@@ -1,16 +1,15 @@
 import { CANVAS_CONFIG } from "../config/canvas.js";
-import { EntityManager } from "../entities/entityManager.js";
+import type { TileType } from "../types.js";
 import { GameState } from "./state.js";
 
 class Collision {
-  private entityManager: EntityManager;
   private static instance: Collision;
   private gameState: GameState;
+  private teleportPairs: Record<string, { x: number; y: number }> = {};
   private tileSize: number;
 
   constructor() {
     this.gameState = GameState.getInstance();
-    this.entityManager = EntityManager.getInstance();
     this.tileSize = CANVAS_CONFIG.tile.size;
   }
 
@@ -49,6 +48,37 @@ class Collision {
     }
 
     return false;
+  }
+
+  public initTeleports(map: TileType[][]): void {
+    const groups: Record<string, { x: number; y: number }[]> = {};
+
+    for (let y = 0; y < map.length; y++) {
+      for (let x = 0; x < map[y].length; x++) {
+        const tile = map[y][x];
+        if (tile.startsWith("0")) {
+          const id = tile.slice(1); 
+          if (!groups[id]) groups[id] = [];
+          groups[id].push({ x, y });
+        }
+      }
+    }
+
+    for (const id in groups) {
+      const [a, b] = groups[id];
+      if (a && b) {
+        this.teleportPairs[`${a.x},${a.y}`] = b;
+        this.teleportPairs[`${b.x},${b.y}`] = a;
+      }
+    }
+  }
+
+  public getTeleportExit(x: number, y: number) {
+    return this.teleportPairs[`${x},${y}`] || null;
+  }
+
+  public isTeleport(x: number, y: number) {
+    return !!this.teleportPairs[`${x},${y}`];
   }
 }
 

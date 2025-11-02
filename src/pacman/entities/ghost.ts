@@ -72,6 +72,8 @@ class Ghost extends Entity {
       this.getRandomDirection();
     }
 
+    this.checkAndTeleport();
+
     if (
       (this.direction.dx !== 0 || this.direction.dy !== 0) &&
       !this.willHitWall()
@@ -172,6 +174,18 @@ class Ghost extends Entity {
     }
 
     this.direction = { dx: 0, dy: 0 };
+  }
+
+  private checkAndTeleport() {
+    const { tileX, tileY } = this.collision.getTile(this.x, this.y);
+
+    if (this.collision.isTeleport(tileX, tileY)) {
+      const exit = this.collision.getTeleportExit(tileX, tileY);
+      if (exit) {
+        this.x = exit.x * this.tileSize + this.tileSize / 2;
+        this.y = exit.y * this.tileSize + this.tileSize / 2;
+      }
+    }
   }
 
   // -------------------------

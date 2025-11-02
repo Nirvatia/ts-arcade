@@ -2,6 +2,7 @@ import { LEVEL_CONFIGS } from "../config/levels.js";
 import { SCORE_CONFIG } from "../config/scoring.js";
 import { EntityManager } from "../entities/entityManager.js";
 import type { GameMode, LevelConfigType } from "../types.js";
+import { Collision } from "./collision.js";
 import { GameLoop } from "./loop.js";
 import { Timer } from "./timer.js";
 
@@ -45,9 +46,13 @@ class GameState {
   }
 
   public loadLevel() {
+    const collision = Collision.getInstance();
+
     this.levelData = this.getLevelConfig(this.currentLevel);
     this.entityManager.resetAll();
     this.entityManager.initAll();
+
+    collision.initTeleports(this.levelData.map);
   }
 
   private resetLevel(): void {

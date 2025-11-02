@@ -15,7 +15,7 @@ const MAP_LVL_1: TileType[][] = [
   ["ES", "ES", "ES", "ES", "ES", "WV", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "ES", "ES", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "WV", "ES", "ES", "ES", "ES", "ES",],
   ["ES", "ES", "ES", "ES", "ES", "WV", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "GL", "GL", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "WV", "ES", "ES", "ES", "ES", "ES",],
   ["ES", "WH", "WH", "WH", "WH", "BR", "FD", "BL", "BR", "FD", "WV", "ES", "ES", "ES", "ES", "ES", "ES", "WV", "FD", "BL", "BR", "FD", "BL", "WH", "WH", "WH", "WH", "ES",],
-  ["TP", "FD", "FD", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "WV", "ES", "ES", "ES", "ES", "ES", "ES", "WV", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "FD", "FD", "TP",],
+  ["0A", "FD", "FD", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "WV", "ES", "ES", "ES", "ES", "ES", "ES", "WV", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "FD", "FD", "0A",],
   ["ES", "WH", "WH", "WH", "WH", "TR", "FD", "TL", "TR", "FD", "WV", "ES", "ES", "ES", "ES", "ES", "ES", "WV", "FD", "TL", "TR", "FD", "TL", "WH", "WH", "WH", "WH", "ES",],
   ["ES", "ES", "ES", "ES", "ES", "WV", "FD", "WV", "WV", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "WV", "WV", "FD", "WV", "ES", "ES", "ES", "ES", "ES",],
   ["ES", "ES", "ES", "ES", "ES", "WV", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "WV", "ES", "ES", "ES", "ES", "ES",],

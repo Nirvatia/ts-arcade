@@ -15,7 +15,7 @@ export type TileType =
   | "BR" // Bottom Right Corner
   | "FD" // Food
   | "PP" // Power Pill
-  | "TP" // Teleport
+  | "0A" // Teleport Pair A
   | "ES" // Empty Space
   | "GL" // Ghost Lair
   | "PM" // Pac-Man

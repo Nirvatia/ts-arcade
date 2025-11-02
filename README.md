@@ -3,10 +3,9 @@
 - Ghosts exit lair
 - Better spawn method
 - Smoother pacman turning
-- Speed independend of framerate
-- AnimationFrameHelper for any 60FPS loop
+- Speed independent of framerate
 - Better pacman's death animation
-
+- Organize map data, i.e. objects and teleports
 
 # create-svelte
 

@@ -17,6 +17,7 @@ class Pacman extends Entity {
   private needsAligning: boolean;
   private isTurning: boolean;
   private speed: number;
+  private lastTeleportExit: { x: number; y: number } | null = null;
 
   private isBuffed: boolean;
   private buffDuration: number;
@@ -29,7 +30,7 @@ class Pacman extends Entity {
 
   private isDying: boolean = false;
   private deathTimer: number = 0; // 0 to 1
-  private deathDuration: number = 1000; // 1 second death animation
+  private deathDuration: number = 3000; // 1 second death animation
 
   private r: number;
   private color: string;
@@ -106,6 +107,8 @@ class Pacman extends Entity {
 
   private updateMovement(dt: number) {
     if (this.willHitWall()) return;
+
+    this.checkAndTeleport();
 
     if (this.isTurning) this.tryTurn();
 
@@ -230,6 +233,34 @@ class Pacman extends Entity {
     const { tileX, tileY } = this.collision.getTile(boundX, boundY);
 
     return this.collision.isWall(tileX, tileY);
+  }
+
+  private checkAndTeleport() {
+    const { tileX, tileY } = this.collision.getTile(this.x, this.y);
+
+    // If we just teleported, check if Pacman has moved off the exit tile
+    if (this.lastTeleportExit) {
+      if (
+        tileX === this.lastTeleportExit.x &&
+        tileY === this.lastTeleportExit.y
+      ) {
+        // Still on exit tile, do nothing
+        return;
+      } else {
+        // Pacman has left exit tile
+        this.lastTeleportExit = null;
+      }
+    }
+
+    // Normal teleport check
+    if (this.collision.isTeleport(tileX, tileY)) {
+      const exit = this.collision.getTeleportExit(tileX, tileY);
+      if (exit) {
+        this.x = exit.x * this.tileSize + this.tileSize / 2;
+        this.y = exit.y * this.tileSize + this.tileSize / 2;
+        this.lastTeleportExit = exit;
+      }
+    }
   }
 
   private handleCollisionWithEatable(x: number, y: number) {
