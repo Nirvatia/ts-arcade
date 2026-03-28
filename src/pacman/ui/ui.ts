@@ -25,16 +25,19 @@ class UI extends Entity {
   }
 
   public draw(animate: boolean) {
+    this.ctx.save(); 
+    this.ctx.letterSpacing = "1.5px";
+
     this.drawWords();
     this.drawScoreCount();
     this.drawLivesCount();
-  }
 
+    this.ctx.restore(); 
+  }
   private drawWords() {
     const scoreCoords = { x: this.tileSize / 2, y: this.tileSize * 32 };
     const livesCoords = { x: this.tileSize * 20, y: this.tileSize * 32 };
 
-    this.ctx.letterSpacing = "1.5px";
     this.ctx.fillStyle = this.color;
     this.ctx.font = this.fontSize + " " + this.fontStyle;
     this.ctx.fillText("SCORE: ", scoreCoords.x, scoreCoords.y);
@@ -72,7 +75,7 @@ class UI extends Entity {
         coords.cy,
         coords.r,
         coords.a1,
-        coords.a2
+        coords.a2,
       );
       this.ctx.lineTo(coords.cx + this.tileSize * i, coords.cy);
       this.ctx.closePath();
