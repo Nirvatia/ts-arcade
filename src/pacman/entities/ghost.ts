@@ -22,6 +22,7 @@ class Ghost extends Entity {
   private defaultSpeed: number;
   private speed: number;
   private isFlashing: boolean;
+  private flashSpeed: number = 200;
 
   // -------------------------
   // 2. Constructor
@@ -55,7 +56,7 @@ class Ghost extends Entity {
     eventBus.on("POWER_PILL_EATEN", () => {
       if (this.state !== "EATEN") {
         this.state = "FRIGHTENED";
-        // this.reverseDirection(); // Classic Pacman mechanic
+        this.reverseDirection(); 
       }
     });
 
@@ -198,6 +199,13 @@ class Ghost extends Entity {
     this.direction = { dx: 0, dy: 0 };
   }
 
+  public reverseDirection() {
+    this.direction = {
+      dx: -this.direction.dx,
+      dy: -this.direction.dy,
+    };
+  }
+
   private checkAndTeleport() {
     const { tileX, tileY } = this.collision.getTile(this.x, this.y);
 
@@ -243,15 +251,23 @@ class Ghost extends Entity {
     const left = this.x - s / 2;
     const top = this.y - s / 2;
 
-    const dir = this.getDirectionLabel();
+    let currentColor = this.defaultColor;
 
-    ctx.fillStyle = this.color;
+    if (this.state === "FRIGHTENED") {
+      if (this.isFlashing) {
+        this.isFlashing = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
+        currentColor = this.isFlashing ? "#FFFFFF" : "#0000FF";
+      } else {
+        currentColor = "#0000FF";
+      }
+    } else if (this.state === "EATEN") {
+      ctx.globalAlpha = 0.5;
+    }
+
+    ctx.fillStyle = currentColor;
     ctx.beginPath();
-
-    // Draw base ghost shape
     this.drawBaseShape(left, top, s);
 
-    // Draw wavy bottom - animated or static
     if (animate) {
       this.animateWavyBottom(left, top, s);
     } else {
@@ -260,8 +276,9 @@ class Ghost extends Entity {
 
     ctx.closePath();
     ctx.fill();
+    ctx.globalAlpha = 1.0;
 
-    // Draw eyes and pupils
+    const dir = this.getDirectionLabel();
     this.drawEyes(left, top, s, dir);
   }
 
