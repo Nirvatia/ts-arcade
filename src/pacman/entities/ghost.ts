@@ -255,8 +255,8 @@ class Ghost extends Entity {
 
     if (this.state === "FRIGHTENED") {
       if (this.isFlashing) {
-        this.isFlashing = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        currentColor = this.isFlashing ? "#FFFFFF" : "#0000FF";
+        const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
+        currentColor = isWhite ? "#FFFFFF" : "#0000FF";
       } else {
         currentColor = "#0000FF";
       }
