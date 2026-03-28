@@ -1,5 +1,6 @@
 import { CANVAS_CONFIG } from "../config/canvas.js";
 import { Collision } from "../game/collision.js";
+import { eventBus } from "../game/eventBus.js";
 import { GameState } from "../game/state.js";
 import { Entity } from "./entity.js";
 
@@ -9,8 +10,9 @@ class Ghost extends Entity {
   // -------------------------
   private gameState: GameState;
   private collision: Collision;
-  private direction: { dx: number; dy: number };
 
+  private state: "CHASE" | "SCATTER" | "FRIGHTENED" | "EATEN" = "CHASE";
+  private direction: { dx: number; dy: number };
   public name: string;
   public defaultColor: string;
   public color: string;
@@ -19,8 +21,7 @@ class Ghost extends Entity {
   public r: number;
   private defaultSpeed: number;
   private speed: number;
-  private isScared: boolean;
-  private isFleeing: boolean;
+  private isFlashing: boolean;
 
   // -------------------------
   // 2. Constructor
@@ -39,8 +40,7 @@ class Ghost extends Entity {
     this.r = this.tileSize / 2;
     this.defaultSpeed = this.tileSize / 16;
     this.speed = this.defaultSpeed;
-    this.isScared = false;
-    this.isFleeing = false;
+    this.isFlashing = false;
   }
 
   // -------------------------
@@ -48,14 +48,36 @@ class Ghost extends Entity {
   // -------------------------
   public override init() {
     this.getRandomDirection();
+    this.initEventListeners();
+  }
+
+  private initEventListeners() {
+    eventBus.on("POWER_PILL_EATEN", () => {
+      if (this.state !== "EATEN") {
+        this.state = "FRIGHTENED";
+        // this.reverseDirection(); // Classic Pacman mechanic
+      }
+    });
+
+    eventBus.on("POWER_PILL_WARNING", () => {
+      if (this.state === "FRIGHTENED") {
+        // Trigger white/blue flashing animation in your Render logic
+        this.isFlashing = true;
+      }
+    });
+
+    eventBus.on("POWER_PILL_EXPIRED", () => {
+      this.isFlashing = false;
+      if (this.state === "FRIGHTENED") {
+        this.state = "CHASE";
+      }
+    });
   }
 
   public override reset() {
     this.direction = { dx: 0, dy: 0 };
     this.speed = this.defaultSpeed;
     this.color = this.defaultColor;
-    this.isScared = false;
-    this.isFleeing = false;
   }
 
   public override resetForLevel() {
@@ -149,10 +171,10 @@ class Ghost extends Entity {
 
     for (const dir of preferredDirs) {
       const tileX = Math.floor(
-        (this.x + dir.dx * (this.tileSize / 2 + this.speed)) / this.tileSize
+        (this.x + dir.dx * (this.tileSize / 2 + this.speed)) / this.tileSize,
       );
       const tileY = Math.floor(
-        (this.y + dir.dy * (this.tileSize / 2 + this.speed)) / this.tileSize
+        (this.y + dir.dy * (this.tileSize / 2 + this.speed)) / this.tileSize,
       );
       if (!this.collision.isWall(tileX, tileY)) {
         this.direction = dir;
@@ -162,10 +184,10 @@ class Ghost extends Entity {
 
     for (const dir of directions) {
       const tileX = Math.floor(
-        (this.x + dir.dx * (this.tileSize / 2 + this.speed)) / this.tileSize
+        (this.x + dir.dx * (this.tileSize / 2 + this.speed)) / this.tileSize,
       );
       const tileY = Math.floor(
-        (this.y + dir.dy * (this.tileSize / 2 + this.speed)) / this.tileSize
+        (this.y + dir.dy * (this.tileSize / 2 + this.speed)) / this.tileSize,
       );
       if (!this.collision.isWall(tileX, tileY)) {
         this.direction = dir;
@@ -304,7 +326,7 @@ class Ghost extends Entity {
         segmentTwoThirdsX,
         twoThirdsY, // Second control point
         segmentEndX,
-        endY // End point
+        endY, // End point
       );
     }
   }
