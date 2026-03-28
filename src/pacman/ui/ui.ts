@@ -34,6 +34,7 @@ class UI extends Entity {
     const scoreCoords = { x: this.tileSize / 2, y: this.tileSize * 32 };
     const livesCoords = { x: this.tileSize * 20, y: this.tileSize * 32 };
 
+    this.ctx.letterSpacing = "1.5px";
     this.ctx.fillStyle = this.color;
     this.ctx.font = this.fontSize + " " + this.fontStyle;
     this.ctx.fillText("SCORE: ", scoreCoords.x, scoreCoords.y);
