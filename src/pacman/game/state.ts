@@ -3,6 +3,7 @@ import { SCORE_CONFIG } from "../config/scoring.js";
 import { EntityManager } from "../entities/entityManager.js";
 import type { GameMode, LevelConfigType } from "../types.js";
 import { Collision } from "./collision.js";
+import { eventBus } from "./eventBus.js";
 import { GameLoop } from "./loop.js";
 import { Timer } from "./timer.js";
 
@@ -10,6 +11,10 @@ class GameState {
   private static instance: GameState;
   private entityManager: EntityManager;
   private gameLoop: GameLoop;
+
+  private buffTimer: Timer = new Timer();
+  private buffDuration = LEVEL_CONFIGS[1].buffDuration;
+  private buffThreshold = LEVEL_CONFIGS[1].buffThreshold;
 
   public mode: GameMode = "INIT";
   public lives: number;
@@ -115,7 +120,26 @@ class GameState {
       () => {
         ui.resetForLevel();
         this.mode = "PLAYING";
-      }
+      },
+    );
+  }
+
+  private handlePowerPillEaten() {
+    this.resetGhostMultiplier();
+
+    this.buffTimer.stop();
+
+    eventBus.emit("POWER_PILL_EATEN");
+
+    this.buffTimer.start(
+      this.buffDuration,
+      1000, 
+      (remaining: number) => {
+        if (remaining === 3) eventBus.emit("POWER_PILL_WARNING");
+      },
+      () => {
+        eventBus.emit("POWER_PILL_EXPIRED");
+      },
     );
   }
 
@@ -127,6 +151,7 @@ class GameState {
         break;
       case "POWER_PELLET":
         this.score += SCORE_CONFIG.DOTS.POWER_PELLET;
+        this.handlePowerPillEaten();
         break;
       case "GHOST":
         this.score +=
