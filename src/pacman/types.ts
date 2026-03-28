@@ -33,6 +33,6 @@ export type LevelConfigType = {
 
 export type EventHandler = (payload?: any) => void;
 export type GameEvent =
-  | "POWER_Pill_EATEN"
-  | "POWER_Pill_EXPIRED"
+  | "POWER_PILL_EATEN"
+  | "POWER_PILL_EXPIRED"
   | "PACMAN_DEATH";
