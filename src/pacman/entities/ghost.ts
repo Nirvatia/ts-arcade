@@ -11,7 +11,7 @@ class Ghost extends Entity {
   private gameState: GameState;
   private collision: Collision;
 
-  private state: "CHASE" | "SCATTER" | "FRIGHTENED" | "EATEN" = "CHASE";
+  public state: "CHASE" | "SCATTER" | "FRIGHTENED" | "EATEN" = "CHASE";
   private direction: { dx: number; dy: number };
   public name: string;
   public defaultColor: string;
