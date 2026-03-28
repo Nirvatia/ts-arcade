@@ -130,12 +130,14 @@ class GameState {
     this.buffTimer.stop();
 
     eventBus.emit("POWER_PILL_EATEN");
-
+    const durationInSeconds = this.buffDuration / 1000;
+    
     this.buffTimer.start(
-      this.buffDuration,
-      1000, 
+      durationInSeconds,
+      1000,
       (remaining: number) => {
-        if (remaining === 3) eventBus.emit("POWER_PILL_WARNING");
+        if (remaining === this.buffThreshold / 1000)
+          eventBus.emit("POWER_PILL_WARNING");
       },
       () => {
         eventBus.emit("POWER_PILL_EXPIRED");
