@@ -70,16 +70,16 @@ class Pacman extends Entity {
   }
 
   public override reset() {
-    this.x = 0;
-    this.y = 0;
     this.isBuffed = false;
     this.mouthOpen = true;
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
+    this.spawn();
   }
 
   public override resetForLevel() {
     this.reset();
+    this.spawn();
   }
 
   public update(dt: number) {
