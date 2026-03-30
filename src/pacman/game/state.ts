@@ -50,26 +50,26 @@ class GameState {
     this.entityManager.createEntities();
     this.loadLevel();
     this.gameLoop.start();
-    this.entityManager.spawnAll();
+    // Removed entityManager.spawnAll() from here!
     this.mode = "INIT";
   }
 
   public loadLevel() {
     const collision = Collision.getInstance();
-
     this.levelData = this.getLevelConfig(this.currentLevel);
+
     this.entityManager.resetAll();
-    this.entityManager.initAll();
+
+    // --- DRAW THE MAZE & DOTS IMMEDIATELY ---
+    this.entityManager.spawnObjects();
+
     this.buffDuration = LEVEL_CONFIGS[this.currentLevel].buffDuration;
     this.buffThreshold = LEVEL_CONFIGS[this.currentLevel].buffThreshold;
-    this.pathGraph = createPathGraph(this.levelData.map);
-
     collision.initTeleports(this.levelData.map);
   }
 
   private resetLevel(): void {
     this.entityManager.resetAllForLevel();
-    this.entityManager.spawnAll();
   }
 
   public nextLevel() {
@@ -80,6 +80,15 @@ class GameState {
 
   public startGame() {
     this.mode = "PLAYING";
+
+    // --- DROP THE CHARACTERS IN NOW ---
+    this.entityManager.spawnEntities();
+
+    // Now that the map is sanitized, generate the graph!
+    this.pathGraph = createPathGraph(this.levelData.map);
+    this.entityManager.exitLairAll();
+    // Initialize triggers the calculateExitPath we added to the ghosts
+    this.entityManager.initAll();
   }
 
   public stopGame(): void {
