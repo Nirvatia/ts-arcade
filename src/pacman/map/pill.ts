@@ -5,7 +5,7 @@ import { GameState } from "../game/state.js";
 class Pill extends Entity {
   private gameState: GameState;
   private pillColor: string;
-  public positions: { i: number; j: number }[];
+  public positions: { i: number; j: number }[] = [];
   private animationSpeed: number = 0.05;
   private animationCounter: number = 0;
 
@@ -14,10 +14,11 @@ class Pill extends Entity {
 
     this.gameState = GameState.getInstance();
     this.pillColor = "#F0F4FF";
-    this.positions = [];
   }
 
-  public override init() {
+  // 1. Map scanning happens here so game can draw pulsing pills on loadLevel()
+  public spawn() {
+    this.positions = []; 
     const map = this.gameState.levelData.map;
 
     for (let i = 0; i < map.length; i++) {
@@ -29,6 +30,11 @@ class Pill extends Entity {
     }
   }
 
+  // 2. Kept empty to prevent duplicate map scans during initAll()
+  public override init() {
+    // Keep empty or add future event listeners here
+  }
+
   public override reset() {
     this.positions = [];
     this.animationCounter = 0;
@@ -38,7 +44,9 @@ class Pill extends Entity {
     this.animationCounter = 0;
   }
 
-  public update() {}
+  public update() {
+    // Animation updates are handled inside the draw method with `animate()`
+  }
 
   public eat(i: number, j: number) {
     this.positions = this.positions.filter((p) => !(p.i === i && p.j === j));

@@ -6,18 +6,22 @@ class Food extends Entity {
   private gameState: GameState;
   private color: string;
   private r: number;
-  public positions: Set<string>;
+  
+  // Explicitly typing this as a Set of strings to avoid TS errors with .clear() and .add()
+  public positions: Set<string> = new Set<string>();
 
   constructor() {
     super(CANVAS_CONFIG.canvasIds.food, false);
     this.gameState = GameState.getInstance();
     this.color = "rgb(230, 230, 230)";
     this.r = this.tileSize / 8;
-    this.positions = new Set();
   }
 
-  public override init() {
+  // 1. Map scanning happens here so game can draw dots on loadLevel()
+  public spawn() {
+    this.positions.clear(); 
     const map = this.gameState.levelData.map;
+    
     for (let i = 0; i < map.length; i++) {
       for (let j = 0; j < map[i].length; j++) {
         if (map[i][j] === "FD") {
@@ -28,8 +32,13 @@ class Food extends Entity {
     this.needsRedraw = true;
   }
 
+  // 2. Kept empty to prevent duplicate map scans during initAll()
+  public override init() {
+    // Keep empty or add future event listeners here
+  }
+
   public override reset() {
-    this.positions = new Set();
+    this.positions.clear();
   }
 
   public eat(i: number, j: number) {
@@ -43,7 +52,7 @@ class Food extends Entity {
   }
 
   public update() {
-    
+    // Static objects usually don't need continuous state updates
   }
 
   public draw(animate: boolean) {
