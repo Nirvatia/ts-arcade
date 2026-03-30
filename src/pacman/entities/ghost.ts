@@ -2,6 +2,7 @@ import { CANVAS_CONFIG } from "../config/canvas.js";
 import { Collision } from "../game/collision.js";
 import { eventBus } from "../game/eventBus.js";
 import { GameState } from "../game/state.js";
+import { findLairExit, findShortestPath } from "../utils.js";
 import { Entity } from "./entity.js";
 
 class Ghost extends Entity {
@@ -13,6 +14,8 @@ class Ghost extends Entity {
 
   public state: "CHASE" | "SCATTER" | "FRIGHTENED" | "EATEN" = "CHASE";
   private direction: { dx: number; dy: number };
+  private path: string[] = [];
+  private currentPathTarget: { x: number; y: number } | null = null;
   public name: string;
   public defaultColor: string;
   public color: string;
@@ -56,7 +59,7 @@ class Ghost extends Entity {
     eventBus.on("POWER_PILL_EATEN", () => {
       if (this.state !== "EATEN") {
         this.state = "FRIGHTENED";
-        this.reverseDirection(); 
+        this.reverseDirection();
       }
     });
 
@@ -90,6 +93,13 @@ class Ghost extends Entity {
   // 4. Update loop
   // -------------------------
   public update() {
+    // 1. PATHFINDING OVERRIDE (For exiting lair or returning home)
+    if (this.path.length > 0) {
+      this.moveAlongPath();
+      return; // Skip normal random movement while on a scripted path
+    }
+
+    // 2. Normal movement logic (your current code)
     if (this.isAtTileCenter() && this.willHitWall()) {
       this.snapToCenter();
       this.getRandomDirection();
@@ -104,6 +114,46 @@ class Ghost extends Entity {
       const { newX, newY } = this.getNextPosition();
       this.x = newX;
       this.y = newY;
+    }
+  }
+
+  private moveAlongPath() {
+    if (!this.currentPathTarget && this.path.length > 0) {
+      const nextTileStr = this.path[0];
+      const [ty, tx] = nextTileStr.split(",").map(Number);
+      this.currentPathTarget = {
+        x: tx * this.tileSize + this.tileSize / 2,
+        y: ty * this.tileSize + this.tileSize / 2,
+      };
+    }
+
+    if (this.currentPathTarget) {
+      const dx = this.currentPathTarget.x - this.x;
+      const dy = this.currentPathTarget.y - this.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        this.direction = { dx: Math.sign(dx), dy: 0 };
+      } else {
+        this.direction = { dx: 0, dy: Math.sign(dy) };
+      }
+
+      if (distance < this.speed) {
+        this.x = this.currentPathTarget.x;
+        this.y = this.currentPathTarget.y;
+        this.currentPathTarget = null;
+        this.path.shift(); // Remove handled tile
+
+        // --- ADD THIS FIX ---
+        // If that was the last tile in the path, kick-start the normal AI!
+        if (this.path.length === 0) {
+          this.getRandomDirection();
+        }
+        // --------------------
+      } else {
+        this.x += (dx / distance) * this.speed;
+        this.y += (dy / distance) * this.speed;
+      }
     }
   }
 
@@ -138,7 +188,11 @@ class Ghost extends Entity {
 
     const { tileX, tileY } = this.collision.getTile(boundX, boundY);
 
-    return this.collision.isWall(tileX, tileY);
+    // Check if we are currently on a path (meaning we are exiting)
+    const isExiting = this.path.length > 0;
+
+    // Pass it to the collision system!
+    return this.collision.isWall(tileX, tileY, isExiting);
   }
 
   public getRandomDirection() {
@@ -223,12 +277,38 @@ class Ghost extends Entity {
   // -------------------------
   public spawn() {
     const map = this.gameState.levelData.map;
+    let spawnY = 0;
+    let spawnX = 0;
+
     for (let y = 0; y < map.length; y++) {
       let x = map[y].findIndex((tile) => tile === this.name);
       if (x !== -1) {
+        spawnY = y;
+        spawnX = x;
         this.x = x * this.tileSize + this.tileSize / 2;
         this.y = y * this.tileSize + this.tileSize / 2;
-        return;
+
+        // --- ADD THIS FIX ---
+        // Wipe the ghost initial from the map grid so it's just empty space!
+        map[y][x] = "ES";
+        // --------------------
+        break;
+      }
+    }
+
+    // BIND THE PATHFINDER HERE
+    // Target row 11, col 13 (just above the ghost house exit)
+    const targetNode = findLairExit(this.gameState.levelData.map);
+    const startNode = `${spawnY},${spawnX}`;
+
+    // Fetch the parsed graph from your GameState
+    const graph = this.gameState.pathGraph;
+
+    if (graph) {
+      const foundPath = findShortestPath(graph, startNode, targetNode);
+      console.log("Found path: ", foundPath);
+      if (foundPath) {
+        this.path = foundPath;
       }
     }
   }
