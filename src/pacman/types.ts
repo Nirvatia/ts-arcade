@@ -31,6 +31,7 @@ export type LevelConfigType = {
   buffThreshold: number;
 };
 
+export type GraphType = Record<string, string[]>;
 export type EventHandler = (payload?: any) => void;
 export type GameEvent =
   | "POWER_PILL_EATEN"
