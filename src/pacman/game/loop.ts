@@ -40,7 +40,8 @@ class GameLoop {
       // (We allow PACMAN_DEAD so his death animation can still render)
       if (
         gameState.mode === "PAUSED" ||
-        gameState.mode === "LEVEL_TRANSITION"
+        gameState.mode === "LEVEL_TRANSITION" ||
+        gameState.mode === "GHOST_EATEN"
       ) {
         return;
       }
