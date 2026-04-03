@@ -14,15 +14,22 @@ class Renderer {
 
   public render(dt?: number): void {
     const gameState = GameState.getInstance();
+
+    // 🔥 FULL PAUSE: If a ghost was just eaten, do not clear, do not draw, do not update.
+    // This leaves the last successfully rendered frame frozen in time on the canvas!
+    if (gameState.mode === "GHOST_EATEN") {
+      return;
+    }
+
     const clearedCanvases = new Set<HTMLCanvasElement>();
 
     const canAnimate = ["PLAYING", "INIT", "LEVEL_TRANSITION"].includes(
-      gameState.mode
+      gameState.mode,
     );
     const canUpdate = gameState.mode === "PLAYING";
 
     // --- FIX: PREVENT RENDERING UNSPAWNED ENTITIES ---
-    // Moving characters (Pacman and Ghosts) have not called spawn() yet 
+    // Moving characters (Pacman and Ghosts) have not called spawn() yet
     // when mode === "INIT". This stops them from appearing at (0, 0).
     const shouldDrawDynamic = gameState.mode !== "INIT";
 
