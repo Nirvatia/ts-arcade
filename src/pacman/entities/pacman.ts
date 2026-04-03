@@ -93,8 +93,9 @@ class Pacman extends Entity {
       if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
         // 1. Tell the system a ghost was eaten (for scoring)
         this.gameState.updateScore("GHOST");
-        // 2. Tell the specific ghost it was eaten (to change its state/return home)
-        collidedGhost.state = "EATEN";
+
+        // 2. Trigger the retreat behavior on the ghost
+        collidedGhost.beEaten();
       } else if (collidedGhost.state !== "EATEN") {
         // Only die if the ghost isn't already "eyes" returning to base
         this.triggerDeath();
