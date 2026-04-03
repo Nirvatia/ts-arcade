@@ -1,5 +1,6 @@
 import { EntityManager } from "../entities/entityManager.js";
 import { GameState } from "../game/state.js";
+import { audio } from "../game/audio.js"; // Added import
 
 class Controller {
   private x1: number | null;
@@ -52,7 +53,6 @@ class Controller {
     const pacman = this.getPacman();
     if (!pacman) return;
 
-    // Use changeDirection for consistency
     if (dx > dy) {
       pacman.changeDirection({ dx: x2 > this.x1 ? 1 : -1, dy: 0 });
     } else {
@@ -62,10 +62,13 @@ class Controller {
     this.x1 = this.y1 = null;
   }
 
-  keyDown(event: KeyboardEvent) {
+  // Made async to allow audio context resuming
+  async keyDown(event: KeyboardEvent) {
     event.preventDefault();
 
     if (event.key === "Enter" && this.gameState.mode === "INIT") {
+      // Unlock the audio context securely on user click/press!
+      await audio.unlockAudio();
       this.gameState.startGame();
       return;
     }
