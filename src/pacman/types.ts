@@ -4,6 +4,7 @@ export type GameMode =
   | "PAUSED"
   | "PACMAN_DEAD"
   | "LEVEL_TRANSITION"
+  | "GHOST_EATEN"
   | "GAME_OVER";
 
 export type TileType =
