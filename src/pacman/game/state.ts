@@ -8,7 +8,6 @@ import { Timer } from "./timer.js";
 
 import type { GameMode, GraphType, LevelConfigType } from "../types.js";
 import { createPathGraph } from "../utils.js";
-import { audio } from "./audio.js";
 
 class GameState {
   private static instance: GameState;
@@ -27,6 +26,9 @@ class GameState {
   public score: number;
   public ghostMultiplier: number;
 
+  // Track buff state so AudioController can query it
+  public isBuffed: boolean = false;
+
   private constructor() {
     this.entityManager = EntityManager.getInstance();
     this.gameLoop = GameLoop.getInstance();
@@ -36,11 +38,29 @@ class GameState {
     this.levelData = LEVEL_CONFIGS[1];
     this.score = 0;
     this.ghostMultiplier = 0;
+
+    // 🌟 THE FIX: Initialize listeners so GameState responds to the bus!
+    this.initEventListeners();
   }
 
   static getInstance(): GameState {
     if (!GameState.instance) GameState.instance = new GameState();
     return GameState.instance;
+  }
+
+  private initEventListeners() {
+    eventBus.on("GHOST_EATEN", () => {
+      this.updateScore("GHOST");
+    });
+
+    // 🌟 ADD THESE TWO LISTENERS
+    eventBus.on("DOT_EATEN", () => {
+      this.updateScore("DOT");
+    });
+
+    eventBus.on("POWER_PILL_EATEN_BY_PACMAN", () => {
+      this.updateScore("POWER_PELLET");
+    });
   }
 
   private getLevelConfig(level: number): LevelConfigType {
@@ -58,10 +78,7 @@ class GameState {
     const collision = Collision.getInstance();
     this.levelData = this.getLevelConfig(this.currentLevel);
 
-    // 1. Hard reset on everything (clears grids, scores stay intact)
     this.entityManager.resetAll();
-
-    // 2. Draw the maze & dots immediately
     this.entityManager.spawnObjects();
 
     this.buffDuration = LEVEL_CONFIGS[this.currentLevel].buffDuration;
@@ -69,13 +86,10 @@ class GameState {
     collision.initTeleports(this.levelData.map);
   }
 
-  // 🔥 REMOVED: resetLevel() because it pointed to a non-existent method!
-
   public nextLevel() {
     this.currentLevel++;
     this.loadLevel();
 
-    // 🔥 NEW: Apply the countdown transition to new level loaded!
     const ui = this.entityManager.getUI();
     this.mode = "LEVEL_TRANSITION";
 
@@ -87,7 +101,6 @@ class GameState {
       () => {
         ui.resetForLevel();
 
-        // Spawn players and calculate their paths
         this.entityManager.spawnEntities();
         this.pathGraph = createPathGraph(this.levelData.map);
         this.entityManager.exitLairAll();
@@ -101,8 +114,7 @@ class GameState {
   public startGame() {
     this.mode = "LEVEL_TRANSITION";
 
-    // 1. Play game start audio (non-looping)
-    audio.playMusic("start", false);
+    eventBus.emit("GAME_START_SEQUENCE");
 
     this.entityManager.spawnEntities();
     this.pathGraph = createPathGraph(this.levelData.map);
@@ -110,21 +122,17 @@ class GameState {
     const ui = this.entityManager.getUI();
 
     const timer = new Timer();
-    // 2. We trigger a 4-second sequence to bridge the 4.5s audio clip
     timer.start(
       4,
       1000,
       (remaining) => {
         if (remaining > 1) {
-          // Display the numbers 3, 2 for the first ticks
           ui.drawCounter(remaining - 1);
         } else if (remaining === 1) {
-          // When we hit the last second of audio, flash READY!
           ui.drawReady();
         }
       },
       () => {
-        // Countdown completed! Clear everything out.
         ui.clearReady();
 
         if (this.pathGraph && Object.keys(this.pathGraph).length > 0) {
@@ -132,8 +140,7 @@ class GameState {
           this.entityManager.initAll();
         }
 
-        // 3. Start background siren loop!
-        audio.playMusic("siren_0", true);
+        eventBus.emit("GAME_START");
 
         this.mode = "PLAYING";
       },
@@ -152,6 +159,7 @@ class GameState {
     this.score = 0;
     this.ghostMultiplier = 0;
     this.mode = "INIT";
+    this.isBuffed = false;
   }
 
   public pauseGame() {
@@ -163,16 +171,10 @@ class GameState {
   }
 
   public triggerGhostEatenFreeze() {
-    // 1. Temporarily change the mode to freeze updates
     const previousMode = this.mode;
     this.mode = "GHOST_EATEN";
 
-    // 2. Play the ghost eating SFX immediately if you have it!
-    audio.playSFX("eat_ghost");
-
-    // 3. Set a timeout to resume the game after ~500ms (half a second)
     setTimeout(() => {
-      // Put the mode back to what it was (usually "PLAYING")
       this.mode = previousMode;
     }, 500);
   }
@@ -185,15 +187,17 @@ class GameState {
 
     this.mode = "PACMAN_DEAD";
     this.lives--;
+
+    eventBus.emit("PACMAN_DEATH");
   }
 
   public completeDeathSequence(): void {
     const ui = this.entityManager.getUI();
 
-    // 3. Perfect! Points back to the working EntityManager method now.
     this.entityManager.resetPositionsForDeath();
-
     this.mode = "LEVEL_TRANSITION";
+
+    eventBus.emit("GAME_START_SEQUENCE");
 
     const timer = new Timer();
     timer.start(
@@ -202,9 +206,9 @@ class GameState {
       (remaining) => ui.drawCounter(remaining),
       () => {
         ui.resetForLevel();
-
-        // 4. Countdown hit 0! Unleash the ghosts.
         this.entityManager.exitLairAll();
+
+        eventBus.emit("GAME_RESUMED");
 
         this.mode = "PLAYING";
       },
@@ -213,9 +217,9 @@ class GameState {
 
   private handlePowerPillEaten() {
     this.resetGhostMultiplier();
-
     this.buffTimer.stop();
 
+    this.isBuffed = true;
     eventBus.emit("POWER_PILL_EATEN");
 
     this.buffTimer.start(
@@ -226,12 +230,17 @@ class GameState {
           eventBus.emit("POWER_PILL_WARNING");
       },
       () => {
+        this.isBuffed = false;
         eventBus.emit("POWER_PILL_EXPIRED");
       },
     );
   }
 
-  public updateScore(type: string) {
+  public resetGhostMultiplier() {
+    this.ghostMultiplier = 0;
+  }
+  // 🌟 THE FIX: Made this private so external files stop calling it directly.
+  private updateScore(type: "DOT" | "POWER_PELLET" | "GHOST") {
     switch (type) {
       case "DOT":
         this.score += SCORE_CONFIG.DOTS.PELLET;
@@ -242,20 +251,20 @@ class GameState {
         this.handlePowerPillEaten();
         break;
       case "GHOST":
+        // 🌟 THE FIX: Safe array indexing for the score multiplier!
+        const multiplierIndex = Math.min(
+          this.ghostMultiplier,
+          SCORE_CONFIG.GHOSTS.MULTIPLIERS.length - 1,
+        );
+
         this.score +=
           SCORE_CONFIG.GHOSTS.BASE *
-          SCORE_CONFIG.GHOSTS.MULTIPLIERS[this.ghostMultiplier];
-        this.ghostMultiplier++;
+          SCORE_CONFIG.GHOSTS.MULTIPLIERS[multiplierIndex];
 
-        // 🔥 Trigger the screen freeze!
         this.triggerGhostEatenFreeze();
-        this.ghostMultiplier++;
+        this.ghostMultiplier++; // Increment for the next one!
         break;
     }
-  }
-
-  public resetGhostMultiplier() {
-    this.ghostMultiplier = 0;
   }
 }
 
