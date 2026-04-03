@@ -37,14 +37,19 @@ class Collision {
   }
 
   // UPDATED: Added isExiting optional parameter
-  public isWall(x: number, y: number, isExiting: boolean = false): boolean {
+  public isWall(
+    x: number,
+    y: number,
+    isExiting: boolean = false,
+    isEntering: boolean = false,
+  ): boolean {
     if (!this.gameState.levelData.map[y]) return true;
 
     const tile = this.gameState.levelData.map[y][x];
 
     // If the tile is GL and the ghost is currently in "exiting" mode,
     // we do not treat it as a wall.
-    if (tile === "GL" && isExiting) {
+    if (tile === "GL" && (isExiting || isEntering)) {
       return false;
     }
 
