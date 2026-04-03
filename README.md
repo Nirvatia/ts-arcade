@@ -1,11 +1,26 @@
-#TODO: 
+# Pac-Man Project - To-Do List
 
-- Ghosts exit lair
-- Better spawn method
-- Smoother pacman turning
-- Speed independent of framerate
-- Better pacman's death animation
-- Organize map data, i.e. objects and teleports
+## High Priority (Core Gameplay Fixes)
+- [ ] **Smoother Pac-Man Turning**
+  - Implement a more forgiving cornering system (tile corner-cutting/pre-turning).
+  - Add active input buffering so turns register even if pressed slightly early.
+- [ ] **Speed Independent of Framerate**
+  - Refactor movement physics across all entities to scale with the `dt` (delta time) passed in the loop rather than a hardcoded pixel-per-frame speed.
+- [ ] **Better Pac-Man Death Animation**
+  - Enhance the canvas drawing routine to match the classic shrink-and-implode spiral of the arcade original rather than a simple fade/shrink.
+
+
+## Ghost AI & Gameplay Logic
+- [ ] **Authentic Ghost Personalities**
+  - Implement Pinky's ambush logic (targeting 4 tiles ahead of Pac-Man).
+  - Implement Inky's vector targeting (based on both Blinky and Pac-Man).
+  - Implement Clyde's proximity retreat algorithm.
+
+## Visuals & UI
+  - Implement active keyboard listener navigation for selecting games on the main menu.
+
+## Future Enhancements
+- [ ] **Audio Engine:** Fire off events for waka-waka sounds, ghost retreats, and power pill alarms.
 
 # create-svelte
 
