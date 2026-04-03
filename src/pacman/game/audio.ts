@@ -1,5 +1,5 @@
-class Audio {
-  private static instance: Audio;
+class AudioManager {
+  private static instance: AudioManager;
   private context!: AudioContext;
   private masterGain!: GainNode;
 
@@ -11,11 +11,11 @@ class Audio {
     // Keep constructor empty so it doesn't crash on the server!
   }
 
-  public static getInstance(): Audio {
-    if (!Audio.instance) {
-      Audio.instance = new Audio();
+  public static getInstance(): AudioManager {
+    if (!AudioManager.instance) {
+      AudioManager.instance = new AudioManager();
     }
-    return Audio.instance;
+    return AudioManager.instance;
   }
 
   public init() {
@@ -87,4 +87,5 @@ class Audio {
   }
 }
 
-export const audio = Audio.getInstance();
+export const audio = AudioManager.getInstance();
+export { AudioManager };

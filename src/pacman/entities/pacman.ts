@@ -1,8 +1,8 @@
 import { CANVAS_CONFIG } from "../config/canvas.js";
+import { AudioManager } from "../game/audio.js";
 import { Collision } from "../game/collision.js";
 import { eventBus } from "../game/eventBus.js";
 import { GameState } from "../game/state.js";
-import { easeInOutCubic } from "../utils.js";
 import { Entity } from "./entity.js";
 import { EntityManager } from "./entityManager.js";
 import type { Ghost } from "./ghost.js";
@@ -119,6 +119,11 @@ class Pacman extends Entity {
   public triggerDeath(): void {
     this.state = "DYING";
     this.deathTimer = 0;
+
+    // 🔥 This circumvents circular references!
+    const audioManager = AudioManager.getInstance();
+    audioManager.stopMusic();
+    audioManager.playSFX("death");
   }
 
   private updateMovement(dt: number) {
