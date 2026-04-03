@@ -90,10 +90,20 @@ class Ghost extends Entity {
     this.direction = { dx: 0, dy: 0 };
     this.speed = this.defaultSpeed;
     this.color = this.defaultColor;
+
+    // 🔥 ADD THESE TO CLEAR PATHING & STATE ON RESET
+    this.path = [];
+    this.currentPathTarget = null;
+    this.isReturningHome = false;
+    this.isFlashing = false;
+    this.state = "CHASE";
   }
 
   public override resetForLevel() {
+    // 🔥 CHANGE THIS: Call this.spawn() instead of getRandomDirection.
+    // This physically moves them back to the grid coords before picking a direction!
     this.reset();
+    this.spawn();
     this.getRandomDirection();
   }
 
