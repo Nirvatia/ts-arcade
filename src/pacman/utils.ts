@@ -18,6 +18,13 @@ function easeInOutCubic(t: number): number {
 }
 
 function createPathGraph(map: TileType[][]): GraphType {
+  if (!map || map.length === 0 || !map[0] || map[0].length === 0) {
+    console.warn(
+      "createPathGraph was called with an empty or uninitialized map!",
+    );
+    return {};
+  }
+
   const walkableTiles: Set<TileType> = new Set([
     "FD",
     "PP",
@@ -28,7 +35,7 @@ function createPathGraph(map: TileType[][]): GraphType {
     "IY",
     "CE",
     "0A",
-    "GL", // <--- CRITICAL: The graph needs to know this is a valid node!
+    "GL",
   ]);
 
   const graph: Record<string, string[]> = {};
@@ -93,6 +100,19 @@ function findShortestPath(
   start: string,
   target: string,
 ): string[] | null {
+  if (!graph || Object.keys(graph).length === 0) {
+    console.error("findShortestPath failed: The graph provided is empty!");
+    return null;
+  }
+
+  // Guard check to see if the start node even exists in the graph
+  if (!graph[start]) {
+    console.error(
+      `findShortestPath failed: Start node '${start}' does not exist in the graph.`,
+    );
+    return null;
+  }
+
   if (start === target) return [start];
 
   const queue: string[] = [start];
@@ -143,10 +163,79 @@ function findLairExit(map: string[][]): string {
   return "11,13"; // Hard fallback to your current map's layout
 }
 
+function findLairInternalTiles(map: TileType[][]): string[] {
+  const lairInternalTiles: string[] = [];
+  const visited = new Set<string>();
+  const queue: { y: number; x: number }[] = [];
+
+  const rows = map.length;
+  const cols = map[0].length;
+
+  // 1. Dynamically find the Gate ("GL")
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (map[y][x] === "GL") {
+        // Step 1 tile down to guarantee we are inside the cage
+        if (y + 1 < rows) {
+          queue.push({ y: y + 1, x });
+          visited.add(`${y + 1},${x}`);
+        }
+        break;
+      }
+    }
+    if (queue.length > 0) break;
+  }
+
+  // If there is no gate on the map, we can't find the lair
+  if (queue.length === 0) return [];
+
+  // 2. Flood Fill to collect only the "ES" tiles trapped inside the walls
+  const directions = [
+    { dy: 1, dx: 0 }, // Down
+    { dy: -1, dx: 0 }, // Up
+    { dy: 0, dx: 1 }, // Right
+    { dy: 0, dx: -1 }, // Left
+  ];
+
+  // We stop expanding the moment we hit any of these wall types
+  const wallTiles = new Set(["WH", "WV", "TL", "TR", "BL", "BR", "GL"]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const currentTile = map[current.y][current.x];
+
+    // If it's an "ES" tile, record it as a valid landing spot
+    if (currentTile === "ES") {
+      lairInternalTiles.push(`${current.y},${current.x}`);
+    }
+
+    // Check all 4 adjacent neighbors
+    for (const { dy, dx } of directions) {
+      const ny = current.y + dy;
+      const nx = current.x + dx;
+      const key = `${ny},${nx}`;
+
+      // Stay within map bounds and don't re-visit tiles
+      if (ny >= 0 && ny < rows && nx >= 0 && nx < cols && !visited.has(key)) {
+        const neighborTile = map[ny][nx];
+
+        // If the neighbor is NOT a wall, keep exploring!
+        if (!wallTiles.has(neighborTile)) {
+          visited.add(key);
+          queue.push({ y: ny, x: nx });
+        }
+      }
+    }
+  }
+
+  return lairInternalTiles;
+}
+
 export {
   setCanvasSize,
   easeInOutCubic,
   findLairExit,
+  findLairInternalTiles,
   createPathGraph,
   findShortestPath,
 };
