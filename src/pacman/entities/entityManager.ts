@@ -76,12 +76,21 @@ class EntityManager {
     [...this.getAllStatic(), ...this.getAllDynamic()].forEach((e) => e.reset());
   }
 
-  public resetAllForLevel(): void {
-    [...this.getAllStatic(), ...this.getAllDynamic()].forEach((e) =>
-      e.resetForLevel(),
-    );
-  }
+  // Call this when Pac-man dies to snap positions back without resetting score/dots
+  public resetPositionsForDeath(): void {
+    const pacman = this.getPacman();
+    const ghosts = this.getGhosts();
 
+    // 1. Respawn Pacman at his starting tile
+    pacman.spawn();
+    pacman.state = "ALIVE";
+
+    // 2. Respawn ghosts and clear their AI brains so they don't wander through walls
+    ghosts.forEach((ghost) => {
+      ghost.spawn();
+      ghost.reset(); // This clears direction, speed, and color
+    });
+  }
   // 1. Call this in GameState's loadLevel()
   // This ensures the screen isn't empty on the title screen!
   public spawnObjects(): void {
