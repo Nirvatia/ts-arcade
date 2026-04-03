@@ -1,15 +1,17 @@
+/* 1. Global reset */
 * {
-  padding: 0px;
-  margin: 0px;
-  border: 0px;
+  padding: 0;
+  margin: 0;
+  border: 0;
 }
 
 *,
-*:before,
-*:after {
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
+/* 2. Core body & app defaults */
 html,
 body {
   height: 100%;
@@ -17,21 +19,36 @@ body {
 }
 
 body {
-  -ms-text-size-adjust: 100%;
-  -moz-text-size-adjust: 100%;
+  line-height: 1.5; /* Good default for reading legibility */
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  
+  /* CRITICAL FOR PACMAN: Prevents tapping/double-clicking on 
+     mobile screens from doing a tiny zoom or showing a blue highlight box */
+  -webkit-tap-highlight-color: transparent;
 }
 
+/* 3. Media & Canvas defaults */
+img, canvas {
+  display: block; /* Removes weird inline-spacing at the bottom of elements */
+  max-width: 100%;
+}
+
+/* 4. Form elements control */
 input,
 button,
-textarea {
+textarea,
+select {
   background: transparent;
   color: inherit;
   font-family: inherit;
   font-size: inherit;
   outline: none;
+}
+
+textarea {
+  resize: vertical; /* Prevents users from breaking grid layouts horizontally */
 }
 
 button,
@@ -48,20 +65,13 @@ ul li {
   list-style: none;
 }
 
-img {
-  vertical-align: top;
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+/* 5. Typography normalization */
+h1, h2, h3, h4, h5, h6 {
   font-weight: inherit;
   font-size: inherit;
 }
 
+/* 6. Accessibility */
 @media screen and (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
