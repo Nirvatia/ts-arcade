@@ -375,7 +375,11 @@ class Pacman extends Entity {
   private drawDead(dt: number): void {
     this.deathTimer += dt;
 
-    if (this.deathTimer >= this.deathDuration) {
+    // 🔥 THE FIX: Speed up the duration!
+    // Let's set it to 1.5 seconds (1500ms) instead of 3000ms.
+    const customDeathDuration = 1500;
+
+    if (this.deathTimer >= customDeathDuration) {
       this.state = "ALIVE";
       this.deathTimer = 0;
       this.gameState.completeDeathSequence();
@@ -385,26 +389,43 @@ class Pacman extends Entity {
     const cx = this.x;
     const cy = this.y;
     const r = this.r;
-    const p = Math.min(1, this.deathTimer / this.deathDuration);
-    const easedP = easeInOutCubic(p);
+
+    // Use the new custom duration for our progress percentage
+    const p = Math.min(1, this.deathTimer / customDeathDuration);
 
     this.ctx.save();
-    this.ctx.translate(cx, cy);
-    this.ctx.rotate(this.getRotation() + easedP * 10); // spin faster as he dies
 
-    const scale = 1 - easedP; // shrink down
-    this.ctx.scale(scale, scale);
+    // 🌟 ADDITION: Screen shake right before he vanishes!
+    if (p > 0.7 && p < 0.9) {
+      const shakeX = (Math.random() - 0.5) * 4;
+      const shakeY = (Math.random() - 0.5) * 4;
+      this.ctx.translate(cx + shakeX, cy + shakeY);
+    } else {
+      this.ctx.translate(cx, cy);
+    }
 
-    const mouthAngle = Math.max(0, Math.PI * (1 - easedP * 2)); // mouth closing
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(0, 0);
-    this.ctx.arc(0, 0, r, mouthAngle, 2 * Math.PI - mouthAngle);
-    this.ctx.closePath();
+    this.ctx.rotate(this.getRotation());
 
     this.ctx.fillStyle = this.color;
-    this.ctx.globalAlpha = Math.max(0, 1 - easedP * 1.2);
+    this.ctx.beginPath();
+    this.ctx.moveTo(0, 0);
+
+    const startMouthAngle = this.mouthAngle || Math.PI / 4;
+    const mouthAperture = startMouthAngle + (Math.PI - startMouthAngle) * p;
+
+    this.ctx.arc(0, 0, r, mouthAperture, 2 * Math.PI - mouthAperture);
+
+    this.ctx.lineTo(0, 0);
+    this.ctx.closePath();
     this.ctx.fill();
+
+    // The classic arcade "spark" pop
+    if (p > 0.9) {
+      this.ctx.fillStyle = "#FFFFFF";
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, r * (1 - p) * 8, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
 
     this.ctx.restore();
   }
