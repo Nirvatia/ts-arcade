@@ -1,6 +1,7 @@
 import { EntityManager } from "../entities/entityManager.js";
 import { GameState } from "../game/state.js";
-import { audio } from "../game/audio.js"; // Added import
+// 🌟 THE FIX: Import the getter instead of the dead named export
+import { getAudio } from "../game/audioManager.js"; 
 
 class Controller {
   private x1: number | null;
@@ -62,13 +63,14 @@ class Controller {
     this.x1 = this.y1 = null;
   }
 
-  // Made async to allow audio context resuming
   async keyDown(event: KeyboardEvent) {
     event.preventDefault();
 
     if (event.key === "Enter" && this.gameState.mode === "INIT") {
-      // Unlock the audio context securely on user click/press!
+      // 🌟 THE FIX: Grab the instance lazily and unlock it safely!
+      const audio = getAudio();
       await audio.unlockAudio();
+      
       this.gameState.startGame();
       return;
     }
