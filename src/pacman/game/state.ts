@@ -162,6 +162,21 @@ class GameState {
     this.mode = "PLAYING";
   }
 
+  public triggerGhostEatenFreeze() {
+    // 1. Temporarily change the mode to freeze updates
+    const previousMode = this.mode;
+    this.mode = "GHOST_EATEN";
+
+    // 2. Play the ghost eating SFX immediately if you have it!
+    audio.playSFX("eat_ghost");
+
+    // 3. Set a timeout to resume the game after ~500ms (half a second)
+    setTimeout(() => {
+      // Put the mode back to what it was (usually "PLAYING")
+      this.mode = previousMode;
+    }, 500);
+  }
+
   public triggerDeathSequence() {
     if (this.lives <= 0) {
       this.mode = "GAME_OVER";
@@ -230,6 +245,10 @@ class GameState {
         this.score +=
           SCORE_CONFIG.GHOSTS.BASE *
           SCORE_CONFIG.GHOSTS.MULTIPLIERS[this.ghostMultiplier];
+        this.ghostMultiplier++;
+
+        // 🔥 Trigger the screen freeze!
+        this.triggerGhostEatenFreeze();
         this.ghostMultiplier++;
         break;
     }
