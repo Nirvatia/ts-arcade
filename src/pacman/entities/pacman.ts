@@ -316,20 +316,34 @@ class Pacman extends Entity {
     const cx = this.x;
     const cy = this.y;
     const r = this.r;
+
+    // Получаем правильный поворот тела Пакмана
     const rotation = this.getRotation();
 
     this.ctx.fillStyle = this.color;
     this.ctx.save();
+
+    // 1. Переносим контекст в центр Пакмана и поворачиваем его
     this.ctx.translate(cx, cy);
     this.ctx.rotate(rotation);
 
-    if (this.mouthOpen) {
+    if (animate) {
+      // 🌟 СЕКРЕТ КУЛЬТОВОЙ АНИМАЦИИ:
+      // Мы используем синус времени, чтобы создать плавный цикл "открытия-закрытия".
+      // PI / 1.8 (примерно 100 градусов) — это идеальный угол полного открытия.
+      const maxMouthAngle = Math.PI / 2.8;
+      const animationSpeed = 0.015;
+
+      const currentAperture =
+        Math.abs(Math.sin(Date.now() * animationSpeed)) * maxMouthAngle;
+
       this.ctx.beginPath();
-      this.ctx.arc(0, 0, r, this.mouthAngle, 2 * Math.PI - this.mouthAngle);
+      this.ctx.arc(0, 0, r, currentAperture, 2 * Math.PI - currentAperture);
       this.ctx.lineTo(0, 0);
       this.ctx.closePath();
       this.ctx.fill();
     } else {
+      // Если анимация выключена (например, пауза), рисуем полный круг
       this.ctx.beginPath();
       this.ctx.arc(0, 0, r, 0, 2 * Math.PI);
       this.ctx.fill();
@@ -337,13 +351,8 @@ class Pacman extends Entity {
 
     this.ctx.restore();
 
-    if (animate) {
-      this.mouthFrameCounter++;
-      if (this.mouthFrameCounter < this.mouthFrameSkip) return;
-
-      this.mouthFrameCounter = 0;
-      this.mouthOpen = !this.mouthOpen;
-    }
+    // Мы больше не используем старые mouthFrameCounter и mouthFrameSkip.
+    // Новая анимация полностью базируется на времени (Date.now()).
   }
 
   private drawDead(dt: number): void {
