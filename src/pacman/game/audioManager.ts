@@ -5,7 +5,9 @@ class AudioManager {
   // 🌟 Kept your exact properties
   private musicGain!: GainNode;
   private sfxGain!: GainNode;
-  private currentMusicVolume: number = 0.3; // Default to 30% to avoid overloading ears
+  private isMuted: boolean = false;
+  private previousMusicVolume: number = 0.15;
+  private previousSfxVolume: number = 0.25;
 
   private buffers: Map<string, AudioBuffer> = new Map();
   private activeMusicSource: AudioBufferSourceNode | null = null;
@@ -42,6 +44,27 @@ class AudioManager {
     this.isInitialized = true;
   }
 
+  public toggleMute() {
+    if (!this.isInitialized) return;
+
+    this.isMuted = !this.isMuted;
+
+    if (this.isMuted) {
+      // Save current volumes before killing them
+      this.previousMusicVolume = this.musicGain.gain.value;
+      this.previousSfxVolume = this.sfxGain.gain.value;
+
+      this.musicGain.gain.value = 0;
+      this.sfxGain.gain.value = 0;
+      console.log("Audio Muted");
+    } else {
+      // Restore previous volumes
+      this.musicGain.gain.value = this.previousMusicVolume;
+      this.sfxGain.gain.value = this.previousSfxVolume;
+      console.log("Audio Unmuted");
+    }
+  }
+
   public async unlockAudio(): Promise<void> {
     if (this.context && this.context.state === "suspended") {
       await this.context.resume();
@@ -56,6 +79,14 @@ class AudioManager {
     const audioBuffer = await this.context.decodeAudioData(arrayBuffer);
 
     this.buffers.set(name, audioBuffer);
+  }
+
+  public getTrackDuration(name: string): number {
+    if (!this.isInitialized) return 0;
+    const buffer = this.buffers.get(name);
+
+    // Returns duration in seconds (e.g., 4.256) or 0 if not found
+    return buffer ? buffer.duration : 0;
   }
 
   public playSFX(name: string) {
