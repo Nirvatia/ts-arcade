@@ -120,18 +120,29 @@ class Pacman extends Entity {
   }
 
   private updateMovement(dt: number) {
-    if (this.willHitWall()) return;
-
     this.checkAndTeleport();
 
-    if (this.isTurning) this.tryTurn();
+    // 1. Process intent to turn first
+    if (this.nextDirection) {
+      this.tryExecuteTurn();
+    }
 
+    // 2. Are we currently hitting a wall in our active direction?
+    const isHittingWall = this.willHitWall(this.direction);
+
+    if (isHittingWall) {
+      // Snap strictly to the center of the current tile when stopping
+      this.snapToTileCenter();
+      return;
+    }
+
+    // 3. Normal movement
     const { newX, newY } = this.getNextPosition();
-
     this.x = newX;
     this.y = newY;
 
-    if (this.needsAligning) this.alignToAxis();
+    // 4. Smooth corner drift (Subtle axis alignment)
+    this.smoothAlignToAxis();
 
     this.handleCollisionWithEatable(newX, newY);
   }
@@ -142,25 +153,78 @@ class Pacman extends Entity {
       newY: this.y + this.direction.dy * this.speed,
     };
   }
+  private tryExecuteTurn(): void {
+    if (!this.nextDirection) return;
+
+    const { centerX, centerY } = this.collision.getTileCenter(this.x, this.y);
+    const { tileX, tileY } = this.collision.getTile(this.x, this.y);
+
+    // If reversing direction (180 degree flip), let them do it instantly anywhere!
+    if (
+      this.nextDirection.dx === -this.direction.dx &&
+      this.nextDirection.dy === -this.direction.dy
+    ) {
+      this.direction = this.nextDirection;
+      this.nextDirection = null;
+      return;
+    }
+
+    // Check if the target corridor is actually open
+    const targetTileX = tileX + this.nextDirection.dx;
+    const targetTileY = tileY + this.nextDirection.dy;
+    const isTargetWall = this.collision.isWall(targetTileX, targetTileY);
+
+    if (isTargetWall) return; // Can't turn into a wall
+
+    // BROAD TOLERANCE: Can we begin the turn?
+    // We let Pac-Man turn if he is within half a tile's distance of the center.
+    const turnThreshold = this.tileSize * 0.5;
+    const distanceToCenter = Math.sqrt(
+      (this.x - centerX) ** 2 + (this.y - centerY) ** 2,
+    );
+
+    if (distanceToCenter < turnThreshold) {
+      // 🌟 CORNER CUTTING: Shift his position toward the center of the lane we are turning into
+      // This pulls him diagonally into the turn instead of making hard 90-degree angle snaps!
+      if (this.nextDirection.dx !== 0) this.y = centerY;
+      if (this.nextDirection.dy !== 0) this.x = centerX;
+
+      this.direction = this.nextDirection;
+      this.nextDirection = null;
+    }
+  }
+
+  private smoothAlignToAxis(): void {
+    const { centerX, centerY } = this.collision.getTileCenter(this.x, this.y);
+    const pullSpeed = 0.3; // How aggressively to pull toward center (0.1 to 0.5)
+
+    if (this.direction.dx !== 0) {
+      // Moving horizontally, smoothly pull Y toward the center line
+      this.y += (centerY - this.y) * pullSpeed;
+    }
+    if (this.direction.dy !== 0) {
+      // Moving vertically, smoothly pull X toward the center line
+      this.x += (centerX - this.x) * pullSpeed;
+    }
+  }
 
   private snapToTileCenter() {
     const { centerX, centerY } = this.collision.getTileCenter(this.x, this.y);
-
-    if (this.direction.dx !== 0) this.x = centerX;
-    if (this.direction.dy !== 0) this.y = centerY;
+    this.x = centerX;
+    this.y = centerY;
   }
 
-  private alignToAxis(): void {
-    const { centerX, centerY } = this.collision.getTileCenter(this.x, this.y);
+  private willHitWall(dir: { dx: number; dy: number }): boolean {
+    if (dir.dx === 0 && dir.dy === 0) return false;
 
-    const tolerance = Math.floor(2 * this.speed);
+    // We look slightly ahead based on Pac-Man's radius and speed
+    const lookAheadDistance = this.speed + this.r;
+    const boundX = this.x + dir.dx * lookAheadDistance;
+    const boundY = this.y + dir.dy * lookAheadDistance;
 
-    if (this.direction.dx !== 0 && Math.abs(this.y - centerY) < tolerance)
-      this.y = centerY;
-    if (this.direction.dy !== 0 && Math.abs(this.x - centerX) < tolerance)
-      this.x = centerX;
+    const { tileX, tileY } = this.collision.getTile(boundX, boundY);
 
-    this.needsAligning = false;
+    return this.collision.isWall(tileX, tileY);
   }
 
   private isAtTileCenter(): boolean {
@@ -238,15 +302,6 @@ class Pacman extends Entity {
       (this.direction.dy !== 0 ? this.direction.dy : this.nextDirection.dy);
 
     if (!this.collision.isWall(bufferTileX, bufferTileY)) this.isTurning = true;
-  }
-
-  private willHitWall(): boolean {
-    const boundX = this.x + this.direction.dx * (this.speed + this.r);
-    const boundY = this.y + this.direction.dy * (this.speed + this.r);
-
-    const { tileX, tileY } = this.collision.getTile(boundX, boundY);
-
-    return this.collision.isWall(tileX, tileY);
   }
 
   private checkAndTeleport() {
