@@ -16,8 +16,6 @@ class Pacman extends Entity {
   public y: number;
   public direction: { dx: number; dy: number };
   public nextDirection: { dx: number; dy: number } | null;
-  private needsAligning: boolean;
-  private isTurning: boolean;
   private speed: number;
   private lastTeleportExit: { x: number; y: number } | null = null;
 
@@ -44,8 +42,6 @@ class Pacman extends Entity {
     this.y = 0;
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
-    this.needsAligning = false;
-    this.isTurning = false;
     this.speed = Math.round((this.tileSize / 8) * 10) / 10;
     this.isBuffed = false;
     this.r = this.tileSize * 0.45;
@@ -58,7 +54,6 @@ class Pacman extends Entity {
   }
 
   private initEventListeners() {
-    // Listen to the actual event emitted by GameState when the buff active timer ticks
     eventBus.on("POWER_PILL_EATEN", () => {
       this.isBuffed = true;
     });
@@ -89,7 +84,6 @@ class Pacman extends Entity {
     const collidedGhost = this.getCollidedGhost();
 
     if (collidedGhost) {
-      // Use Pacman's local truth!
       if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
         eventBus.emit("COMMAND_GHOST_EATEN", { ghostName: collidedGhost.name });
       } else if (
@@ -101,6 +95,7 @@ class Pacman extends Entity {
       }
     }
   }
+
   public spawn() {
     const map = this.gameState.levelData.map;
 
@@ -119,29 +114,36 @@ class Pacman extends Entity {
     this.deathTimer = 0;
   }
 
+  // 🌟 ОБНОВЛЕННОЕ ДВИЖЕНИЕ
   private updateMovement(dt: number) {
     this.checkAndTeleport();
 
-    // 1. Process intent to turn first
+    // СИСТЕМА СТАРТА: Если Пакман стоит, сразу даем ему новое направление
+    if (
+      this.direction.dx === 0 &&
+      this.direction.dy === 0 &&
+      this.nextDirection
+    ) {
+      this.direction = this.nextDirection;
+      this.nextDirection = null;
+    }
+
+    // Обработка намерения повернуть на перекрестке
     if (this.nextDirection) {
       this.tryExecuteTurn();
     }
 
-    // 2. Are we currently hitting a wall in our active direction?
     const isHittingWall = this.willHitWall(this.direction);
 
     if (isHittingWall) {
-      // Snap strictly to the center of the current tile when stopping
       this.snapToTileCenter();
       return;
     }
 
-    // 3. Normal movement
     const { newX, newY } = this.getNextPosition();
     this.x = newX;
     this.y = newY;
 
-    // 4. Smooth corner drift (Subtle axis alignment)
     this.smoothAlignToAxis();
 
     this.handleCollisionWithEatable(newX, newY);
@@ -153,13 +155,14 @@ class Pacman extends Entity {
       newY: this.y + this.direction.dy * this.speed,
     };
   }
+
   private tryExecuteTurn(): void {
     if (!this.nextDirection) return;
 
     const { centerX, centerY } = this.collision.getTileCenter(this.x, this.y);
     const { tileX, tileY } = this.collision.getTile(this.x, this.y);
 
-    // If reversing direction (180 degree flip), let them do it instantly anywhere!
+    // Разворот на 180 градусов
     if (
       this.nextDirection.dx === -this.direction.dx &&
       this.nextDirection.dy === -this.direction.dy
@@ -169,23 +172,18 @@ class Pacman extends Entity {
       return;
     }
 
-    // Check if the target corridor is actually open
     const targetTileX = tileX + this.nextDirection.dx;
     const targetTileY = tileY + this.nextDirection.dy;
     const isTargetWall = this.collision.isWall(targetTileX, targetTileY);
 
-    if (isTargetWall) return; // Can't turn into a wall
+    if (isTargetWall) return;
 
-    // BROAD TOLERANCE: Can we begin the turn?
-    // We let Pac-Man turn if he is within half a tile's distance of the center.
     const turnThreshold = this.tileSize * 0.5;
     const distanceToCenter = Math.sqrt(
       (this.x - centerX) ** 2 + (this.y - centerY) ** 2,
     );
 
     if (distanceToCenter < turnThreshold) {
-      // 🌟 CORNER CUTTING: Shift his position toward the center of the lane we are turning into
-      // This pulls him diagonally into the turn instead of making hard 90-degree angle snaps!
       if (this.nextDirection.dx !== 0) this.y = centerY;
       if (this.nextDirection.dy !== 0) this.x = centerX;
 
@@ -196,14 +194,12 @@ class Pacman extends Entity {
 
   private smoothAlignToAxis(): void {
     const { centerX, centerY } = this.collision.getTileCenter(this.x, this.y);
-    const pullSpeed = 0.3; // How aggressively to pull toward center (0.1 to 0.5)
+    const pullSpeed = 0.3;
 
     if (this.direction.dx !== 0) {
-      // Moving horizontally, smoothly pull Y toward the center line
       this.y += (centerY - this.y) * pullSpeed;
     }
     if (this.direction.dy !== 0) {
-      // Moving vertically, smoothly pull X toward the center line
       this.x += (centerX - this.x) * pullSpeed;
     }
   }
@@ -217,7 +213,6 @@ class Pacman extends Entity {
   private willHitWall(dir: { dx: number; dy: number }): boolean {
     if (dir.dx === 0 && dir.dy === 0) return false;
 
-    // We look slightly ahead based on Pac-Man's radius and speed
     const lookAheadDistance = this.speed + this.r;
     const boundX = this.x + dir.dx * lookAheadDistance;
     const boundY = this.y + dir.dy * lookAheadDistance;
@@ -227,82 +222,11 @@ class Pacman extends Entity {
     return this.collision.isWall(tileX, tileY);
   }
 
-  private isAtTileCenter(): boolean {
-    const { centerX, centerY } = this.collision.getTileCenter(this.x, this.y);
-
-    const tolerance = 3 * this.speed;
-
-    if (
-      (this.direction.dx !== 0 && Math.abs(this.x - centerX) <= tolerance) ||
-      (this.direction.dy !== 0 && Math.abs(this.y - centerY) <= tolerance)
-    ) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private isNextTileWall(): boolean {
-    if (!this.nextDirection) return false;
-
-    const { tileX, tileY } = this.collision.getTile(this.x, this.y);
-
-    const nextTileX = tileX + this.nextDirection.dx;
-    const nextTileY = tileY + this.nextDirection.dy;
-
-    return this.collision.isWall(nextTileX, nextTileY);
-  }
-
-  private willChangeAxis(): boolean {
-    if (!this.nextDirection) return false;
-
-    return (
-      (this.direction.dx !== 0 && this.nextDirection.dy !== 0) ||
-      (this.direction.dy !== 0 && this.nextDirection.dx !== 0)
-    );
-  }
-
   public changeDirection(dir: { dx: number; dy: number }) {
     this.nextDirection = dir;
-
-    if (!this.willChangeAxis() && !this.isNextTileWall()) {
-      this.direction = this.nextDirection;
-      return;
-    }
-
-    if (!this.tryTurn()) this.tryBufferTurn();
   }
 
-  private tryTurn(): boolean {
-    if (!this.nextDirection) return false;
-
-    if (this.isAtTileCenter() && !this.isNextTileWall()) {
-      this.snapToTileCenter();
-      this.direction = this.nextDirection;
-      this.nextDirection = null;
-      this.isTurning = false;
-      this.needsAligning = true;
-
-      return true;
-    }
-
-    return false;
-  }
-
-  private tryBufferTurn() {
-    if (!this.nextDirection) return false;
-
-    const { tileX, tileY } = this.collision.getTile(this.x, this.y);
-
-    const bufferTileX =
-      tileX +
-      (this.direction.dx !== 0 ? this.direction.dx : this.nextDirection.dx);
-    const bufferTileY =
-      tileY +
-      (this.direction.dy !== 0 ? this.direction.dy : this.nextDirection.dy);
-
-    if (!this.collision.isWall(bufferTileX, bufferTileY)) this.isTurning = true;
-  }
+  // 🌟 ВСЁ ОСТАЛЬНОЕ (Транспортная система, еда, отрисовка)
 
   private checkAndTeleport() {
     const { tileX, tileY } = this.collision.getTile(this.x, this.y);
@@ -363,8 +287,6 @@ class Pacman extends Entity {
     const food = this.entityManager.getFood();
     if (food.positions.has(`${tileY},${tileX}`)) {
       food.eat(tileY, tileX);
-
-      // 🌟 THE FIX: Fired off to event bus instead of direct GameState calls
       eventBus.emit("DOT_EATEN");
     }
   }
@@ -377,12 +299,7 @@ class Pacman extends Entity {
 
     if (pillIndex !== -1) {
       pill.eat(tileY, tileX);
-
-      // Broadcast to the whole game that a power pill was eaten!
-      // (This is the event GameState listens to in order to fire back "POWER_PILL_EATEN")
       eventBus.emit("POWER_PILL_EATEN");
-
-      // Keep this if the AudioController still relies on it for the gulp sound!
       eventBus.emit("POWER_PILL_EATEN_BY_PACMAN");
     }
   }
@@ -431,7 +348,6 @@ class Pacman extends Entity {
 
   private drawDead(dt: number): void {
     this.deathTimer += dt;
-
     const customDeathDuration = 1500;
 
     if (this.deathTimer >= customDeathDuration) {
