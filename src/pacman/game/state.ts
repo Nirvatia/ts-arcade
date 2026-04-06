@@ -1,4 +1,3 @@
-import { LEVEL_CONFIGS } from "../config/levels.js";
 import { SCORE_CONFIG } from "../config/scoring.js";
 import { EntityManager } from "../entities/entityManager.js";
 import { Collision } from "./collision.js";
