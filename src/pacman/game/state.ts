@@ -61,6 +61,7 @@ class GameState {
 
     eventBus.on("POWER_PILL_EATEN_BY_PACMAN", () => {
       this.updateScore("POWER_PELLET");
+      this.handlePowerPillEaten();
     });
   }
 
@@ -250,7 +251,6 @@ public startGame() {
   public resetGhostMultiplier() {
     this.ghostMultiplier = 0;
   }
-  // 🌟 THE FIX: Made this private so external files stop calling it directly.
   private updateScore(type: "DOT" | "POWER_PELLET" | "GHOST") {
     switch (type) {
       case "DOT":
@@ -259,21 +259,17 @@ public startGame() {
         break;
       case "POWER_PELLET":
         this.score += SCORE_CONFIG.DOTS.POWER_PELLET;
-        this.handlePowerPillEaten();
         break;
       case "GHOST":
-        // 🌟 THE FIX: Safe array indexing for the score multiplier!
         const multiplierIndex = Math.min(
           this.ghostMultiplier,
           SCORE_CONFIG.GHOSTS.MULTIPLIERS.length - 1,
         );
-
         this.score +=
           SCORE_CONFIG.GHOSTS.BASE *
           SCORE_CONFIG.GHOSTS.MULTIPLIERS[multiplierIndex];
-
         this.triggerGhostEatenFreeze();
-        this.ghostMultiplier++; // Increment for the next one!
+        this.ghostMultiplier++; 
         break;
     }
   }
