@@ -44,7 +44,7 @@ class Pacman extends Entity {
     this.nextDirection = null;
     this.speed = Math.round((this.tileSize / 8) * 10) / 10;
     this.isBuffed = false;
-    this.r = this.tileSize * 0.45;
+    this.r = this.tileSize * 0.5;
     this.color = "rgb(255, 255, 0)";
   }
 
