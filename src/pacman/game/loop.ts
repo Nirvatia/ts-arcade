@@ -1,8 +1,10 @@
 import { Renderer } from "./renderer.js";
 import { GameState } from "./state.js";
+import { EntityManager } from "../entities/entityManager.js";
 
 class GameLoop {
   renderer: Renderer;
+  private entityManager = EntityManager.getInstance(); // 🌟 ДОБАВИЛИ
   private static instance: GameLoop;
   private fps: number;
   private now: number | null = null;
@@ -36,17 +38,19 @@ class GameLoop {
 
       const gameState = GameState.getInstance();
 
-      // Stop moving things if we are paused or waiting!
-      // (We allow PACMAN_DEAD so his death animation can still render)
-      if (
-        gameState.mode === "PAUSED" ||
-        gameState.mode === "LEVEL_TRANSITION" ||
-        gameState.mode === "GHOST_EATEN"
-      ) {
-        return;
+      // 1. ФАЗА ОБНОВЛЕНИЯ (UPDATE)
+      // Двигать сущности мы разрешаем ТОЛЬКО в режиме игры.
+      // Это решает проблему, когда при паузе или "GHOST_EATEN" сущности замирают физически.
+      if (gameState.mode === "PLAYING") {
+        this.entityManager.getAllDynamic().forEach((entity) => entity.update(this.delta!));
+        this.entityManager.getAllStatic().forEach((entity) => entity.update(this.delta!));
       }
 
-      this.renderer.render(this.delta);
+      // 2. ФАЗА ОТРИСОВКИ (RENDER)
+      // Здесь мы пропускаем рендер только для полной паузы или ожидания.
+      if (gameState.mode !== "PAUSED" && gameState.mode !== "LEVEL_TRANSITION") {
+        this.renderer.render(this.delta);
+      }
     }
   }
 

@@ -15,41 +15,30 @@ class Renderer {
   public render(dt?: number): void {
     const gameState = GameState.getInstance();
 
-    // 🔥 FULL PAUSE: If a ghost was just eaten, do not clear, do not draw, do not update.
-    // This leaves the last successfully rendered frame frozen in time on the canvas!
+    // 🌟 ОСТАВЛЯЕМ ЗАМОРОЗКУ ЭКРАНА: 
+    // Если Пакман съел привидение, мы просто не очищаем холст и не рисуем новые кадры.
     if (gameState.mode === "GHOST_EATEN") {
       return;
     }
 
     const clearedCanvases = new Set<HTMLCanvasElement>();
 
-    const canAnimate = ["PLAYING", "INIT", "LEVEL_TRANSITION"].includes(
-      gameState.mode,
-    );
-    const canUpdate = gameState.mode === "PLAYING";
-
-    // --- FIX: PREVENT RENDERING UNSPAWNED ENTITIES ---
-    // Moving characters (Pacman and Ghosts) have not called spawn() yet
-    // when mode === "INIT". This stops them from appearing at (0, 0).
+    // Решаем, нужно ли крутить анимации (ножки привидений, рот Пакмана)
+    const canAnimate = ["PLAYING", "INIT", "LEVEL_TRANSITION"].includes(gameState.mode);
     const shouldDrawDynamic = gameState.mode !== "INIT";
 
-    // 1. Draw all dynamic entities (Only if game has started or is transitioning)
+    // 1. Отрисовка динамических объектов
     if (shouldDrawDynamic) {
       this.entityManager.getAllDynamic().forEach((entity) => {
         if (!clearedCanvases.has(entity.canvas)) {
           entity.clearCanvas();
           clearedCanvases.add(entity.canvas);
         }
-
-        // Draw and optionally animate
-        entity.draw(canAnimate, dt);
-
-        // Update only if the mode allows it
-        if (canUpdate) entity.update(dt);
+        entity.draw(canAnimate, dt); // 🌟 ТОЛЬКО DRAW
       });
     }
 
-    // 2. Draw all static entities if they need redraw (Walls, Food, UI)
+    // 2. Отрисовка статических объектов (Стены, еда)
     this.entityManager
       .getAllStatic()
       .filter((entity) => entity.needsRedraw)
@@ -59,10 +48,8 @@ class Renderer {
           clearedCanvases.add(entity.canvas);
         }
 
-        entity.draw(canAnimate, dt);
+        entity.draw(canAnimate, dt); // 🌟 ТОЛЬКО DRAW
         entity.needsRedraw = false;
-
-        if (canUpdate) entity.update(dt);
       });
   }
 }
