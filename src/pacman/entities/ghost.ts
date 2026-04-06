@@ -14,6 +14,7 @@ class Ghost extends Entity {
 
   public state: "CHASE" | "SCATTER" | "FRIGHTENED" | "EATEN" = "CHASE";
   private direction: { dx: number; dy: number };
+  private lastTeleportExit: { x: number; y: number } | null = null;
   private path: string[] = [];
   private currentPathTarget: { x: number; y: number } | null = null;
   private spawnGridX: number = 0;
@@ -99,6 +100,7 @@ class Ghost extends Entity {
   }
 
   public override reset() {
+    this.lastTeleportExit = null;
     this.direction = { dx: 0, dy: 0 };
     this.speed = this.defaultSpeed;
     this.color = this.defaultColor;
@@ -301,13 +303,32 @@ class Ghost extends Entity {
   }
 
   private checkAndTeleport() {
+    // 1. Если призрак идет по выверенному алгоритмом пути,
+    // не даем ему случайно телепортироваться и сломать маршрут
+    if (this.path.length > 0) return;
+
     const { tileX, tileY } = this.collision.getTile(this.x, this.y);
+
+    // 2. Проверяем, не стоим ли мы на точке, куда только что телепортировались
+    if (this.lastTeleportExit) {
+      if (
+        tileX === this.lastTeleportExit.x &&
+        tileY === this.lastTeleportExit.y
+      ) {
+        return; // Еще не сошли с портала, игнорируем
+      } else {
+        this.lastTeleportExit = null; // Сошли с портала — забываем его
+      }
+    }
 
     if (this.collision.isTeleport(tileX, tileY)) {
       const exit = this.collision.getTeleportExit(tileX, tileY);
       if (exit) {
         this.x = exit.x * this.tileSize + this.tileSize / 2;
         this.y = exit.y * this.tileSize + this.tileSize / 2;
+
+        // 3. Запоминаем новые координаты плитки, чтобы не прыгнуть назад
+        this.lastTeleportExit = exit;
       }
     }
   }
