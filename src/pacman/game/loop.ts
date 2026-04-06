@@ -27,6 +27,7 @@ class GameLoop {
     return GameLoop.instance;
   }
 
+  // В методе loop() класса GameLoop
   public loop() {
     this.timer = requestAnimationFrame(() => this.loop());
 
@@ -38,18 +39,29 @@ class GameLoop {
 
       const gameState = GameState.getInstance();
 
-      // 1. ФАЗА ОБНОВЛЕНИЯ (UPDATE)
-      // Двигать сущности мы разрешаем ТОЛЬКО в режиме игры.
-      // Это решает проблему, когда при паузе или "GHOST_EATEN" сущности замирают физически.
+      // 🌟 ФАЗА UPDATE 🌟
       if (gameState.mode === "PLAYING") {
-        this.entityManager.getAllDynamic().forEach((entity) => entity.update(this.delta!));
-        this.entityManager.getAllStatic().forEach((entity) => entity.update(this.delta!));
+        this.entityManager
+          .getAllDynamic()
+          .forEach((entity) => entity.update(this.delta!));
+        this.entityManager
+          .getAllStatic()
+          .forEach((entity) => entity.update(this.delta!));
+      } else if (gameState.mode === "INTERMISSION") {
+        // Здесь мы обновляем только координаты персонажей в мультфильме!
+        const ui = this.entityManager.getUI();
+        const intermission = ui.getIntermission();
+        if (intermission) {
+          intermission.update(this.delta!);
+        }
       }
 
-      // 2. ФАЗА ОТРИСОВКИ (RENDER)
-      // Здесь мы пропускаем рендер только для полной паузы или ожидания.
-      if (gameState.mode !== "PAUSED" && gameState.mode !== "LEVEL_TRANSITION") {
-        this.renderer.render(this.delta);
+      // 🌟 ФАЗА RENDER 🌟
+      if (
+        gameState.mode !== "PAUSED" &&
+        gameState.mode !== "LEVEL_TRANSITION"
+      ) {
+        this.renderer.render(this.delta!);
       }
     }
   }
