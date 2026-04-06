@@ -57,13 +57,15 @@ class Pill extends Entity {
     this.animationCounter += this.animationSpeed;
   }
 
-  public draw(animate: boolean) {
+public draw(animate: boolean) {
     if (animate) this.animate();
+    
+    // 🌟 Очищаем холст энерджайзеров перед каждым кадром пульсации!
+    this.clearCanvas();
 
     this.positions.forEach(({ i, j }) => {
       const baseSize = this.tileSize / 6;
-      const pulseSize =
-        Math.sin(this.animationCounter * 3) * (this.tileSize / 15);
+      const pulseSize = Math.sin(this.animationCounter * 3) * (this.tileSize / 15);
       const finalSize = baseSize + pulseSize;
 
       this.ctx.fillStyle = this.pillColor;
