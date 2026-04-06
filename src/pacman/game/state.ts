@@ -7,7 +7,7 @@ import { GameLoop } from "./loop.js";
 import { Timer } from "./timer.js";
 
 import type { GameMode, GraphType, LevelConfigType } from "../types.js";
-import { createPathGraph } from "../utils.js";
+import { createPathGraph, generateLevelConfig } from "../utils.js";
 import { getAudio } from "./audioManager.js";
 import type { Map } from "../map/map.js";
 
@@ -42,7 +42,7 @@ class GameState {
     this.pathGraph = null;
     this.lives = 3;
     this.currentLevel = 1;
-    this.levelData = LEVEL_CONFIGS[1];
+    this.levelData = generateLevelConfig(this.currentLevel);
     this.score = 0;
     this.ghostMultiplier = 0;
 
@@ -77,7 +77,7 @@ class GameState {
   }
 
   private getLevelConfig(level: number): LevelConfigType {
-    return LEVEL_CONFIGS[level] || LEVEL_CONFIGS[1];
+    return generateLevelConfig(level);
   }
 
   public setTotalDots(count: number) {
