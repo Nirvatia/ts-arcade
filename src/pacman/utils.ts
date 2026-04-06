@@ -1,6 +1,13 @@
-import type { GraphType, TileType } from "./types.js";
+import type { GraphType, LevelConfigType, TileType } from "./types.js";
 import { AUDIO_CONFIG } from "./config/audioConfig.js";
 import { getAudio } from "./game/audioManager.js";
+import {
+  LEVEL_1_MAP,
+  LEVEL_2_MAP,
+  LEVEL_3_MAP,
+  LEVEL_4_MAP,
+  LEVEL_5_MAP,
+} from "./config/maps.js";
 
 async function initAudio() {
   const audio = getAudio();
@@ -248,6 +255,38 @@ function findLairInternalTiles(map: TileType[][]): string[] {
   return lairInternalTiles;
 }
 
+// Пример функции-генератора сложности
+function generateLevelConfig(level: number): LevelConfigType {
+  // Зацикливаем 5 доступных карт
+  const maps = [
+    LEVEL_1_MAP,
+    LEVEL_2_MAP,
+    LEVEL_3_MAP,
+    LEVEL_4_MAP,
+    LEVEL_5_MAP,
+  ];
+  const mapIndex = (level - 1) % maps.length;
+
+  // Массив красивых цветов (тоже гоняем по кругу)
+  // Ultimate low-strain "Dark Mode" slate/grey palette
+  const colors = [
+    "hsl(220, 70%, 35%)", // Deep Cobalt Blue
+    "hsl(340, 70%, 35%)", // Deep Crimson Red
+    "hsl(160, 70%, 30%)", // Deep Forest Green
+    "hsl(280, 70%, 35%)", // Dark Amethyst Purple
+  ];
+  const colorIndex = (level - 1) % colors.length;
+
+  return {
+    map: maps[mapIndex],
+    mapColor: colors[colorIndex],
+    // С каждым уровнем время уменьшается, но не падает ниже 2 секунд
+    buffDuration: Math.max(2, 10 - (level - 1) * 1.5),
+    // Порог мигания пропорционален времени баффа
+    buffThreshold: Math.max(1, 3 - (level - 1) * 0.4),
+  };
+}
+
 export {
   initAudio,
   setCanvasSize,
@@ -256,4 +295,5 @@ export {
   findLairInternalTiles,
   createPathGraph,
   findShortestPath,
+  generateLevelConfig,
 };
