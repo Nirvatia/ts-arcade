@@ -1,12 +1,14 @@
 import { CANVAS_CONFIG } from "../config/canvas.js";
 import { Entity } from "../entities/entity.js";
 import { GameState } from "../game/state.js";
+import { Intermission } from "../game/intermission.js"; // 🌟 ИМПОРТ
 
 class UI extends Entity {
   private gameState: GameState;
   private fontSize: string;
   private fontStyle: string;
   private color: string;
+  private intermission: Intermission; // 🌟 ДОБАВИЛИ СВОЙСТВО
 
   constructor() {
     super(CANVAS_CONFIG.canvasIds.ui, false);
@@ -15,6 +17,14 @@ class UI extends Entity {
     this.fontSize = 30 + "px";
     this.fontStyle = "Jersey-Regular";
     this.color = "rgba(250, 240, 98, 0.85)";
+
+    // 🌟 Создаем инстанс сцены внутри UI
+    this.intermission = new Intermission(this.canvas, this.ctx, this.fontStyle);
+  }
+
+  // 🌟 ГЕТТЕР ДЛЯ ОСТАЛЬНЫХ ФАЙЛОВ
+  public getIntermission(): Intermission {
+    return this.intermission;
   }
 
   public update() {}
@@ -32,18 +42,23 @@ class UI extends Entity {
   }
 
   public draw(animate: boolean) {
-    this.ctx.save();
-    this.ctx.letterSpacing = "1.5px";
+    // 🌟 Если включен режим Интермиссии — мы просто рисуем мультик и выходим!
+    if (this.gameState.mode === "INTERMISSION") {
+      this.intermission.draw();
+      return;
+    }
 
     this.drawWords();
     this.drawScoreCount();
     this.drawLivesCount();
-
-    this.ctx.restore();
   }
+
   private drawWords() {
     const scoreCoords = { x: this.tileSize / 2, y: this.tileSize * 32 };
     const livesCoords = { x: this.tileSize * 20, y: this.tileSize * 32 };
+
+    // 🌟 Гарантируем отступ при каждом вызове отрисовки слов
+    this.ctx.letterSpacing = "1.5px";
 
     this.ctx.fillStyle = this.color;
     this.ctx.font = this.fontSize + " " + this.fontStyle;
@@ -56,7 +71,6 @@ class UI extends Entity {
 
   public clearReady(): void {
     this.clearCanvas();
-    // Redraw just the default HUD
     this.drawWords();
     this.drawScoreCount();
     this.drawLivesCount();
@@ -106,35 +120,25 @@ class UI extends Entity {
 
     this.ctx.fillStyle = this.color;
     this.ctx.beginPath();
-
-    // 🔥 SCALED UP: Using a massive font size for the countdown numbers
     this.ctx.font = this.tileSize * 3 + "px " + this.fontStyle;
-
     const coords = this.getCenterPosition();
-
-    // We adjust the centering since the font is much bigger now
     this.ctx.fillText(n.toString(), coords.x + this.tileSize, coords.y);
     this.ctx.closePath();
   }
 
   public drawReady(): void {
-    this.clearCanvas(); // Redraw normal score and lives so they don't vanish
-
+    this.clearCanvas();
     this.drawWords();
     this.drawScoreCount();
-    this.drawLivesCount(); // Draw the READY! text dead-center
+    this.drawLivesCount();
 
-    this.ctx.fillStyle = "rgb(255, 255, 0)"; // Solid yellow
-
-    // 🔥 SCALED UP: Setting font size to 60px or roughly double your standard HUD size!
+    this.ctx.fillStyle = "rgb(255, 255, 0)";
     this.ctx.font = "60px " + this.fontStyle;
 
     const coords = this.getCenterPosition();
-
-    // Since 60px is larger, we grab the width of the string to calculate a perfect visual center
     const text = "READY!";
     const metrics = this.ctx.measureText(text);
-    const xOffset = (this.tileSize * 28) / 2 - metrics.width / 2; // Assuming 28 columns for canvas width
+    const xOffset = (this.tileSize * 28) / 2 - metrics.width / 2;
 
     this.ctx.fillText(text, xOffset, coords.y);
   }
