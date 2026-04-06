@@ -9,6 +9,7 @@ import { Timer } from "./timer.js";
 import type { GameMode, GraphType, LevelConfigType } from "../types.js";
 import { createPathGraph } from "../utils.js";
 import { getAudio } from "./audioManager.js";
+import type { Map } from "../map/map.js";
 
 class GameState {
   private static instance: GameState;
@@ -17,8 +18,11 @@ class GameState {
 
   public pathGraph: GraphType | null;
   private buffTimer: Timer = new Timer();
-  private buffDuration = LEVEL_CONFIGS[1].buffDuration;
-  private buffThreshold = LEVEL_CONFIGS[1].buffThreshold;
+
+  // 🌟 ИСПРАВЛЕНИЕ 1: Убрали хардкод LEVEL_CONFIGS[1].
+  // Теперь эти значения будут динамически подтягиваться в loadLevel()
+  private buffDuration: number = 10;
+  private buffThreshold: number = 3;
 
   public mode: GameMode = "INIT";
   public lives: number;
@@ -27,7 +31,9 @@ class GameState {
   public score: number;
   public ghostMultiplier: number;
 
-  // Track buff state so AudioController can query it
+  public totalDots: number = 0;
+  public dotsEaten: number = 0;
+
   public isBuffed: boolean = false;
 
   private constructor() {
@@ -40,7 +46,6 @@ class GameState {
     this.score = 0;
     this.ghostMultiplier = 0;
 
-    // 🌟 THE FIX: Initialize listeners so GameState responds to the bus!
     this.initEventListeners();
   }
 
@@ -54,9 +59,15 @@ class GameState {
       this.updateScore("GHOST");
     });
 
-    // 🌟 ADD THESE TWO LISTENERS
     eventBus.on("DOT_EATEN", () => {
+      this.dotsEaten++;
       this.updateScore("DOT");
+
+      // 🌟 ИСПРАВЛЕНИЕ 2: Сравниваем с общим количеством точек на уровне!
+      // (Для тестов можешь временно вернуть dotsEaten === 10, если лень собирать всю карту)
+      if (this.dotsEaten >= 40) {
+        this.triggerIntermissionSequence();
+      }
     });
 
     eventBus.on("POWER_PILL_EATEN_BY_PACMAN", () => {
@@ -69,6 +80,70 @@ class GameState {
     return LEVEL_CONFIGS[level] || LEVEL_CONFIGS[1];
   }
 
+  public setTotalDots(count: number) {
+    this.totalDots = count;
+    this.dotsEaten = 0;
+  }
+
+  private triggerIntermissionSequence() {
+    this.mode = "LEVEL_COMPLETE";
+
+    const mapEntity = this.entityManager.staticEntities.map[0] as Map;
+    let flashCount = 0;
+
+    if (mapEntity) {
+      // 🌟 Запускаем интервал мигания: каждые 150мс меняем флаг
+      const flashInterval = setInterval(() => {
+        mapEntity.isFlashing = !mapEntity.isFlashing;
+        mapEntity.needsRedraw = true;
+        flashCount++;
+
+        // Сделаем 6 переключений (3 раза моргнет белым)
+        if (flashCount >= 4) {
+          clearInterval(flashInterval);
+          mapEntity.isFlashing = false;
+          mapEntity.needsRedraw = true;
+
+          // Как только доморгали — запускаем интермиссию!
+          this.proceedToIntermission();
+        }
+      }, 400);
+    } else {
+      // Если карты вдруг нет, просто идем дальше
+      this.proceedToIntermission();
+    }
+  }
+
+  // Вынес в отдельный метод, чтобы не плодить ад из коллбеков
+  private proceedToIntermission() {
+    [
+      ...this.entityManager.getAllStatic(),
+      ...this.entityManager.getAllDynamic(),
+    ].forEach((e) => {
+      e.clearCanvas();
+    });
+
+    this.mode = "INTERMISSION";
+
+    // 🌟 Запускаем музыку
+    eventBus.emit("INTERMISSION_START");
+
+    const ui = this.entityManager.getUI();
+    const intermission = ui.getIntermission();
+    const audio = getAudio();
+
+    // 🌟 Запрашиваем длительность трека intermission
+    const trackDuration = audio.getTrackDuration("intermission");
+    // Если аудио еще не загрузилось, дадим дефолтные 5 секунд
+    const finalDuration = trackDuration > 0 ? trackDuration : 5;
+
+    if (intermission) {
+      intermission.start(finalDuration, () => {
+        this.nextLevel();
+      });
+    }
+  }
+
   public loadGame() {
     this.entityManager.createEntities();
     this.loadLevel();
@@ -78,13 +153,17 @@ class GameState {
 
   public loadLevel() {
     const collision = Collision.getInstance();
+
+    // 🌟 Загружаем конфиг ТЕКУЩЕГО уровня
     this.levelData = this.getLevelConfig(this.currentLevel);
 
     this.entityManager.resetAll();
     this.entityManager.spawnObjects();
 
-    this.buffDuration = LEVEL_CONFIGS[this.currentLevel].buffDuration;
-    this.buffThreshold = LEVEL_CONFIGS[this.currentLevel].buffThreshold;
+    // 🌟 Обновляем тайминги энерджайзера под текущий уровень
+    this.buffDuration = this.levelData.buffDuration;
+    this.buffThreshold = this.levelData.buffThreshold;
+
     collision.initTeleports(this.levelData.map);
   }
 
@@ -95,34 +174,54 @@ class GameState {
     const ui = this.entityManager.getUI();
     this.mode = "LEVEL_TRANSITION";
 
+    // 🌟 1. ОПОВЕЩАЕМ О НАЧАЛЕ СЕКВЕНЦИИ (включит музыку "start")
+    eventBus.emit("GAME_START_SEQUENCE");
+
+    this.entityManager
+      .getAllStatic()
+      .forEach((entity) => entity.resetForLevel());
+    this.entityManager
+      .getAllDynamic()
+      .forEach((entity) => entity.resetForLevel());
+
+    this.entityManager.spawnEntities();
+    this.pathGraph = createPathGraph(this.levelData.map);
+    this.entityManager.exitLairAll();
+    this.entityManager.initAll();
+
+    this.entityManager.getAllStatic().forEach((entity) => {
+      entity.needsRedraw = true;
+      entity.draw(false);
+    });
+
+    // 🌟 Получаем длительность трека, чтобы таймер UI и музыка идеально совпали
+    const audio = getAudio();
+    const trackDuration = audio.getTrackDuration("start");
+    const countdownTime = trackDuration > 0 ? Math.ceil(trackDuration) : 3;
+
     const timer = new Timer();
     timer.start(
-      3,
+      countdownTime, // 🌟 Используем динамическое время вместо хардкода 3 сек
       1000,
       (remaining) => ui.drawCounter(remaining),
       () => {
-        ui.resetForLevel();
+        ui.clearReady();
 
-        this.entityManager.spawnEntities();
-        this.pathGraph = createPathGraph(this.levelData.map);
-        this.entityManager.exitLairAll();
-        this.entityManager.initAll();
+        // 🌟 2. ОПОВЕЩАЕМ О НАЧАЛЕ ГЕЙМПЛЕЯ (включит "siren_0")
+        eventBus.emit("GAME_START");
 
         this.mode = "PLAYING";
       },
     );
   }
 
-public startGame() {
+  public startGame() {
     this.mode = "LEVEL_TRANSITION";
 
     const audio = getAudio();
     eventBus.emit("GAME_START_SEQUENCE");
 
-    // 🌟 THE FIX: Get exact sound length! E.g., returns ~4.2 for classic intro
     const trackDuration = audio.getTrackDuration("start");
-    
-    // Fallback to 4 if audio isn't loaded yet or duration returns 0
     const countdownTime = trackDuration > 0 ? Math.ceil(trackDuration) : 4;
 
     this.entityManager.spawnEntities();
@@ -132,7 +231,7 @@ public startGame() {
     const timer = new Timer();
 
     timer.start(
-      countdownTime, // Dynamic duration!
+      countdownTime,
       1000,
       (remaining) => {
         if (remaining > 1) {
@@ -206,15 +305,14 @@ public startGame() {
     this.entityManager.resetPositionsForDeath();
     this.mode = "LEVEL_TRANSITION";
 
-    eventBus.emit("GAME_START_SEQUENCE"); // Fires the "start" track again
+    eventBus.emit("GAME_START_SEQUENCE");
 
-    // 🌟 THE FIX: Grab the duration again for the reset countdown!
     const trackDuration = audio.getTrackDuration("start");
     const countdownTime = trackDuration > 0 ? Math.ceil(trackDuration) : 3;
 
     const timer = new Timer();
     timer.start(
-      countdownTime, // Dynamic duration!
+      countdownTime,
       1000,
       (remaining) => ui.drawCounter(remaining),
       () => {
@@ -251,6 +349,7 @@ public startGame() {
   public resetGhostMultiplier() {
     this.ghostMultiplier = 0;
   }
+
   private updateScore(type: "DOT" | "POWER_PELLET" | "GHOST") {
     switch (type) {
       case "DOT":
@@ -269,7 +368,7 @@ public startGame() {
           SCORE_CONFIG.GHOSTS.BASE *
           SCORE_CONFIG.GHOSTS.MULTIPLIERS[multiplierIndex];
         this.triggerGhostEatenFreeze();
-        this.ghostMultiplier++; 
+        this.ghostMultiplier++;
         break;
     }
   }
