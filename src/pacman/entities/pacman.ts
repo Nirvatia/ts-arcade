@@ -68,12 +68,11 @@ class Pacman extends Entity {
     this.mouthOpen = true;
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
-    this.spawn();
+    this.spawn(); // Оставляем вызов тут
   }
 
   public override resetForLevel() {
-    this.reset();
-    this.spawn();
+    this.reset(); // Вызов spawn() уже внутри reset(), повторно писать его тут НЕ НУЖНО
   }
 
   public update(dt: number) {
@@ -100,13 +99,20 @@ class Pacman extends Entity {
     const map = this.gameState.levelData.map;
 
     for (let y = 0; y < map.length; y++) {
-      let x = map[y].findIndex((tile: string) => tile === "PM");
+      const x = map[y].findIndex((tile: string) => tile === "PM");
       if (x !== -1) {
-        this.x = x * this.tileSize + this.tileSize;
+        // 🌟 ИСПРАВЛЕНИЕ: Пакман встает ровно в центр тайла!
+        this.x = x * this.tileSize + this.tileSize / 2;
         this.y = y * this.tileSize + this.tileSize / 2;
+
+        // Сбрасываем "память" о предыдущем телепорте,
+        // чтобы Пакмана не выкинуло обратно при спавне на телепорте
+        this.lastTeleportExit = null;
         return;
       }
     }
+
+    console.warn("Pac-Man spawn point (PM) not found on the current map!");
   }
 
   public triggerDeath(): void {
@@ -287,7 +293,6 @@ class Pacman extends Entity {
     const food = this.entityManager.getFood();
     if (food.positions.has(`${tileY},${tileX}`)) {
       food.eat(tileY, tileX);
-      eventBus.emit("DOT_EATEN");
     }
   }
 
