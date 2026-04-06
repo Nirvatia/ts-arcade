@@ -6,6 +6,7 @@ class Map extends Entity {
   private gameState: GameState;
   private lineWidth: number;
   private lineColor: string;
+  public isFlashing: boolean = false;
 
   constructor() {
     super(CANVAS_CONFIG.canvasIds.map, false);
@@ -15,9 +16,16 @@ class Map extends Entity {
     this.lineColor = this.gameState.levelData.mapColor;
   }
 
-  public update() {
+  // 🌟 ПЕРЕОПРЕДЕЛЯЕМ МЕТОД ДЛЯ НОВОГО УРОВНЯ
+  public override resetForLevel() {
+    super.resetForLevel(); // Вызовет ресайз и очистку холста из Entity
 
+    // Обновляем цвет лабиринта под новый уровень!
+    this.lineColor = this.gameState.levelData.mapColor;
+    this.needsRedraw = true;
   }
+
+  public update() {}
 
   public override init() {
     this.needsRedraw = true;
@@ -26,8 +34,20 @@ class Map extends Entity {
   public draw(animate: boolean) {
     const map = this.gameState.levelData.map;
 
-    this.ctx.strokeStyle = this.lineColor;
+    this.lineColor = this.gameState.levelData.mapColor;
+    this.ctx.strokeStyle = this.lineColor; // Всегда используем основной цвет
     this.ctx.lineWidth = this.lineWidth;
+
+    this.ctx.save(); // Сохраняем стейт контекста
+
+    // 🌟 БЕЗОПАСНЫЙ ЭФФЕКТ: Если включено мигание, делаем лабиринт полупрозрачным
+    if (this.isFlashing) {
+      // Вместо белого цвета просто делаем лабиринт пульсирующим по прозрачности
+      const time = Date.now() / 150;
+      this.ctx.globalAlpha = 0.3 + Math.sin(time) * 0.3; // Прозрачность будет мягко ходить от 0.0 до 0.6
+    } else {
+      this.ctx.globalAlpha = 1.0;
+    }
 
     for (let i = 0; i < map.length; i++) {
       for (let j = 0; j < map[i].length; j++) {
@@ -46,6 +66,8 @@ class Map extends Entity {
         if (drawMethod) drawMethod.call(this, i, j);
       }
     }
+
+    this.ctx.restore(); // Возвращаем прозрачность обратно в 1.0
   }
 
   private drawLine(x1: number, y1: number, x2: number, y2: number) {
@@ -62,7 +84,7 @@ class Map extends Entity {
     cx: number,
     cy: number,
     x2: number,
-    y2: number
+    y2: number,
   ) {
     this.ctx.beginPath();
     this.ctx.moveTo(x1, y1);
@@ -92,7 +114,7 @@ class Map extends Entity {
       x,
       y - this.tileSize / 2,
       x - this.tileSize / 2,
-      y - this.tileSize / 2
+      y - this.tileSize / 2,
     );
   }
 
@@ -105,7 +127,7 @@ class Map extends Entity {
       x,
       y - this.tileSize / 2,
       x + this.tileSize / 2,
-      y - this.tileSize / 2
+      y - this.tileSize / 2,
     );
   }
 
@@ -118,7 +140,7 @@ class Map extends Entity {
       x,
       y + this.tileSize / 2,
       x + this.tileSize / 2,
-      y + this.tileSize / 2
+      y + this.tileSize / 2,
     );
   }
 
@@ -131,7 +153,7 @@ class Map extends Entity {
       x,
       y + this.tileSize / 2,
       x - this.tileSize / 2,
-      y + this.tileSize / 2
+      y + this.tileSize / 2,
     );
   }
 }
