@@ -1,6 +1,6 @@
 import { type TileType } from "../types.js";
 
-const MAP_LVL_1: TileType[][] = [
+export const LEVEL_1_MAP: TileType[][] = [
   ["TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR",],
   ["WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "PP", "WV", "WV", "PP", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV",],
   ["WV", "FD", "TL", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "TR", "FD", "WV",],
@@ -34,4 +34,36 @@ const MAP_LVL_1: TileType[][] = [
   ["BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR",],
 ];
 
-export { MAP_LVL_1 };
+export const LEVEL_2_MAP: TileType[][] = [
+  ["TL", "WH", "WH", "WH", "WH", "TR", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "TL", "WH", "WH", "WH", "WH", "TR"],
+  ["WV", "FD", "FD", "FD", "FD", "WV", "ES", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "ES", "WV", "FD", "FD", "FD", "FD", "WV"],
+  ["WV", "FD", "TL", "TR", "FD", "WV", "ES", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "ES", "WV", "FD", "TL", "TR", "FD", "WV"],
+  ["WV", "FD", "WV", "WV", "FD", "WV", "ES", "WV", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "WV", "ES", "WV", "FD", "WV", "WV", "FD", "WV"],
+  ["WV", "FD", "WV", "WV", "FD", "BL", "WH", "BR", "FD", "BL", "WH", "WH", "WH", "TR", "TL", "WH", "WH", "WH", "BR", "FD", "BL", "WH", "BR", "FD", "WV", "WV", "FD", "WV"],
+  ["WV", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "WV"],
+  ["WV", "FD", "WV", "BL", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "BR", "WV", "FD", "WV"],
+  ["BR", "FD", "BL", "WH", "WH", "BR", "FD", "BL", "WH", "WH", "WH", "BR", "FD", "BL", "BR", "FD", "BL", "WH", "WH", "WH", "BR", "FD", "BL", "WH", "WH", "BR", "FD", "BL"],
+  ["0A", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "0A"],
+  ["WH", "WH", "TR", "FD", "TL", "TR", "FD", "TL", "TR", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "TL", "TR", "FD", "TL", "TR", "FD", "TL", "WH", "WH"],
+  ["ES", "ES", "WV", "FD", "WV", "WV", "FD", "WV", "WV", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "WV", "WV", "FD", "WV", "WV", "FD", "WV", "ES", "ES"],
+  ["ES", "ES", "WV", "FD", "WV", "WV", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "WV", "WV", "FD", "WV", "ES", "ES"],
+  ["ES", "ES", "WV", "FD", "WV", "WV", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "GL", "GL", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "WV", "WV", "FD", "WV", "ES", "ES"],
+  ["WH", "WH", "BR", "FD", "BL", "BR", "FD", "BL", "BR", "FD", "WV", "ES", "ES", "IY", "CE", "ES", "ES", "WV", "FD", "BL", "BR", "FD", "BL", "BR", "FD", "BL", "WH", "WH"],
+  ["0B", "FD", "FD", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "WV", "ES", "ES", "BY", "PY", "ES", "ES", "WV", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "FD", "FD", "0B"],
+  ["WH", "WH", "TR", "FD", "TL", "TR", "FD", "TL", "TR", "FD", "WV", "ES", "ES", "ES", "ES", "ES", "ES", "WV", "FD", "TL", "TR", "FD", "TL", "TR", "FD", "TL", "WH", "WH"],
+  ["ES", "ES", "WV", "FD", "BL", "BR", "FD", "WV", "WV", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "WV", "WV", "FD", "BL", "BR", "FD", "WV", "ES", "ES"],
+  ["ES", "ES", "WV", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "WV", "ES", "ES"],
+  ["ES", "ES", "BL", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "BR", "ES", "ES"],
+  ["TL", "WH", "WH", "WH", "WH", "BR", "FD", "BL", "BR", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "BL", "BR", "FD", "BL", "WH", "WH", "WH", "WH", "TR"],
+  ["WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV"],
+  ["WV", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "WV"],
+  ["WV", "FD", "WV", "TL", "WH", "WH", "WH", "WH", "BR", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "BL", "WH", "WH", "WH", "WH", "TR", "WV", "FD", "WV"],
+  ["WV", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "PM", "FD", "FD", "FD", "FD", "PP", "FD", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "WV"],
+  ["WV", "FD", "WV", "WV", "FD", "TL", "TR", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "TL", "TR", "FD", "WV", "WV", "FD", "WV"],
+  ["BR", "FD", "BL", "BR", "FD", "WV", "WV", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "WV", "WV", "FD", "BL", "BR", "FD", "BL"],
+  ["0C", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "0C"],
+  ["TR", "FD", "TL", "WH", "WH", "BR", "BL", "WH", "WH", "WH", "WH", "TR", "FD", "TL", "TR", "FD", "TL", "WH", "WH", "WH", "WH", "BR", "BL", "WH", "WH", "TR", "FD", "TL"],
+  ["WV", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "WV", "WV", "FD", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "FD", "WV"],
+  ["WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV"],
+  ["BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR"],
+];
