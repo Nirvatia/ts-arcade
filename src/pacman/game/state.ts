@@ -15,11 +15,12 @@ class GameState {
   private entityManager: EntityManager;
   private gameLoop: GameLoop;
 
+  private isProcessingLevelTransition: boolean = false;
+  private hasReceivedBonusLife: boolean = false;
+  private readonly BONUS_LIFE_THRESHOLD = 10000;
   public pathGraph: GraphType | null;
   private buffTimer: Timer = new Timer();
 
-  // 🌟 ИСПРАВЛЕНИЕ 1: Убрали хардкод LEVEL_CONFIGS[1].
-  // Теперь эти значения будут динамически подтягиваться в loadLevel()
   private buffDuration: number = 10;
   private buffThreshold: number = 3;
 
@@ -59,12 +60,13 @@ class GameState {
     });
 
     eventBus.on("DOT_EATEN", () => {
+      if (this.isProcessingLevelTransition) return;
       this.dotsEaten++;
       this.updateScore("DOT");
 
-      // 🌟 ИСПРАВЛЕНИЕ 2: Сравниваем с общим количеством точек на уровне!
-      // (Для тестов можешь временно вернуть dotsEaten === 10, если лень собирать всю карту)
-      if (this.dotsEaten >= 40) {
+      // 🌟 Compare against the dynamic total instead of hardcoded 40!
+      if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
+        this.isProcessingLevelTransition = true;
         this.triggerIntermissionSequence();
       }
     });
@@ -84,63 +86,60 @@ class GameState {
     this.dotsEaten = 0;
   }
 
+  // GameState.ts
   private triggerIntermissionSequence() {
     this.mode = "LEVEL_COMPLETE";
+
+    // 🌟 ARCADE FIX: Clear the dynamic canvases immediately
+    this.entityManager.getAllDynamic().forEach((e) => e.clearCanvas());
 
     const mapEntity = this.entityManager.staticEntities.map[0] as Map;
     let flashCount = 0;
 
     if (mapEntity) {
-      // 🌟 Запускаем интервал мигания: каждые 150мс меняем флаг
       const flashInterval = setInterval(() => {
         mapEntity.isFlashing = !mapEntity.isFlashing;
         mapEntity.needsRedraw = true;
         flashCount++;
 
-        // Сделаем 6 переключений (3 раза моргнет белым)
         if (flashCount >= 4) {
           clearInterval(flashInterval);
           mapEntity.isFlashing = false;
-          mapEntity.needsRedraw = true;
+          // 🌟 CRITICAL: Clear all static canvases (dots/walls) before Intermission
+          this.entityManager.getAllStatic().forEach((e) => e.clearCanvas());
 
-          // Как только доморгали — запускаем интермиссию!
           this.proceedToIntermission();
         }
       }, 400);
     } else {
-      // Если карты вдруг нет, просто идем дальше
       this.proceedToIntermission();
     }
   }
 
-  // Вынес в отдельный метод, чтобы не плодить ад из коллбеков
   private proceedToIntermission() {
     [
       ...this.entityManager.getAllStatic(),
       ...this.entityManager.getAllDynamic(),
     ].forEach((e) => {
       e.clearCanvas();
+      if ("needsRedraw" in e) (e as any).needsRedraw = true;
     });
 
+    // 🌟 Svelte picks up on this state and fires up the Intermission cartoon!
     this.mode = "INTERMISSION";
-
-    // 🌟 Запускаем музыку
     eventBus.emit("INTERMISSION_START");
 
-    const ui = this.entityManager.getUI();
-    const intermission = ui.getIntermission();
     const audio = getAudio();
-
-    // 🌟 Запрашиваем длительность трека intermission
     const trackDuration = audio.getTrackDuration("intermission");
-    // Если аудио еще не загрузилось, дадим дефолтные 5 секунд
     const finalDuration = trackDuration > 0 ? trackDuration : 5;
 
-    if (intermission) {
-      intermission.start(finalDuration, () => {
+    // We control game transition simply by waiting the track duration
+    setTimeout(() => {
+      // 🌟 Check if we are still in a valid state to progress
+      if (this.mode !== "GAME_OVER") {
         this.nextLevel();
-      });
-    }
+      }
+    }, finalDuration * 1000);
   }
 
   public loadGame() {
@@ -152,36 +151,40 @@ class GameState {
 
   public loadLevel() {
     const collision = Collision.getInstance();
-
-    // 🌟 Загружаем конфиг ТЕКУЩЕГО уровня
     this.levelData = this.getLevelConfig(this.currentLevel);
 
     this.entityManager.resetAll();
     this.entityManager.spawnObjects();
 
-    // 🌟 Обновляем тайминги энерджайзера под текущий уровень
     this.buffDuration = this.levelData.buffDuration;
     this.buffThreshold = this.levelData.buffThreshold;
-
+    this.isProcessingLevelTransition = false;
     collision.initTeleports(this.levelData.map);
   }
 
   public nextLevel() {
-    this.currentLevel++;
-    this.loadLevel();
-
-    const ui = this.entityManager.getUI();
+    if (this.mode === "GAME_OVER") return;
+    // 1. IMMEDIATELY flip mode so the Renderer knows to stop returning early
     this.mode = "LEVEL_TRANSITION";
 
-    // 🌟 1. ОПОВЕЩАЕМ О НАЧАЛЕ СЕКВЕНЦИИ (включит музыку "start")
+    // 2. Clear the old pixels manually before doing ANY logic
+    [
+      ...this.entityManager.getAllStatic(),
+      ...this.entityManager.getAllDynamic(),
+    ].forEach((e) => e.clearCanvas());
+
+    this.currentLevel++;
+    this.loadLevel(); // This sets up Level 2 data
+
     eventBus.emit("GAME_START_SEQUENCE");
 
-    this.entityManager
-      .getAllStatic()
-      .forEach((entity) => entity.resetForLevel());
-    this.entityManager
-      .getAllDynamic()
-      .forEach((entity) => entity.resetForLevel());
+    this.entityManager.getAllStatic().forEach((e) => e.resetForLevel());
+    this.entityManager.getAllDynamic().forEach((e) => e.resetForLevel());
+
+    this.entityManager.getAllStatic().forEach((entity) => {
+      entity.needsRedraw = true;
+      entity.draw(false);
+    });
 
     this.entityManager.spawnEntities();
     this.pathGraph = createPathGraph(this.levelData.map);
@@ -193,29 +196,39 @@ class GameState {
       entity.draw(false);
     });
 
-    // 🌟 Получаем длительность трека, чтобы таймер UI и музыка идеально совпали
     const audio = getAudio();
     const trackDuration = audio.getTrackDuration("start");
     const countdownTime = trackDuration > 0 ? Math.ceil(trackDuration) : 3;
 
     const timer = new Timer();
+
+    // 🌟 ADD THIS: Expose it so Svelte can steal the countdown!
+    (this as any).activeTimer = timer;
+
     timer.start(
-      countdownTime, // 🌟 Используем динамическое время вместо хардкода 3 сек
+      countdownTime,
       1000,
-      (remaining) => ui.drawCounter(remaining),
+      (remaining) => {
+        // Handled by Svelte
+      },
       () => {
-        ui.clearReady();
-
-        // 🌟 2. ОПОВЕЩАЕМ О НАЧАЛЕ ГЕЙМПЛЕЯ (включит "siren_0")
         eventBus.emit("GAME_START");
-
         this.mode = "PLAYING";
+        (this as any).activeTimer = null; // Clean up afterward!
       },
     );
   }
 
   public startGame() {
+    // Prevent double-starting if already in transition
+    if (this.mode === "LEVEL_TRANSITION") return;
+
     this.mode = "LEVEL_TRANSITION";
+
+    // Stop existing timers to prevent overlapping callbacks
+    if ((this as any).activeTimer) {
+      (this as any).activeTimer.stop();
+    }
 
     const audio = getAudio();
     eventBus.emit("GAME_START_SEQUENCE");
@@ -226,21 +239,18 @@ class GameState {
     this.entityManager.spawnEntities();
     this.pathGraph = createPathGraph(this.levelData.map);
 
-    const ui = this.entityManager.getUI();
     const timer = new Timer();
+    (this as any).activeTimer = timer;
 
     timer.start(
       countdownTime,
       1000,
       (remaining) => {
-        if (remaining > 1) {
-          ui.drawCounter(remaining - 1);
-        } else if (remaining === 1) {
-          ui.drawReady();
-        }
+        /* Svelte handles UI */
       },
       () => {
-        ui.clearReady();
+        // Ensure we are still in the right mode to start
+        if (this.mode !== "LEVEL_TRANSITION") return;
 
         if (this.pathGraph && Object.keys(this.pathGraph).length > 0) {
           this.entityManager.exitLairAll();
@@ -249,6 +259,7 @@ class GameState {
 
         eventBus.emit("GAME_START");
         this.mode = "PLAYING";
+        (this as any).activeTimer = null;
       },
     );
   }
@@ -286,21 +297,94 @@ class GameState {
   }
 
   public triggerDeathSequence() {
-    if (this.lives <= 0) {
-      this.mode = "GAME_OVER";
+    this.mode = "PACMAN_DEAD";
+    eventBus.emit("PACMAN_DEATH");
+
+    const audio = getAudio();
+    // 🌟 Get actual duration, default to 2s if not found
+    const deathDuration = audio.getTrackDuration("death") || 2;
+
+    // We add a tiny 200ms buffer to the end of the sound for visual polish
+    setTimeout(
+      () => {
+        const remainingLives = this.lives - 1;
+
+        if (remainingLives < 0) {
+          this.lives = 0;
+          this.handleGameOver();
+        } else {
+          this.lives = remainingLives;
+          this.completeDeathSequence();
+        }
+      },
+      deathDuration * 1000 + 200,
+    );
+  }
+
+  // GameState.ts
+
+  private handleGameOver() {
+    // 1. SET DATA STATE FIRST
+    this.lives = 0;
+    this.mode = "GAME_OVER";
+
+    // 2. Clear actors immediately
+    this.entityManager.getAllDynamic().forEach((e) => e.clearCanvas());
+
+    // 3. Stop any background tasks
+    const activeTimer = (this as any).activeTimer;
+    if (activeTimer) {
+      activeTimer.stop();
+      (this as any).activeTimer = null;
+    }
+
+    // 4. Signal Svelte
+    eventBus.emit("GAME_OVER_SEQUENCE");
+
+    // 5. Short delay to let Svelte render the final score before the heart stops
+    setTimeout(() => {
+      this.entityManager.getAllStatic().forEach((e) => e.clearCanvas());
+      this.gameLoop.stop();
+    }, 50);
+  }
+
+  public restartGame() {
+    this.lives = 3;
+    this.currentLevel = 1;
+    this.score = 0;
+    this.hasReceivedBonusLife = false;
+    this.dotsEaten = 0;
+    this.isProcessingLevelTransition = false;
+
+    this.loadLevel();
+
+    // 🌟 Ensure the heart is beating again!
+    this.gameLoop.start();
+
+    this.startGame();
+  }
+
+  // GameState.ts
+
+  // GameState.ts
+
+  public completeDeathSequence(): void {
+    // 1. SAFETY: If we are already in transition, don't start ANOTHER transition
+    // This prevents the "double countdown" if this method is triggered rapidly.
+    if (this.mode === "LEVEL_TRANSITION" && (this as any).activeTimer) {
       return;
     }
 
-    this.mode = "PACMAN_DEAD";
-    this.lives--;
+    // 2. STOPS THE LOOP: Kill any previous timer instance immediately
+    if ((this as any).activeTimer) {
+      (this as any).activeTimer.stop();
+      (this as any).activeTimer = null;
+    }
 
-    eventBus.emit("PACMAN_DEATH");
-  }
+    // 3. EXIT: If the game is actually over, don't start a new countdown
+    if (this.mode === "GAME_OVER" || this.lives <= 0) return;
 
-  public completeDeathSequence(): void {
-    const ui = this.entityManager.getUI();
     const audio = getAudio();
-
     this.entityManager.resetPositionsForDeath();
     this.mode = "LEVEL_TRANSITION";
 
@@ -310,16 +394,28 @@ class GameState {
     const countdownTime = trackDuration > 0 ? Math.ceil(trackDuration) : 3;
 
     const timer = new Timer();
+    (this as any).activeTimer = timer;
+
     timer.start(
       countdownTime,
       1000,
-      (remaining) => ui.drawCounter(remaining),
+      (remaining) => {
+        /* UI Update */
+      },
       () => {
-        ui.resetForLevel();
-        this.entityManager.exitLairAll();
+        // 4. IDENTITY CHECK: Only proceed if this specific timer is still the 'active' one.
+        // This prevents a "zombie" timer from an old life from starting the game.
+        if (
+          this.mode !== "LEVEL_TRANSITION" ||
+          (this as any).activeTimer !== timer
+        ) {
+          return;
+        }
 
+        this.entityManager.exitLairAll();
         eventBus.emit("GAME_RESUMED");
         this.mode = "PLAYING";
+        (this as any).activeTimer = null;
       },
     );
   }
@@ -353,7 +449,7 @@ class GameState {
     switch (type) {
       case "DOT":
         this.score += SCORE_CONFIG.DOTS.PELLET;
-        this.entityManager.getUI().needsRedraw = true;
+        // 🌟 Svelte auto-updates scores, we don't need to force redraw the UI canvas!
         break;
       case "POWER_PELLET":
         this.score += SCORE_CONFIG.DOTS.POWER_PELLET;
@@ -369,6 +465,13 @@ class GameState {
         this.triggerGhostEatenFreeze();
         this.ghostMultiplier++;
         break;
+    }
+
+    if (!this.hasReceivedBonusLife && this.score >= this.BONUS_LIFE_THRESHOLD) {
+      this.lives++;
+      this.hasReceivedBonusLife = true;
+      eventBus.emit("EXTRA_LIFE_GAINED");
+      // TIP: You might want to play a 'ding' sound here!
     }
   }
 }
