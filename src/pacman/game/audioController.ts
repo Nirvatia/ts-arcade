@@ -34,9 +34,20 @@ class AudioController {
       currentMusic = newTrack;
     };
 
+    eventBus.on("GAME_OVER_SEQUENCE" as GameEvent, () => {
+      audio.stopMusic();
+      currentMusic = null;
+      // Optional: If you want a specific "Game Over" stinger sound:
+      // audio.playSFX("game_over_stinger");
+    });
+
     // 🏁 1. Game Intro
     eventBus.on("GAME_START_SEQUENCE" as GameEvent, () => {
-      currentMusic = null; // 🌟 Принудительно сбрасываем старый трек, так как "intermission" уже заглохла
+      // CRITICAL: Stop whatever was playing first to prevent stacking
+      audio.stopMusic();
+      currentMusic = null;
+
+      // Now play the start sequence
       switchMusic("start", false);
     });
 
