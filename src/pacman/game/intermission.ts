@@ -89,10 +89,10 @@ class Intermission {
 
     this.ctx.save();
     this.drawAnimatedPacman(this.pacmanX, y, size);
-    
+
     // 🌟 ВОТ ОН: Исправленный вызов. Передаем animationTime четвертым аргументом!
     this.drawAnimatedGhost(this.ghostX, y, size, this.animationTime);
-    
+
     this.ctx.restore();
   }
 
@@ -101,8 +101,9 @@ class Intermission {
     const maxMouthAngle = Math.PI / 3;
     const animationSpeed = 0.015;
 
+    // Uses the accumulated animation time for perfect sync
     const currentAperture =
-      Math.abs(Math.sin(Date.now() * animationSpeed)) * maxMouthAngle;
+      Math.abs(Math.sin(this.animationTime * 3.0)) * maxMouthAngle;
 
     ctx.fillStyle = "yellow";
     ctx.beginPath();
