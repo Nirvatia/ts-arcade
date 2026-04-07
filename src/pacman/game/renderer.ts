@@ -12,54 +12,58 @@ class Renderer {
     return Renderer.instance;
   }
 
+  // Renderer.ts
+  // Renderer.ts
+
   public render(dt?: number): void {
     const gameState = GameState.getInstance();
 
-    // 🌟 ОСТАВЛЯЕМ ЗАМОРОЗКУ ЭКРАНА:
-    // Если Пакман съел привидение, мы просто не очищаем холст и не рисуем новые кадры.
-    if (gameState.mode === "GHOST_EATEN") {
+    // 🌟 CRITICAL: If the game is over or in intermission,
+    // we exit immediately. GameState.handleGameOver() handles the final clear.
+    if (gameState.mode === "INTERMISSION" || gameState.mode === "GAME_OVER") {
       return;
     }
 
     const clearedCanvases = new Set<HTMLCanvasElement>();
 
-    // Решаем, нужно ли крутить анимации (ножки привидений, рот Пакмана)
-    const canAnimate = ["PLAYING", "INIT", "LEVEL_TRANSITION"].includes(
-      gameState.mode,
-    );
+    const isPlaying = gameState.mode === "PLAYING";
+    const isDead = gameState.mode === "PACMAN_DEAD";
+    const isTransition = gameState.mode === "LEVEL_TRANSITION";
+    const isGhostEaten = gameState.mode === "GHOST_EATEN";
 
-    if (gameState.mode === "INTERMISSION") {
-      const ui = this.entityManager.getUI();
-      ui.draw(canAnimate);
-      return;
-    }
+    // 1. DYNAMIC ENTITIES (Pacman, Ghosts, Pills)
+    this.entityManager.getAllDynamic().forEach((entity) => {
+      if (!clearedCanvases.has(entity.canvas)) {
+        entity.clearCanvas();
+        clearedCanvases.add(entity.canvas);
+      }
 
-    const shouldDrawDynamic = gameState.mode !== "INIT";
+      // Draw if playing, dead (for animation), or during the ghost-eat freeze
+      if (isPlaying || isDead || isGhostEaten) {
+        entity.draw(true, dt);
+      }
+    });
 
-    // 1. Отрисовка динамических объектов
-    if (shouldDrawDynamic) {
-      this.entityManager.getAllDynamic().forEach((entity) => {
+    // 2. STATIC ENTITIES (Map, Food)
+    this.entityManager.getAllStatic().forEach((entity) => {
+      // We redraw static elements if needed, or during global state changes
+      if (
+        entity.needsRedraw ||
+        isTransition ||
+        isDead ||
+        isPlaying ||
+        isGhostEaten
+      ) {
         if (!clearedCanvases.has(entity.canvas)) {
           entity.clearCanvas();
           clearedCanvases.add(entity.canvas);
         }
-        entity.draw(canAnimate, dt); // 🌟 ТОЛЬКО DRAW
-      });
-    }
 
-    // 2. Отрисовка статических объектов (Стены, еда)
-    this.entityManager
-      .getAllStatic()
-      .filter((entity) => entity.needsRedraw)
-      .forEach((entity) => {
-        if (!clearedCanvases.has(entity.canvas)) {
-          entity.clearCanvas();
-          clearedCanvases.add(entity.canvas);
-        }
-
-        entity.draw(canAnimate, dt); // 🌟 ТОЛЬКО DRAW
+        // Draw static; pass 'false' to animation if just a transition
+        entity.draw(isPlaying || isDead, dt);
         entity.needsRedraw = false;
-      });
+      }
+    });
   }
 }
 
