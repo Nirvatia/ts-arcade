@@ -66,9 +66,13 @@ class Pacman extends Entity {
   public override reset() {
     this.isBuffed = false;
     this.mouthOpen = true;
+    this.state = "ALIVE"; // Ensure he isn't stuck in DYING
+
+    // 🌟 CRITICAL: Stop all movement and clear "buffered" turns
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
-    this.spawn(); // Оставляем вызов тут
+
+    this.spawn();
   }
 
   public override resetForLevel() {
