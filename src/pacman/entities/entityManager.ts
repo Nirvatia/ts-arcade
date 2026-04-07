@@ -2,7 +2,6 @@ import type { Entity } from "./entity.js";
 import { Food } from "../map/food.js";
 import { Map } from "../map/map.js";
 import { Pill } from "../map/pill.js";
-import { UI } from "../ui/ui.js";
 import { Pacman } from "./pacman.js";
 import { Ghost } from "./ghost.js";
 import { GHOSTS_CONFIG } from "../config/entities.js";
@@ -27,8 +26,7 @@ class EntityManager {
   public createEntities(): void {
     this.staticEntities = {
       food: [new Food()],
-      ui: [new UI()],
-      map: [new Map()],
+      map: [new Map()], // 🌟 Cleaned out UI from static entities!
     };
 
     this.dynamicEntities = {
@@ -56,9 +54,7 @@ class EntityManager {
     return this.dynamicEntities.pill[0] as Pill;
   }
 
-  public getUI(): UI {
-    return this.staticEntities.ui[0] as UI;
-  }
+  // 🌟 Removed getUI() getter entirely!
 
   public getPacman(): Pacman {
     return this.dynamicEntities.pacman[0] as Pacman;
@@ -76,29 +72,23 @@ class EntityManager {
     [...this.getAllStatic(), ...this.getAllDynamic()].forEach((e) => e.reset());
   }
 
-  // Call this when Pac-man dies to snap positions back without resetting score/dots
   public resetPositionsForDeath(): void {
     const pacman = this.getPacman();
     const ghosts = this.getGhosts();
 
-    // 1. Respawn Pacman at his starting tile
-    pacman.spawn();
-    pacman.state = "ALIVE";
+    // 🌟 CHANGE: Use reset() instead of just spawn()
+    // This triggers the direction clearing we added above
+    pacman.reset();
 
-    // 2. Respawn ghosts and clear their AI brains so they don't wander through walls
     ghosts.forEach((ghost) => {
       ghost.spawn();
-      ghost.reset(); // This clears direction, speed, and color
+      ghost.reset();
     });
   }
-  // 1. Call this in GameState's loadLevel()
-  // This ensures the screen isn't empty on the title screen!
   public spawnObjects(): void {
     const food = this.getFood();
     const pill = this.getPill();
 
-    // If your Food/Pill classes have separate spawn or setup methods,
-    // call them here! Otherwise, making sure they exist in the array is enough.
     if (food && typeof food.spawn === "function") food.spawn();
     if (pill && typeof pill.spawn === "function") pill.spawn();
   }
@@ -109,14 +99,11 @@ class EntityManager {
     });
   }
 
-  // 2. Call this in GameState's startGame() on Enter.
-  // This drops the characters in and cleans up the map array!
   public spawnEntities(): void {
     this.getPacman().spawn();
     this.getGhosts().forEach((g: Ghost) => g.spawn());
   }
 
-  // 3. Keep this for when Pacman dies and you just need to reset positions
   public resetPositionsForLevel(): void {
     this.getPacman().spawn();
     this.getGhosts().forEach((g: Ghost) => g.spawn());
