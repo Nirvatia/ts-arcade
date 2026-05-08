@@ -1,20 +1,29 @@
-import { EntityManager } from "../entities/entityManager.js";
-import { GameState } from "../game/state.js";
-// 🌟 THE FIX: Import the getter instead of the dead named export
-import { getAudio } from "../game/audioManager.js";
+// src/input/Controller.ts
 
-class Controller {
+import { eventBus } from "../core/eventBus.js";
+import { GameRegistry } from "../game/gameRegistry.js";
+import { GameState } from "../game/gameState.js";
+import { sfx } from "../sfx/sfx.js";
+
+/**
+ * Обработчик пользовательского ввода:
+ * клавиатура (стрелки, Enter, M) и тач-жесты.
+ */
+export class Controller {
   private x1: number | null;
   private y1: number | null;
   private gameState: GameState;
+  private registry: GameRegistry;
 
   constructor() {
     this.x1 = null;
     this.y1 = null;
     this.gameState = GameState.getInstance();
+    this.registry = GameRegistry.getInstance();
   }
 
-  init() {
+  /** Привязать слушатели событий */
+  init(): void {
     window.addEventListener("touchstart", this.touchStart.bind(this), {
       passive: false,
     });
@@ -28,20 +37,20 @@ class Controller {
   }
 
   private getPacman() {
-    return EntityManager.getInstance().getPacman();
+    return this.registry.getPacman();
   }
 
-  touchCancel() {
+  private touchCancel(): void {
     this.x1 = this.y1 = null;
   }
 
-  touchStart(event: TouchEvent) {
+  private touchStart(event: TouchEvent): void {
     event.preventDefault();
     this.x1 = event.touches[0].clientX;
     this.y1 = event.touches[0].clientY;
   }
 
-  touchEnd(event: TouchEvent) {
+  private touchEnd(event: TouchEvent): void {
     if (this.x1 === null || this.y1 === null) return;
 
     event.preventDefault();
@@ -63,24 +72,44 @@ class Controller {
     this.x1 = this.y1 = null;
   }
 
-  async keyDown(event: KeyboardEvent) {
-    event.preventDefault();
+private async keyDown(event: KeyboardEvent): Promise<void> {
+    // 1. Определяем список клавиш, которые нужны ДЛЯ ИГРЫ
+    const gameKeys = [
+      "ArrowLeft",
+      "ArrowUp",
+      "ArrowRight",
+      "ArrowDown",
+      "Enter",
+      " ",
+      "m",
+      "M"
+    ];
 
-    if (event.key === "m" || event.key === "M") {
-      const audio = getAudio();
-      audio.toggleMute();
+    // 2. Блокируем стандартное поведение ТОЛЬКО для игровых клавиш
+    // Теперь F5 (которого нет в списке) проскочит мимо этого блока
+    if (gameKeys.includes(event.key)) {
+      event.preventDefault();
+    } else {
+      // Если это не игровая клавиша (например, F5), выходим из функции
       return;
     }
 
+    // --- Логика обработки ---
+
+    // Mute toggle
+    if (event.key.toLowerCase() === "m") {
+      sfx.toggleMute();
+      return;
+    }
+
+    // Start game
     if (event.key === "Enter" && this.gameState.mode === "INIT") {
-      // 🌟 THE FIX: Grab the instance lazily and unlock it safely!
-      const audio = getAudio();
-      await audio.unlockAudio();
-
-      this.gameState.startGame();
+      await sfx.unlockAudio();
+      eventBus.emit("COMMAND_START_GAME");
       return;
     }
 
+    // Движение Pacman
     if (this.gameState.mode !== "PLAYING") return;
 
     const pacman = this.getPacman();
@@ -89,24 +118,13 @@ class Controller {
     let newDirection = { dx: 0, dy: 0 };
 
     switch (event.key) {
-      case "ArrowLeft":
-        newDirection = { dx: -1, dy: 0 };
-        break;
-      case "ArrowUp":
-        newDirection = { dx: 0, dy: -1 };
-        break;
-      case "ArrowRight":
-        newDirection = { dx: 1, dy: 0 };
-        break;
-      case "ArrowDown":
-        newDirection = { dx: 0, dy: 1 };
-        break;
-      default:
-        break;
+      case "ArrowLeft":  newDirection = { dx: -1, dy: 0 }; break;
+      case "ArrowUp":    newDirection = { dx: 0, dy: -1 }; break;
+      case "ArrowRight": newDirection = { dx: 1, dy: 0 }; break;
+      case "ArrowDown":  newDirection = { dx: 0, dy: 1 }; break;
+      default: return; 
     }
 
     pacman.changeDirection(newDirection);
   }
 }
-
-export { Controller };

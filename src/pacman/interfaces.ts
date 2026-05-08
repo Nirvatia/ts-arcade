@@ -1,6 +1,6 @@
 // src/core/interfaces/Drawable.ts
 export interface Drawable {
-  readonly needsRedraw: boolean;
+  needsRedraw: boolean;
   draw(animate: boolean, dt?: number): void;
   requestRedraw(): void;
 }
