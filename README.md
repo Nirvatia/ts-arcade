@@ -1,8 +1,13 @@
 # Pac-Man Project - To-Do List
 
 ## High Priority (Core Gameplay Fixes)
-- [ ] **Speed Independent of Framerate**
+- [ ] **Core**
   - Refactor movement physics across all entities to scale with the `dt` (delta time) passed in the loop rather than a hardcoded pixel-per-frame speed.
+  - Fix Intermission scene framerate
+  - Adjust pacman and ghost speed
+  - Review possible artifacts on intermission scene end
+  - Ensure levels are infinite
+
 
 ## Ghost AI & Gameplay Logic
 - [ ] **Authentic Ghost Personalities**
@@ -12,6 +17,8 @@
 
 ## Visuals & UI
   - Implement active keyboard listener navigation for selecting games on the main menu.
+  - Improve pacman animation
+  - Improve ghost animation
 
 # create-svelte
 
