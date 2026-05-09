@@ -350,174 +350,174 @@ export class Ghost extends Actor {
     return "RIGHT";
   }
 
-  draw(animate: boolean, _dt?: number): void {
-    const ctx = this.ctx;
-    const s = this.tileSize;
-    const left = this.x - s / 2;
-    const top = this.y - s / 2;
+ draw(animate: boolean, _dt?: number): void {
+  const ctx = this.ctx;
+  const s = this.tileSize;
+  const left = this.x - s / 2;
+  const top = this.y - s / 2;
 
-    let bodyColor = this.defaultColor;
-    let shouldDrawBody = true;
+  let bodyColor = this.defaultColor;
+  let shouldDrawBody = true;
 
-    if (this.state === "FRIGHTENED") {
-      if (this.isFlashing) {
-        const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        bodyColor = isWhite ? "#FFFFFF" : "#0000FF";
-      } else {
-        bodyColor = "#0000FF";
-      }
-    } else if (this.state === "EATEN") {
-      shouldDrawBody = false;
+  if (this.state === "FRIGHTENED") {
+    if (this.isFlashing) {
+      const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
+      bodyColor = isWhite ? "#FFFFFF" : "#0000FF";
+    } else {
+      bodyColor = "#0000FF";
     }
-
-    if (shouldDrawBody) {
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      this.drawBaseShape(left, top, s);
-
-      if (animate) {
-        this.animateWavyBottom(left, top, s);
-      } else {
-        this.drawStaticBottom(left, top, s);
-      }
-
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    const dir = this.getDirectionLabel();
-    this.drawEyes(left, top, s, dir);
+  } else if (this.state === "EATEN") {
+    shouldDrawBody = false;
   }
 
-  private drawBaseShape(left: number, top: number, s: number): void {
-    const centerX = left + s / 2;
-    const centerY = top + s / 2;
-    this.ctx.arc(centerX, centerY, s / 2, Math.PI, 0, false);
-  }
-
-  private drawStaticBottom(left: number, top: number, s: number): void {
-    const ctx = this.ctx;
-    const bottomBaseY = top + s;
-    const waveCount = 6;
-    const segmentWidth = s / waveCount;
-    const waveAmplitude = 2.5;
-
-    let currentX = left + s;
-    // Start at right edge with a slight wave offset
-    let currentY = bottomBaseY + Math.sin(0) * waveAmplitude;
-    ctx.lineTo(currentX, currentY);
-
-    for (let i = waveCount - 1; i >= 0; i--) {
-      const segmentStartX = left + (i + 1) * segmentWidth;
-      const segmentEndX = left + i * segmentWidth;
-      const segmentThirdX = segmentStartX - segmentWidth / 3;
-      const segmentTwoThirdsX = segmentStartX - (2 * segmentWidth) / 3;
-
-      // Frozen wave: use static phase offsets to create a permanent wave shape
-      const startPhase = ((i + 1) / waveCount) * Math.PI * 4;
-      const thirdPhase = ((i + 2 / 3) / waveCount) * Math.PI * 4;
-      const twoThirdsPhase = ((i + 1 / 3) / waveCount) * Math.PI * 4;
-      const endPhase = (i / waveCount) * Math.PI * 4;
-
-      const startY = bottomBaseY + Math.sin(startPhase) * waveAmplitude;
-      const thirdY = bottomBaseY + Math.sin(thirdPhase) * waveAmplitude;
-      const twoThirdsY = bottomBaseY + Math.sin(twoThirdsPhase) * waveAmplitude;
-      const endY = bottomBaseY + Math.sin(endPhase) * waveAmplitude;
-
-      ctx.bezierCurveTo(
-        segmentThirdX,
-        thirdY,
-        segmentTwoThirdsX,
-        twoThirdsY,
-        segmentEndX,
-        endY,
-      );
-    }
-  }
-
-  private animateWavyBottom(left: number, top: number, s: number): void {
-    const ctx = this.ctx;
-    const bottomBaseY = top + s;
-    const waveCount = 6;
-    const segmentWidth = s / waveCount;
-    const waveAmplitude = 2.5;
-
-    const now = Date.now();
-    const animationPhase = ((now % 1000) / 1000) * Math.PI * 2;
-
-    let currentX = left + s;
-    let currentY = bottomBaseY + Math.sin(animationPhase * 4) * waveAmplitude;
-    ctx.lineTo(currentX, currentY);
-
-    for (let i = waveCount - 1; i >= 0; i--) {
-      const segmentStartX = left + (i + 1) * segmentWidth;
-      const segmentEndX = left + i * segmentWidth;
-      const segmentThirdX = segmentStartX - segmentWidth / 3;
-      const segmentTwoThirdsX = segmentStartX - (2 * segmentWidth) / 3;
-
-      const startPhase =
-        ((i + 1) / waveCount) * Math.PI * 4 + animationPhase * 4;
-      const thirdPhase =
-        ((i + 2 / 3) / waveCount) * Math.PI * 4 + animationPhase * 4;
-      const twoThirdsPhase =
-        ((i + 1 / 3) / waveCount) * Math.PI * 4 + animationPhase * 4;
-      const endPhase = (i / waveCount) * Math.PI * 4 + animationPhase * 4;
-
-      const startY = bottomBaseY + Math.sin(startPhase) * waveAmplitude;
-      const thirdY = bottomBaseY + Math.sin(thirdPhase) * waveAmplitude;
-      const twoThirdsY = bottomBaseY + Math.sin(twoThirdsPhase) * waveAmplitude;
-      const endY = bottomBaseY + Math.sin(endPhase) * waveAmplitude;
-
-      ctx.bezierCurveTo(
-        segmentThirdX,
-        thirdY,
-        segmentTwoThirdsX,
-        twoThirdsY,
-        segmentEndX,
-        endY,
-      );
-    }
-  }
-
-  private drawEyes(left: number, top: number, s: number, dir: string): void {
-    const ctx = this.ctx;
-
-    ctx.fillStyle = "#FFFFFF";
+  if (shouldDrawBody) {
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
-    ctx.arc(left + s * 0.3, top + s / 2, s / 6, 0, Math.PI * 2);
-    ctx.arc(left + s * 0.7, top + s / 2, s / 6, 0, Math.PI * 2);
-    ctx.fill();
+    this.drawBaseShape(left, top, s);
 
-    ctx.fillStyle = "#0000AA";
-    ctx.beginPath();
-
-    const pupilOffset = s / 10;
-    let leftPupilX = left + s * 0.3;
-    let leftPupilY = top + s / 2;
-    let rightPupilX = left + s * 0.7;
-    let rightPupilY = top + s / 2;
-
-    switch (dir) {
-      case "LEFT":
-        leftPupilX -= pupilOffset;
-        rightPupilX -= pupilOffset;
-        break;
-      case "RIGHT":
-        leftPupilX += pupilOffset;
-        rightPupilX += pupilOffset;
-        break;
-      case "UP":
-        leftPupilY -= pupilOffset;
-        rightPupilY -= pupilOffset;
-        break;
-      case "DOWN":
-        leftPupilY += pupilOffset;
-        rightPupilY += pupilOffset;
-        break;
+    if (animate) {
+      this.animateWavyBottom(left, top, s);
+    } else {
+      this.drawStaticBottom(left, top, s);
     }
 
-    ctx.arc(leftPupilX, leftPupilY, s / 12, 0, Math.PI * 2);
-    ctx.arc(rightPupilX, rightPupilY, s / 12, 0, Math.PI * 2);
+    ctx.closePath();
     ctx.fill();
   }
+
+  const dir = this.getDirectionLabel();
+  this.drawEyes(left, top, s, dir);
+}
+
+private drawBaseShape(left: number, top: number, s: number): void {
+  const centerX = left + s / 2;
+  const centerY = top + s / 2;
+  this.ctx.arc(centerX, centerY, s / 2, Math.PI, 0, false);
+}
+
+private drawStaticBottom(left: number, top: number, s: number): void {
+  const ctx = this.ctx;
+  const bottomBaseY = top + s;
+  const waveCount = 4;
+  const segmentWidth = s / waveCount;
+  const waveAmplitude = 2.2; // Sweet spot between 2.5 and 1.8
+
+  let currentX = left + s;
+  let currentY = bottomBaseY + Math.sin(0) * waveAmplitude;
+  ctx.lineTo(currentX, currentY);
+
+  for (let i = waveCount - 1; i >= 0; i--) {
+    const segmentStartX = left + (i + 1) * segmentWidth;
+    const segmentEndX = left + i * segmentWidth;
+    const segmentThirdX = segmentStartX - segmentWidth / 3;
+    const segmentTwoThirdsX = segmentStartX - (2 * segmentWidth) / 3;
+
+    const startPhase = ((i + 1) / waveCount) * Math.PI * 3;
+    const thirdPhase = ((i + 2 / 3) / waveCount) * Math.PI * 3;
+    const twoThirdsPhase = ((i + 1 / 3) / waveCount) * Math.PI * 3;
+    const endPhase = (i / waveCount) * Math.PI * 3;
+
+    const startY = bottomBaseY + Math.sin(startPhase) * waveAmplitude;
+    const thirdY = bottomBaseY + Math.sin(thirdPhase) * waveAmplitude;
+    const twoThirdsY = bottomBaseY + Math.sin(twoThirdsPhase) * waveAmplitude;
+    const endY = bottomBaseY + Math.sin(endPhase) * waveAmplitude;
+
+    ctx.bezierCurveTo(
+      segmentThirdX,
+      thirdY,
+      segmentTwoThirdsX,
+      twoThirdsY,
+      segmentEndX,
+      endY,
+    );
+  }
+}
+
+private animateWavyBottom(left: number, top: number, s: number): void {
+  const ctx = this.ctx;
+  const bottomBaseY = top + s;
+  const waveCount = 4;
+  const segmentWidth = s / waveCount;
+  const waveAmplitude = 2.2; // Match static
+
+  const now = Date.now();
+  const animationPhase = ((now % 1000) / 1000) * Math.PI * 2;
+
+  let currentX = left + s;
+  let currentY = bottomBaseY + Math.sin(animationPhase * 3) * waveAmplitude;
+  ctx.lineTo(currentX, currentY);
+
+  for (let i = waveCount - 1; i >= 0; i--) {
+    const segmentStartX = left + (i + 1) * segmentWidth;
+    const segmentEndX = left + i * segmentWidth;
+    const segmentThirdX = segmentStartX - segmentWidth / 3;
+    const segmentTwoThirdsX = segmentStartX - (2 * segmentWidth) / 3;
+
+    const startPhase =
+      ((i + 1) / waveCount) * Math.PI * 3 + animationPhase * 3;
+    const thirdPhase =
+      ((i + 2 / 3) / waveCount) * Math.PI * 3 + animationPhase * 3;
+    const twoThirdsPhase =
+      ((i + 1 / 3) / waveCount) * Math.PI * 3 + animationPhase * 3;
+    const endPhase = (i / waveCount) * Math.PI * 3 + animationPhase * 3;
+
+    const startY = bottomBaseY + Math.sin(startPhase) * waveAmplitude;
+    const thirdY = bottomBaseY + Math.sin(thirdPhase) * waveAmplitude;
+    const twoThirdsY = bottomBaseY + Math.sin(twoThirdsPhase) * waveAmplitude;
+    const endY = bottomBaseY + Math.sin(endPhase) * waveAmplitude;
+
+    ctx.bezierCurveTo(
+      segmentThirdX,
+      thirdY,
+      segmentTwoThirdsX,
+      twoThirdsY,
+      segmentEndX,
+      endY,
+    );
+  }
+}
+
+private drawEyes(left: number, top: number, s: number, dir: string): void {
+  const ctx = this.ctx;
+
+  // Eye whites
+  ctx.fillStyle = "#FFFFFF";
+  ctx.beginPath();
+  ctx.arc(left + s * 0.3, top + s / 2, s / 6, 0, Math.PI * 2);
+  ctx.arc(left + s * 0.7, top + s / 2, s / 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pupils
+  ctx.fillStyle = "#0000AA";
+  ctx.beginPath();
+
+  const pupilOffset = s / 10;
+  let leftPupilX = left + s * 0.3;
+  let leftPupilY = top + s / 2;
+  let rightPupilX = left + s * 0.7;
+  let rightPupilY = top + s / 2;
+
+  switch (dir) {
+    case "LEFT":
+      leftPupilX -= pupilOffset;
+      rightPupilX -= pupilOffset;
+      break;
+    case "RIGHT":
+      leftPupilX += pupilOffset;
+      rightPupilX += pupilOffset;
+      break;
+    case "UP":
+      leftPupilY -= pupilOffset;
+      rightPupilY -= pupilOffset;
+      break;
+    case "DOWN":
+      leftPupilY += pupilOffset;
+      rightPupilY += pupilOffset;
+      break;
+  }
+
+  ctx.arc(leftPupilX, leftPupilY, s / 12, 0, Math.PI * 2);
+  ctx.arc(rightPupilX, rightPupilY, s / 12, 0, Math.PI * 2);
+  ctx.fill();
+}
 }
