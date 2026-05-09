@@ -1,9 +1,6 @@
-// src/audio/SFX.ts
-
 import { eventBus } from "../core/eventBus.js";
 import { GameRegistry } from "../game/gameRegistry.js";
 import { GameState } from "../game/gameState.js";
-import type { GameEvent } from "../types.js";
 
 /**
  * Управляет всеми звуковыми эффектами и музыкой в игре.
@@ -209,26 +206,26 @@ export class SFX {
       currentMusic = newTrack;
     };
 
-    eventBus.on("GAME_OVER_SEQUENCE" as GameEvent, () => {
+    eventBus.on("game:over", () => {
       this.stopMusic();
       currentMusic = null;
     });
 
-    eventBus.on("GAME_START_SEQUENCE" as GameEvent, () => {
+    eventBus.on("level:transition_start", () => {
       this.stopMusic();
       currentMusic = null;
       switchMusic("start", false);
     });
 
-    eventBus.on("GAME_START" as GameEvent, () => {
+    eventBus.on("game:started", () => {
       switchMusic("siren_0", true);
     });
 
-    eventBus.on("GAME_RESUMED" as GameEvent, () => {
+    eventBus.on("game:resumed", () => {
       switchMusic("siren_0", true);
     });
 
-    eventBus.on("POWER_PILL_EATEN" as GameEvent, () => {
+    eventBus.on("power_pill:activated", () => {
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) {
         currentMusic = "fright";
@@ -237,20 +234,20 @@ export class SFX {
       switchMusic("fright", true);
     });
 
-    eventBus.on("POWER_PILL_EXPIRED" as GameEvent, () => {
+    eventBus.on("power_pill:expired", () => {
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) return;
       switchMusic("siren_0", true);
     });
 
-    eventBus.on("GHOST_EATEN" as GameEvent, () => {
+    eventBus.on("ghost:eaten", () => {
       this.stopMusic();
       currentMusic = null;
       this.playSFX("eat_ghost");
       switchMusic("eyes", true);
     });
 
-    eventBus.on("GHOST_RETURNED_HOME" as GameEvent, () => {
+    eventBus.on("ghost:returned_home", () => {
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) return;
       if (gameState.isBuffed) {
@@ -260,13 +257,13 @@ export class SFX {
       }
     });
 
-    eventBus.on("PACMAN_DEATH" as GameEvent, () => {
+    eventBus.on("pacman:death_animation_start", () => {
       this.stopMusic();
       currentMusic = null;
       this.playSFX("death");
     });
 
-    eventBus.on("DOT_EATEN" as GameEvent, () => {
+    eventBus.on("dot:eaten", () => {
       const ghosts = registry.getGhosts();
       const abnormalStateActive = ghosts.some(
         (g) => g.state === "FRIGHTENED" || g.state === "EATEN",
@@ -278,11 +275,11 @@ export class SFX {
       this.wakaToggle = !this.wakaToggle;
     });
 
-    eventBus.on("POWER_PILL_EATEN_BY_PACMAN" as GameEvent, () => {
+    eventBus.on("power_pill:eaten", () => {
       this.playSFX("fruit");
     });
 
-    eventBus.on("INTERMISSION_START" as GameEvent, () => {
+    eventBus.on("level:intermission_start", () => {
       switchMusic("intermission", false);
     });
   }

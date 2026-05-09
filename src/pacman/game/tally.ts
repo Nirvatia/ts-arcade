@@ -92,10 +92,16 @@ export class Tally {
    * @returns true если жизнь была выдана
    */
   checkBonusLife(): boolean {
-    if (!this._hasReceivedBonusLife && this._score >= this.BONUS_LIFE_THRESHOLD) {
+    if (
+      !this._hasReceivedBonusLife &&
+      this._score >= this.BONUS_LIFE_THRESHOLD
+    ) {
       this._lives++;
       this._hasReceivedBonusLife = true;
-      eventBus.emit("EXTRA_LIFE_GAINED");
+      eventBus.emit("bonus_life:earned", {
+        newTotal: this._lives,
+        threshold: this.BONUS_LIFE_THRESHOLD,
+      });
       return true;
     }
     return false;
@@ -106,7 +112,13 @@ export class Tally {
    * @returns оставшееся количество жизней
    */
   loseLife(): number {
+    const previousLives = this._lives;
     this._lives--;
+    eventBus.emit("lives:changed", {
+      lives: this._lives,
+      delta: -1,
+      reason: "death",
+    });
     return this._lives;
   }
 

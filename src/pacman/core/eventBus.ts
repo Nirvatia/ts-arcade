@@ -1,32 +1,64 @@
-import type { EventHandler } from "../types.js";
+import type { EventPayloads, GameEvent } from "../gameEvents.js";
 
+/**
+ * Type-safe event bus for Pacman game.
+ * Ensures compile-time checking of event names and payloads.
+ */
 class EventBus {
-  private listeners: Map<string, EventHandler[]> = new Map();
+  // Partial record ensures we don't need to initialize every event key at startup
+  private listeners: Partial<Record<GameEvent, Array<(payload: any) => void>>> = {};
 
-  constructor() {}
-
-  public on(event: string, handler: EventHandler) {
-    if (!this.listeners.has(event)) this.listeners.set(event, []);
-    this.listeners.get(event)!.push(handler);
+  /**
+   * Subscribe to an event.
+   * The handler's payload type is automatically inferred from the event name.
+   */
+  public on<K extends GameEvent>(
+    event: K,
+    handler: (payload: EventPayloads[K]) => void
+  ): void {
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
+    }
+    this.listeners[event]!.push(handler);
   }
 
-  public off(event: string, handler: EventHandler) {
-    const handlers = this.listeners.get(event);
-
+  /**
+   * Unsubscribe a specific handler.
+   */
+  public off<K extends GameEvent>(
+    event: K,
+    handler: (payload: EventPayloads[K]) => void
+  ): void {
+    const handlers = this.listeners[event];
     if (!handlers) return;
 
-    this.listeners.set(
-      event,
-      handlers.filter((h) => h !== handler)
-    );
+    this.listeners[event] = handlers.filter((h) => h !== handler);
   }
 
-  public emit(event: string, payload?: any) {
-    const handlers = this.listeners.get(event);
-
+  /**
+   * Emit an event.
+   * TypeScript will enforce the correct object structure for the payload.
+   */
+  public emit<K extends GameEvent>(
+    event: K,
+    ...args: EventPayloads[K] extends void ? [] : [EventPayloads[K]]
+  ): void {
+    const handlers = this.listeners[event];
     if (!handlers) return;
 
+    const payload = args[0];
     handlers.forEach((h) => h(payload));
+  }
+
+  /**
+   * Remove all listeners for a specific event, or all events if none specified.
+   */
+  public removeAllListeners(event?: GameEvent): void {
+    if (event) {
+      delete this.listeners[event];
+    } else {
+      this.listeners = {};
+    }
   }
 }
 

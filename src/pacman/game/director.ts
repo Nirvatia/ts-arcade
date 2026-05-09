@@ -37,42 +37,33 @@ export class Director {
   }
 
   private initCommandListeners(): void {
-    eventBus.on("COMMAND_LOAD_GAME", () => this.loadGame());
-    eventBus.on("COMMAND_START_GAME", () => this.startGame());
-    eventBus.on("COMMAND_RESTART_GAME", () => this.restartGame());
-    eventBus.on("COMMAND_INTERMISSION", () =>
-      this.triggerIntermissionSequence(),
+    eventBus.on("game:load", () => this.loadGame());
+    eventBus.on("game:start", () => this.startGame());
+    eventBus.on("game:restart", () => this.restartGame());
+    eventBus.on("level:complete", () => this.triggerIntermissionSequence());
+    eventBus.on("pacman:death_triggered", () => this.triggerDeathSequence());
+    eventBus.on("command:ghost_eaten", (data: { ghostName: string }) =>
+      this.triggerGhostEatenSequence(data),
     );
-    eventBus.on("PACMAN_DEATH_TRIGGER", () => this.triggerDeathSequence());
-     eventBus.on("COMMAND_GHOST_EATEN", (data: { ghostName: string }) => 
-    this.triggerGhostEatenSequence(data)
-  );
   }
 
   private triggerGhostEatenSequence(data: { ghostName: string }): void {
-  this.stopActiveClock();
-  
-  // Set the freeze mode
-  this.gameState.mode = "GHOST_EATEN";
-  
-  // Emit so the ghost can transition to EATEN state
-  // (Ghost already handles this in its own listener, 
-  //  but we ensure the freeze happens here at the Director level)
-  
-  const ghostEatenDuration = 1000; // 1 second freeze — adjust as needed
-  
-  this.activeClock = new Clock();
-  this.activeClock.start(
-    ghostEatenDuration / 1000,
-    ghostEatenDuration,
-    () => {},
-    () => {
-      // Resume gameplay
-      this.gameState.mode = "PLAYING";
-      this.activeClock = null;
-    }
-  );
-}
+    this.stopActiveClock();
+    this.gameState.mode = "GHOST_EATEN";
+
+    const ghostEatenDuration = 1000;
+
+    this.activeClock = new Clock();
+    this.activeClock.start(
+      ghostEatenDuration / 1000,
+      ghostEatenDuration,
+      () => {},
+      () => {
+        this.gameState.mode = "PLAYING";
+        this.activeClock = null;
+      },
+    );
+  }
 
   get currentClock(): Clock | null {
     return this.activeClock;
@@ -98,7 +89,7 @@ export class Director {
     this.stopActiveClock();
     this.gameState.mode = "LEVEL_TRANSITION";
 
-    eventBus.emit("GAME_START_SEQUENCE");
+    eventBus.emit("level:transition_start", { duration: 4 });
     this.registry.spawnEntities();
     this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
 
@@ -113,7 +104,8 @@ export class Director {
       () => {
         this.registry.exitLairAll();
         this.registry.initAll();
-        eventBus.emit("GAME_START");
+        eventBus.emit("game:started");
+        eventBus.emit("level:transition_end");
         this.gameState.mode = "PLAYING";
         this.activeClock = null;
       },
@@ -122,7 +114,14 @@ export class Director {
 
   triggerDeathSequence(): void {
     this.gameState.mode = "PACMAN_DEAD";
-    eventBus.emit("PACMAN_DEATH");
+
+    // Get Pacman's actual position for the death animation
+    const pacman = this.registry.getPacman();
+    eventBus.emit("pacman:death_animation_start", {
+      x: pacman.x,
+      y: pacman.y,
+    });
+
     const deathDuration = sfx.getTrackDuration("death") || 2;
 
     setTimeout(
@@ -142,7 +141,9 @@ export class Director {
     this.stopActiveClock();
     this.registry.resetPositionsForDeath();
     this.gameState.mode = "LEVEL_TRANSITION";
-    eventBus.emit("GAME_START_SEQUENCE");
+
+    eventBus.emit("level:transition_start", { duration: 3 });
+    eventBus.emit("pacman:death_animation_end");
 
     this.activeClock = new Clock();
     this.activeClock.start(
@@ -151,7 +152,8 @@ export class Director {
       () => {},
       () => {
         this.registry.exitLairAll();
-        eventBus.emit("GAME_RESUMED");
+        eventBus.emit("game:resumed");
+        eventBus.emit("level:transition_end");
         this.gameState.mode = "PLAYING";
         this.activeClock = null;
       },
@@ -163,7 +165,7 @@ export class Director {
     const maze = this.registry.getMaze();
     const sequence = new Sequence();
 
-    // Моргание лабиринта
+    // Maze flash
     for (let i = 0; i < 4; i++) {
       sequence
         .addCallback(() => {
@@ -181,7 +183,9 @@ export class Director {
     sequence.addCallback(() => {
       this.registry.clearAllCanvases();
       this.gameState.mode = "INTERMISSION";
-      eventBus.emit("INTERMISSION_START");
+      eventBus.emit("level:intermission_start", {
+        nextLevel: this.gameState.currentLevel + 1,
+      });
 
       setTimeout(() => this.nextLevel(), 5000);
     });
@@ -197,7 +201,10 @@ export class Director {
   private handleGameOver(): void {
     this.gameState.mode = "GAME_OVER";
     this.stopActiveClock();
-    eventBus.emit("GAME_OVER_SEQUENCE");
+    eventBus.emit("game:over", {
+      finalScore: this.tally.score,
+      level: this.gameState.currentLevel,
+    });
   }
 
   restartGame(): void {

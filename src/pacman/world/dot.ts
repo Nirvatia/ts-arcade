@@ -6,7 +6,6 @@ import { eventBus } from "../core/eventBus.js";
 import { GameState } from "../game/gameState.js";
 import type { Collectible, Drawable } from "../interfaces.js";
 
-
 /**
  * Управляет точками еды (dots) на карте.
  * Статический объект с интерфейсами Drawable и Collectible.
@@ -93,7 +92,10 @@ export class Dot implements Drawable, Collectible {
       this.tileSize,
       this.tileSize,
     );
-    eventBus.emit("DOT_EATEN");
+    eventBus.emit("dot:eaten", {
+      position: { i, j },
+      dotsRemaining: this.positions.size,
+    });
   }
 
   // --- Lifecycle ---

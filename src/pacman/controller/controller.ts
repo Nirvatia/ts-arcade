@@ -72,7 +72,7 @@ export class Controller {
     this.x1 = this.y1 = null;
   }
 
-private async keyDown(event: KeyboardEvent): Promise<void> {
+  private async keyDown(event: KeyboardEvent): Promise<void> {
     // 1. Определяем список клавиш, которые нужны ДЛЯ ИГРЫ
     const gameKeys = [
       "ArrowLeft",
@@ -82,7 +82,7 @@ private async keyDown(event: KeyboardEvent): Promise<void> {
       "Enter",
       " ",
       "m",
-      "M"
+      "M",
     ];
 
     // 2. Блокируем стандартное поведение ТОЛЬКО для игровых клавиш
@@ -105,7 +105,7 @@ private async keyDown(event: KeyboardEvent): Promise<void> {
     // Start game
     if (event.key === "Enter" && this.gameState.mode === "INIT") {
       await sfx.unlockAudio();
-      eventBus.emit("COMMAND_START_GAME");
+      eventBus.emit("game:start");
       return;
     }
 
@@ -118,11 +118,20 @@ private async keyDown(event: KeyboardEvent): Promise<void> {
     let newDirection = { dx: 0, dy: 0 };
 
     switch (event.key) {
-      case "ArrowLeft":  newDirection = { dx: -1, dy: 0 }; break;
-      case "ArrowUp":    newDirection = { dx: 0, dy: -1 }; break;
-      case "ArrowRight": newDirection = { dx: 1, dy: 0 }; break;
-      case "ArrowDown":  newDirection = { dx: 0, dy: 1 }; break;
-      default: return; 
+      case "ArrowLeft":
+        newDirection = { dx: -1, dy: 0 };
+        break;
+      case "ArrowUp":
+        newDirection = { dx: 0, dy: -1 };
+        break;
+      case "ArrowRight":
+        newDirection = { dx: 1, dy: 0 };
+        break;
+      case "ArrowDown":
+        newDirection = { dx: 0, dy: 1 };
+        break;
+      default:
+        return;
     }
 
     pacman.changeDirection(newDirection);

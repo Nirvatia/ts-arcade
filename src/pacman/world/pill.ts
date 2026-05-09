@@ -6,7 +6,6 @@ import { eventBus } from "../core/eventBus.js";
 import { GameState } from "../game/gameState.js";
 import type { Collectible, Updatable } from "../interfaces.js";
 
-
 /**
  * Управляет энерджайзерами (power pellets) на карте.
  * Динамический объект — анимируется пульсацией каждый кадр.
@@ -73,8 +72,7 @@ export class Pill implements Updatable, Collectible {
   eat(i: number, j: number): void {
     this.positions = this.positions.filter((p) => !(p.i === i && p.j === j));
     this.clearCanvas();
-    eventBus.emit("POWER_PILL_EATEN");
-    eventBus.emit("POWER_PILL_EATEN_BY_PACMAN");
+    eventBus.emit("power_pill:eaten", { position: { i, j } });
   }
 
   // --- Lifecycle ---
@@ -107,7 +105,8 @@ export class Pill implements Updatable, Collectible {
 
     this.positions.forEach(({ i, j }) => {
       const baseSize = this.tileSize / 6;
-      const pulseSize = Math.sin(this.animationCounter * 3) * (this.tileSize / 15);
+      const pulseSize =
+        Math.sin(this.animationCounter * 3) * (this.tileSize / 15);
       const finalSize = baseSize + pulseSize;
 
       this.ctx.fillStyle = this.pillColor;

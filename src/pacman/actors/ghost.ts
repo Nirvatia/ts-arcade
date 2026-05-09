@@ -61,40 +61,50 @@ export class Ghost extends Actor {
   }
 
   private initEventListeners(): void {
-    eventBus.on("POWER_PILL_EATEN", () => {
+    eventBus.on("power_pill:activated", () => {
       if (this.state !== "EATEN") {
         this.state = "FRIGHTENED";
         this.isFlashing = false;
         this.reverseDirection();
+        eventBus.emit("ghost:state_changed", {
+          ghostName: this.name,
+          from: this.state,
+          to: "FRIGHTENED",
+        });
       }
     });
 
-    eventBus.on("POWER_PILL_WARNING", () => {
+    eventBus.on("power_pill:warning", () => {
       if (this.state === "FRIGHTENED") {
         this.isFlashing = true;
       }
     });
 
-    eventBus.on("POWER_PILL_EXPIRED", () => {
+    eventBus.on("power_pill:expired", () => {
       this.isFlashing = false;
       if (this.state === "FRIGHTENED") {
+        const previousState = this.state;
         this.state = "CHASE";
+        eventBus.emit("ghost:state_changed", {
+          ghostName: this.name,
+          from: previousState,
+          to: "CHASE",
+        });
       }
     });
 
-    eventBus.on(
-      "COMMAND_GHOST_EATEN",
-      (data: { ghostName: string } | undefined) => {
-        if (
-          data &&
-          this.name === data.ghostName &&
-          this.state === "FRIGHTENED"
-        ) {
-          this.beEaten();
-          eventBus.emit("GHOST_EATEN", { ghostName: this.name });
-        }
-      },
-    );
+    eventBus.on("command:ghost_eaten", (data: { ghostName: string }) => {
+      if (data && this.name === data.ghostName && this.state === "FRIGHTENED") {
+        this.beEaten();
+        // Let the Director/Tally handle the scoring and freeze frame
+        // The ghost:eaten event is now emitted by the entity itself
+        eventBus.emit("ghost:eaten", {
+          ghostName: this.name,
+          points: 0, // Points will be calculated by Tally
+          ghostIndex: 0, // Set by Ghost config
+        });
+      }
+    });
   }
 
   // --- Update ---
@@ -158,11 +168,19 @@ export class Ghost extends Actor {
 
         if (this.path.length === 0) {
           if (this.isReturningHome) {
+            const previousState = this.state;
             this.state = "CHASE";
             this.speed = this.defaultSpeed;
             this.color = this.defaultColor;
             this.isReturningHome = false;
-            eventBus.emit("GHOST_RETURNED_HOME", { ghostName: this.name });
+
+            eventBus.emit("ghost:state_changed", {
+              ghostName: this.name,
+              from: previousState,
+              to: "CHASE",
+            });
+
+            eventBus.emit("ghost:returned_home", { ghostName: this.name });
             this.calculateExitPath();
           } else {
             this.getRandomDirection();
@@ -267,9 +285,16 @@ export class Ghost extends Actor {
   }
 
   beEaten(): void {
+    const previousState = this.state;
     this.state = "EATEN";
     this.speed = this.defaultSpeed * 2;
     this.isReturningHome = true;
+
+    eventBus.emit("ghost:state_changed", {
+      ghostName: this.name,
+      from: previousState,
+      to: "EATEN",
+    });
 
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
     const startNode = `${tileY},${tileX}`;

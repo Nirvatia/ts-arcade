@@ -62,40 +62,38 @@ export class Pacman extends Actor {
   }
 
   private initEventListeners(): void {
-    eventBus.on("POWER_PILL_EATEN", () => {
+    eventBus.on("power_pill:activated", () => {
       this.isBuffed = true;
     });
 
-    eventBus.on("POWER_PILL_EXPIRED", () => {
+    eventBus.on("power_pill:expired", () => {
       this.isBuffed = false;
     });
   }
 
   // --- Update ---
 
-update(dt: number): void {
-  // THE FIX: Allow death animation to progress even when game is frozen,
-  // but don't process movement/collision
-  if (this.state === "DYING") return;
-  
-  if (this.gameState.mode !== "PLAYING") return;
+  update(dt: number): void {
+    if (this.state === "DYING") return;
 
-  this.updateMovement();
-  this.checkAndTeleport();
+    if (this.gameState.mode !== "PLAYING") return;
 
-  const collidedGhost = this.getCollidedGhost();
+    this.updateMovement();
+    this.checkAndTeleport();
 
-  if (collidedGhost) {
-    if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
-      eventBus.emit("COMMAND_GHOST_EATEN", { ghostName: collidedGhost.name });
-    } else if (
-      collidedGhost.state !== "FRIGHTENED" &&
-      collidedGhost.state !== "EATEN"
-    ) {
-      this.triggerDeath();
+    const collidedGhost = this.getCollidedGhost();
+
+    if (collidedGhost) {
+      if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
+        eventBus.emit("command:ghost_eaten", { ghostName: collidedGhost.name });
+      } else if (
+        collidedGhost.state !== "FRIGHTENED" &&
+        collidedGhost.state !== "EATEN"
+      ) {
+        this.triggerDeath();
+      }
     }
   }
-}
 
   private updateMovement(): void {
     if (
@@ -237,12 +235,11 @@ update(dt: number): void {
   // --- Death ---
 
   triggerDeath(): void {
-    if (this.state === "DYING") return; // Guard against double-trigger
+    if (this.state === "DYING") return;
     this.state = "DYING";
     this.deathTimer = 0;
 
-    // THE FIX: Emit the event so Director owns the sequence
-    eventBus.emit("PACMAN_DEATH_TRIGGER");
+    eventBus.emit("pacman:death_triggered");
   }
 
   // --- Draw ---
@@ -294,48 +291,48 @@ update(dt: number): void {
     this.ctx.restore();
   }
 
-private drawDead(dt: number): void {
-  this.deathTimer += dt;
-  const customDeathDuration = 1500;
+  private drawDead(dt: number): void {
+    this.deathTimer += dt;
+    const customDeathDuration = 1500;
 
-  // THE FIX: Never transition to ALIVE here.
-  // Director controls when Pacman resets via resetPositionsForDeath()
-  const p = Math.min(1, this.deathTimer / customDeathDuration);
+    // THE FIX: Never transition to ALIVE here.
+    // Director controls when Pacman resets via resetPositionsForDeath()
+    const p = Math.min(1, this.deathTimer / customDeathDuration);
 
-  const cx = this.x;
-  const cy = this.y;
-  const r = this.r;
+    const cx = this.x;
+    const cy = this.y;
+    const r = this.r;
 
-  this.ctx.save();
+    this.ctx.save();
 
-  if (p > 0.7 && p < 0.9) {
-    const shakeX = (Math.random() - 0.5) * 4;
-    const shakeY = (Math.random() - 0.5) * 4;
-    this.ctx.translate(cx + shakeX, cy + shakeY);
-  } else {
-    this.ctx.translate(cx, cy);
-  }
+    if (p > 0.7 && p < 0.9) {
+      const shakeX = (Math.random() - 0.5) * 4;
+      const shakeY = (Math.random() - 0.5) * 4;
+      this.ctx.translate(cx + shakeX, cy + shakeY);
+    } else {
+      this.ctx.translate(cx, cy);
+    }
 
-  this.ctx.rotate(this.getRotation());
-  this.ctx.fillStyle = this.color;
-  this.ctx.beginPath();
-  this.ctx.moveTo(0, 0);
-
-  const startMouthAngle = Math.PI / 4;
-  const mouthAperture = startMouthAngle + (Math.PI - startMouthAngle) * p;
-
-  this.ctx.arc(0, 0, r, mouthAperture, 2 * Math.PI - mouthAperture);
-  this.ctx.lineTo(0, 0);
-  this.ctx.closePath();
-  this.ctx.fill();
-
-  if (p > 0.9) {
-    this.ctx.fillStyle = "#FFFFFF";
+    this.ctx.rotate(this.getRotation());
+    this.ctx.fillStyle = this.color;
     this.ctx.beginPath();
-    this.ctx.arc(0, 0, r * (1 - p) * 8, 0, Math.PI * 2);
-    this.ctx.fill();
-  }
+    this.ctx.moveTo(0, 0);
 
-  this.ctx.restore();
-}
+    const startMouthAngle = Math.PI / 4;
+    const mouthAperture = startMouthAngle + (Math.PI - startMouthAngle) * p;
+
+    this.ctx.arc(0, 0, r, mouthAperture, 2 * Math.PI - mouthAperture);
+    this.ctx.lineTo(0, 0);
+    this.ctx.closePath();
+    this.ctx.fill();
+
+    if (p > 0.9) {
+      this.ctx.fillStyle = "#FFFFFF";
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, r * (1 - p) * 8, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+
+    this.ctx.restore();
+  }
 }

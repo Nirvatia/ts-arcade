@@ -1,7 +1,8 @@
 // src/game/gameState.ts
 import { Clock } from "../core/clock.js";
 import { eventBus } from "../core/eventBus.js";
-import type { GameMode, GraphType, LevelConfigType } from "../types.js";
+import type { GameMode } from "../gameModes.js";
+import type { GraphType, LevelConfigType } from "../types.js";
 import { generateLevelConfig } from "../utils.js";
 import { Tally } from "./tally.js";
 
@@ -47,35 +48,41 @@ export class GameState {
   }
 
   private initEventListeners(): void {
-    eventBus.on("GHOST_EATEN", () => {
+    eventBus.on("ghost:eaten", (data) => {
       this.tally.addGhost();
       this.tally.checkBonusLife();
     });
 
-    eventBus.on("DOT_EATEN", () => {
+    eventBus.on("dot:eaten", (data) => {
       if (this.isProcessingLevelTransition) return;
       this.dotsEaten++;
       if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
         this.isProcessingLevelTransition = true;
-        // Вместо Director.getInstance().trigger... просто кидаем сигнал
-        eventBus.emit("COMMAND_INTERMISSION");
+        eventBus.emit("level:complete", {
+          level: this.currentLevel,
+          score: this.tally.score,
+        });
       }
     });
 
-    eventBus.on("POWER_PILL_EATEN", () => {
+    eventBus.on("power_pill:eaten", () => {
       this.tally.resetGhostMultiplier();
       this.buffClock.stop();
       this.isBuffed = true;
       this.buffClock.start(
         this.buffDuration,
         1000,
-        (rem) =>
-          rem === this.buffThreshold && eventBus.emit("POWER_PILL_WARNING"),
+        (rem) => {
+          if (rem === this.buffThreshold) {
+            eventBus.emit("power_pill:warning", { remainingSeconds: rem });
+          }
+        },
         () => {
           this.isBuffed = false;
-          eventBus.emit("POWER_PILL_EXPIRED");
+          eventBus.emit("power_pill:expired");
         },
       );
+      eventBus.emit("power_pill:activated", { duration: this.buffDuration });
     });
   }
 

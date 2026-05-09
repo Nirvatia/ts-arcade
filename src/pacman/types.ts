@@ -1,28 +1,3 @@
-export type GameMode =
-  | "INIT"
-  | "PLAYING"
-  | "PAUSED"
-  | "PACMAN_DEAD"
-  | "LEVEL_TRANSITION"
-  | "GHOST_EATEN" // Classic freeze-frame when Pac-Man munches a ghost
-  | "GAME_OVER"
-  | "LEVEL_COMPLETE" // 🌟 Заморозка при съедании последней точки
-  | "INTERMISSION";
-
-export type GameEvent =
-  // --- Power Pill Events ---
-  | "POWER_PILL_EATEN"
-  | "POWER_PILL_WARNING"
-  | "POWER_PILL_EXPIRED"
-
-  // --- Combat & Scoring Events ---
-  | "GHOST_EATEN" // Emitted by Pacman when he overlaps a blue ghost
-  | "GHOST_RETURNED_HOME" // Emitted by a Ghost when its eyes reach the center cage
-
-  // --- Lifecycle Events ---
-  | "GAME_START"
-  | "PACMAN_DEATH";
-
 export type TeleportType = `0${string}`; // Подходит для "0A", "0B", "0C", "01" и т.д.
 
 export type TileType =

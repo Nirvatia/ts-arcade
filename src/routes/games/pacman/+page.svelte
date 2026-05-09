@@ -46,7 +46,8 @@
     director = Director.getInstance();
     tally = Tally.getInstance();
 
-    eventBus.emit("COMMAND_LOAD_GAME");
+    // FIXED: Use new event name
+    eventBus.emit("game:load");
 
     const mapCanvas = document.getElementById("map-cvs") as HTMLCanvasElement;
     if (mapCanvas) {
@@ -57,19 +58,77 @@
     const controller = new Controller();
     controller.init();
 
-    uiUpdateInterval = window.setInterval(() => {
-      score = tally.score;
-      lives = tally.lives;
-      gameMode = gameState.mode;
+    // FIXED: Listen to new events to update UI reactively instead of polling
+    eventBus.on("score:updated", (data) => {
+      score = data.score;
+    });
 
-      if (gameState.mode === "GAME_OVER") {
+    eventBus.on("lives:changed", (data) => {
+      lives = data.lives;
+    });
+
+    eventBus.on("bonus_life:earned", (data) => {
+      lives = data.newTotal;
+    });
+
+    eventBus.on("game:over", (data) => {
+      score = data.finalScore;
+      gameMode = "GAME_OVER";
+      countdown = 0;
+    });
+
+    eventBus.on("game:started", () => {
+      gameMode = "PLAYING";
+    });
+
+    eventBus.on("game:resumed", () => {
+      gameMode = "PLAYING";
+    });
+
+    eventBus.on("pacman:death_triggered", () => {
+      gameMode = "PACMAN_DEAD";
+    });
+
+    eventBus.on("level:transition_start", () => {
+      gameMode = "LEVEL_TRANSITION";
+    });
+
+    eventBus.on("level:transition_end", () => {
+      gameMode = "PLAYING";
+    });
+
+    eventBus.on("level:complete", () => {
+      gameMode = "LEVEL_COMPLETE";
+    });
+
+    eventBus.on("level:intermission_start", () => {
+      gameMode = "INTERMISSION";
+    });
+
+    // Keep polling for countdown (since it's time-sensitive UI)
+    // But we can also update other stats reactively now
+    uiUpdateInterval = window.setInterval(() => {
+      // Update score/lives from Tally as fallback (in case we missed an event)
+      if (tally) {
+        score = tally.score;
+        lives = tally.lives;
+      }
+      
+      // Update game mode from GameState as source of truth
+      if (gameState) {
+        gameMode = gameState.mode;
+      }
+
+      if (gameMode === "GAME_OVER") {
         countdown = 0;
         return;
       }
 
-      const activeClock = director.currentClock;
-      countdown =
-        activeClock && activeClock.isRunning ? activeClock.getRemaining() : 0;
+      if (director) {
+        const activeClock = director.currentClock;
+        countdown =
+          activeClock && activeClock.isRunning ? activeClock.getRemaining() : 0;
+      }
     }, 1000 / 30);
   });
 
@@ -104,14 +163,15 @@
     }
   });
 
+  // FIXED: Use new event names
   async function handleStart() {
     await sfx.unlockAudio();
-    eventBus.emit("COMMAND_START_GAME");
+    eventBus.emit("game:start");
   }
 
   async function handleRestart() {
     await sfx.unlockAudio();
-    eventBus.emit("COMMAND_RESTART_GAME");
+    eventBus.emit("game:restart");
   }
 </script>
 
