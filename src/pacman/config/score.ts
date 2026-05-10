@@ -1,4 +1,4 @@
-export const SCORE_CONFIG = {
+export const CFG_SCORE = {
   DOTS: {
     PELLET: 10,
     POWER_PELLET: 50,

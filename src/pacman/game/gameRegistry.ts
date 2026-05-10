@@ -2,7 +2,7 @@
 
 import { Ghost } from "../actors/ghost.js";
 import { Pacman } from "../actors/pacman.js";
-import { GHOSTS_CONFIG } from "../config/entities.js";
+import { CFG_GHOSTS } from "../config/ghosts.js";
 import { eventBus } from "../core/eventBus.js";
 import type { Drawable, Updatable } from "../interfaces.js";
 import { Dot } from "../world/dot.js";
@@ -58,7 +58,7 @@ export class GameRegistry {
     this._dynamicUpdatables.set("pacman", [new Pacman()]);
     this._dynamicUpdatables.set(
       "ghosts",
-      Object.values(GHOSTS_CONFIG).map(
+      Object.values(CFG_GHOSTS).map(
         ({ name, color }) => new Ghost(name, color),
       ),
     );

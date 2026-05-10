@@ -1,5 +1,4 @@
-// Define this in a separate config file, e.g., src/lib/config/assets/pacman/sfx.ts
-const AUDIO_CONFIG = [
+export const CFG_SFX = [
   // Core Gameplay
   { name: "start", url: "/assets/pacman/sfx/start.wav" },
   { name: "intermission", url: "/assets/pacman/sfx/intermission.wav" },
@@ -22,5 +21,3 @@ const AUDIO_CONFIG = [
   // UI / Menus
   { name: "credit", url: "/assets/pacman/sfx/credit.wav" },
 ];
-
-export { AUDIO_CONFIG };

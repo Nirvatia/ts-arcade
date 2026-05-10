@@ -1,5 +1,5 @@
 // src/game/Tally.ts
-import { SCORE_CONFIG } from "../config/scoring.js";
+import { CFG_SCORE } from "../config/score.js";
 import { eventBus } from "../core/eventBus.js";
 
 /**
@@ -84,23 +84,23 @@ export class Tally {
 
   /** Начислить очки за точку еды */
   private addDot(): void {
-    this._score += SCORE_CONFIG.DOTS.PELLET;
+    this._score += CFG_SCORE.DOTS.PELLET;
     eventBus.emit("ui:score_display_update", { score: this._score });
   }
 
   private addPowerPellet(): void {
-    this._score += SCORE_CONFIG.DOTS.POWER_PELLET;
+    this._score += CFG_SCORE.DOTS.POWER_PELLET;
     eventBus.emit("ui:score_display_update", { score: this._score });
   }
 
   private addGhost(): void {
     const multiplierIndex = Math.min(
       this._ghostMultiplier,
-      SCORE_CONFIG.GHOSTS.MULTIPLIERS.length - 1,
+      CFG_SCORE.GHOSTS.MULTIPLIERS.length - 1,
     );
     this._score +=
-      SCORE_CONFIG.GHOSTS.BASE *
-      SCORE_CONFIG.GHOSTS.MULTIPLIERS[multiplierIndex];
+      CFG_SCORE.GHOSTS.BASE *
+      CFG_SCORE.GHOSTS.MULTIPLIERS[multiplierIndex];
     this._ghostMultiplier++;
     eventBus.emit("ui:score_display_update", { score: this._score });
   }

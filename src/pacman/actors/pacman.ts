@@ -1,5 +1,5 @@
 // src/entities/Pacman.ts
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
 import { GameRegistry } from "../game/gameRegistry.js";
@@ -23,7 +23,7 @@ export class Pacman extends Actor {
   private color: string = "rgb(255, 255, 0)";
 
   constructor() {
-    super(CANVAS_CONFIG.canvasIds.pacman);
+    super(CFG_CANVAS.canvasIds.pacman);
     this.registry = GameRegistry.getInstance();
     this.speed = Math.round((this.tileSize / 8) * 10) / 10;
     this.r = this.tileSize * 0.5;

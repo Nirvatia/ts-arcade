@@ -1,5 +1,5 @@
 // src/entities/Ghost.ts
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
 import { findLairExit, findShortestPath } from "../utils.js";
@@ -26,7 +26,7 @@ export class Ghost extends Actor {
   private flashSpeed: number = 200;
 
   constructor(name: string, color: string) {
-    super(CANVAS_CONFIG.canvasIds.ghosts);
+    super(CFG_CANVAS.canvasIds.ghosts);
     this.name = name;
     this.defaultColor = color;
     this.color = color;

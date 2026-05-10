@@ -1,6 +1,6 @@
 // src/world/Maze.ts
 
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { CanvasLayer } from "../core/canvasLayer.js";
 import { GameState } from "../game/gameState.js";
 import type { Drawable } from "../interfaces.js";
@@ -22,8 +22,8 @@ export class Maze implements Drawable {
 
   constructor() {
     this.gameState = GameState.getInstance();
-    this.canvasLayer = new CanvasLayer(CANVAS_CONFIG.canvasIds.map);
-    this.tileSize = CANVAS_CONFIG.tile.size;
+    this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.maze);
+    this.tileSize = CFG_CANVAS.tile.size;
     this.lineWidth = Math.floor((this.tileSize * 20) / 100);
     this.lineColor = this.gameState.levelData.mapColor;
   }

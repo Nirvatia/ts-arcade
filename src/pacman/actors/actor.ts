@@ -1,5 +1,5 @@
 // src/core/Actor.ts
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { CanvasLayer } from "../core/canvasLayer.js";
 import { Collision } from "../core/collision.js";
 import { GameState } from "../game/gameState.js";
@@ -44,7 +44,7 @@ export abstract class Actor implements Updatable {
   constructor(layerId: string) {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(layerId);
-    this.tileSize = CANVAS_CONFIG.tile.size;
+    this.tileSize = CFG_CANVAS.tile.size;
     this.r = this.tileSize / 2;
     this.speed = this.tileSize / 8;
   }

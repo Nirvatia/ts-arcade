@@ -1,4 +1,4 @@
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 
 class Intermission {
   private ctx: CanvasRenderingContext2D;
@@ -36,7 +36,7 @@ class Intermission {
     this.elapsedTime = 0;
 
     const scaleFactor = 2.5;
-    const size = (CANVAS_CONFIG.tile.size / 2) * scaleFactor;
+    const size = (CFG_CANVAS.tile.size / 2) * scaleFactor;
 
     // Пакман стартует впереди, Блинки позади него на расстоянии 2.5 своих размеров
     this.startPacmanX = this.canvas.width + size;
@@ -77,7 +77,7 @@ class Intermission {
   public draw() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    const s = CANVAS_CONFIG.tile.size;
+    const s = CFG_CANVAS.tile.size;
     const y = this.canvas.height / 2;
 
     const scaleFactor = 2.5;

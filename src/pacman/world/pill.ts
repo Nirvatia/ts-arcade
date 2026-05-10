@@ -1,6 +1,6 @@
 // src/world/Pill.ts
 
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { CanvasLayer } from "../core/canvasLayer.js";
 import { eventBus } from "../core/eventBus.js";
 import { GameState } from "../game/gameState.js";
@@ -25,8 +25,8 @@ export class Pill implements Updatable, Collectible {
 
   constructor() {
     this.gameState = GameState.getInstance();
-    this.canvasLayer = new CanvasLayer(CANVAS_CONFIG.canvasIds.pill);
-    this.tileSize = CANVAS_CONFIG.tile.size;
+    this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pills);
+    this.tileSize = CFG_CANVAS.tile.size;
     this.pillColor = "#F0F4FF";
   }
 

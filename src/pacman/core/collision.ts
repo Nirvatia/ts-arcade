@@ -1,5 +1,5 @@
 // src/world/Collision.ts
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { GameState } from "../game/gameState.js";
 import type { TileType, TeleportType } from "../types.js";
 
@@ -15,7 +15,7 @@ interface Coords {
  */
 export class Collision {
   private static teleportPairs: Record<string, Coords> = {};
-  private static tileSize: number = CANVAS_CONFIG.tile.size;
+  private static tileSize: number = CFG_CANVAS.tile.size;
 
   private constructor() {
     // Запрещаем создание экземпляра

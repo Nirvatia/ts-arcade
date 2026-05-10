@@ -1,8 +1,8 @@
 // src/core/CanvasLayer.ts
 import { setCanvasSize } from "../utils.js";
-import { CANVAS_CONFIG } from "../config/canvas.js";
 import { LEVEL_1_MAP } from "../config/maps.js";
 import { GameState } from "../game/gameState.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 
 /**
  * Управляет HTML Canvas элементом и его 2D контекстом.
@@ -74,6 +74,6 @@ export class CanvasLayer {
     const gameState = GameState.getInstance();
     const currentMap = gameState.levelData?.map || LEVEL_1_MAP;
 
-    setCanvasSize(this._canvas, CANVAS_CONFIG.tile.size, 0, currentMap);
+    setCanvasSize(this._canvas, CFG_CANVAS.tile.size, 0, currentMap);
   }
 }

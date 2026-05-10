@@ -10,6 +10,7 @@
   import { Tally } from "../../../pacman/game/tally.js";
   import { eventBus } from "../../../pacman/core/eventBus.js";
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
+  import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
 
   let isLoading = $state(true);
   let score = $state(0);
@@ -49,7 +50,7 @@
     // FIXED: Use new event name
     eventBus.emit("game:load");
 
-    const mapCanvas = document.getElementById("map-cvs") as HTMLCanvasElement;
+    const mapCanvas = document.getElementById(CFG_CANVAS.canvasIds.maze) as HTMLCanvasElement;
     if (mapCanvas) {
       canvasWidth = mapCanvas.width;
       canvasHeight = mapCanvas.height;
@@ -191,11 +192,11 @@
         class="game-container"
         style="width: {canvasWidth}px; height: {canvasHeight}px;"
       >
-        <canvas id="map-cvs"></canvas>
-        <canvas id="food-cvs"></canvas>
-        <canvas id="pill-cvs"></canvas>
-        <canvas id="pacman-cvs"></canvas>
-        <canvas id="ghosts-cvs"></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.maze}></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.dots}></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.pills}></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.pacman}></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.ghosts}></canvas>
 
         {#if gameMode === "INIT" || gameMode === "GAME_OVER"}
           <div

@@ -1,6 +1,5 @@
 // src/utils.ts
 import type { GraphType, LevelConfigType, TileType } from "./types.js";
-import { AUDIO_CONFIG } from "./config/audioConfig.js";
 import {
   LEVEL_1_MAP,
   LEVEL_2_MAP,
@@ -9,6 +8,7 @@ import {
   LEVEL_5_MAP,
 } from "./config/maps.js";
 import { sfx } from "./sfx/sfx.js";
+import { CFG_SFX } from "./config/sfx.js";
 
 /**
  * Предзагружает все аудио-ассеты через SFX.
@@ -18,7 +18,7 @@ async function initAudio(): Promise<void> {
   try {
     // Теперь это просто скачивание байтов, браузер не ругается
     await Promise.all(
-      AUDIO_CONFIG.map((sound) => sfx.loadSound(sound.name, sound.url)),
+      CFG_SFX.map((sound) => sfx.loadSound(sound.name, sound.url)),
     );
     console.log("Audio assets pre-loaded (buffers cached).");
   } catch (err) {

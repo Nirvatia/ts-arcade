@@ -1,14 +1,12 @@
-const CANVAS_CONFIG = {
+export const CFG_CANVAS = {
   tile: {
     size: 22, // Size of each tile in pixels
   },
   canvasIds: {
-    map: "map-cvs",
-    food: "food-cvs",
-    pill: "pill-cvs",
-    pacman: "pacman-cvs",
-    ghosts: "ghosts-cvs", // 🌟 Notice "ui" is gone!
+    maze: "cvs-maze",
+    dots: "cvs-dots",
+    pills: "cvs-pills",
+    pacman: "cvs-pacman",
+    ghosts: "cvs-ghosts", 
   },
 };
-
-export { CANVAS_CONFIG };

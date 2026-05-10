@@ -1,4 +1,4 @@
-const GHOSTS_CONFIG = {
+export const CFG_GHOSTS = {
   blinky: {
     name: "BY",
     color: "#d02c2c",
@@ -8,4 +8,3 @@ const GHOSTS_CONFIG = {
   clyde: { name: "CE", color: "#f5a623" },
 };
 
-export { GHOSTS_CONFIG };

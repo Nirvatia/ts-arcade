@@ -1,6 +1,6 @@
 // src/world/Dot.ts
 
-import { CANVAS_CONFIG } from "../config/canvas.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { CanvasLayer } from "../core/canvasLayer.js";
 import { eventBus } from "../core/eventBus.js";
 import { GameState } from "../game/gameState.js";
@@ -24,8 +24,8 @@ export class Dot implements Drawable, Collectible {
 
   constructor() {
     this.gameState = GameState.getInstance();
-    this.canvasLayer = new CanvasLayer(CANVAS_CONFIG.canvasIds.food);
-    this.tileSize = CANVAS_CONFIG.tile.size;
+    this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
+    this.tileSize = CFG_CANVAS.tile.size;
     this.color = "rgb(230, 230, 230)";
     this.radius = this.tileSize / 8;
     this.initEventListeners();
