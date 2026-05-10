@@ -14,7 +14,6 @@ import type { Ghost } from "./ghost.js";
  */
 export class Pacman extends Actor {
   private registry: GameRegistry;
-  private tally: Tally;
 
   public state: "ALIVE" | "EATEN" | "DYING" = "ALIVE";
   public nextDirection: { dx: number; dy: number } | null = null;
@@ -26,7 +25,6 @@ export class Pacman extends Actor {
   constructor() {
     super(CANVAS_CONFIG.canvasIds.pacman);
     this.registry = GameRegistry.getInstance();
-    this.tally = Tally.getInstance();
     this.speed = Math.round((this.tileSize / 8) * 10) / 10;
     this.r = this.tileSize * 0.5;
   }
@@ -213,9 +211,7 @@ export class Pacman extends Actor {
   private tryEatFood(tileX: number, tileY: number): void {
     const dot = this.registry.getDots();
     if (dot.positions.has(`${tileY},${tileX}`)) {
-      dot.eat(tileY, tileX);
-      this.tally.addDot();
-      this.tally.checkBonusLife();
+      eventBus.emit("dot:collect", { position: { i: tileY, j: tileX } });
     }
   }
 
@@ -226,9 +222,7 @@ export class Pacman extends Actor {
     );
 
     if (pillIndex !== -1) {
-      pill.eat(tileY, tileX);
-      this.tally.addPowerPellet();
-      this.tally.checkBonusLife();
+      eventBus.emit("power_pill:collect", { position: { i: tileY, j: tileX } });
     }
   }
 

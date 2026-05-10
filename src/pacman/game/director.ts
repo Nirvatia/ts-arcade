@@ -77,11 +77,11 @@ export class Director {
 
   loadLevel(): void {
     this.tally.resetForLevel();
-    this.registry.resetAll();
+    eventBus.emit("command:reset_all"); // Instead of this.registry.resetAll()
     this.gameState.updateLevelConfig(this.gameState.currentLevel);
-    this.gameState.dotsEaten = 0; // ОБЯЗАТЕЛЬНО ОБНУЛЯЕМ ТУТ
+    this.gameState.dotsEaten = 0;
     this.gameState.isProcessingLevelTransition = false;
-    this.environment.setup();
+    eventBus.emit("command:setup_environment"); // Instead of this.environment.setup()
   }
 
   startGame(): void {
@@ -90,7 +90,7 @@ export class Director {
     this.gameState.mode = "LEVEL_TRANSITION";
 
     eventBus.emit("level:transition_start", { duration: 4 });
-    this.registry.spawnEntities();
+    eventBus.emit("command:spawn_entities"); // Instead of this.registry.spawnEntities()
     this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
 
     const trackDuration = sfx.getTrackDuration("start");
@@ -102,8 +102,8 @@ export class Director {
       1000,
       () => {},
       () => {
-        this.registry.exitLairAll();
-        this.registry.initAll();
+        eventBus.emit("command:exit_lair_all"); // Instead of this.registry.exitLairAll()
+        eventBus.emit("command:init_all"); // Instead of this.registry.initAll()
         eventBus.emit("game:started");
         eventBus.emit("level:transition_end");
         this.gameState.mode = "PLAYING";
@@ -139,7 +139,7 @@ export class Director {
 
   completeDeathSequence(): void {
     this.stopActiveClock();
-    this.registry.resetPositionsForDeath();
+    eventBus.emit("command:reset_positions"); // Instead of this.registry.resetPositionsForDeath()
     this.gameState.mode = "LEVEL_TRANSITION";
 
     eventBus.emit("level:transition_start", { duration: 3 });
@@ -151,7 +151,7 @@ export class Director {
       1000,
       () => {},
       () => {
-        this.registry.exitLairAll();
+        eventBus.emit("command:exit_lair_all");
         eventBus.emit("game:resumed");
         eventBus.emit("level:transition_end");
         this.gameState.mode = "PLAYING";
@@ -181,6 +181,7 @@ export class Director {
     }
 
     sequence.addCallback(() => {
+      eventBus.emit("command:clear_canvases");
       this.registry.clearAllCanvases();
       this.gameState.mode = "INTERMISSION";
       eventBus.emit("level:intermission_start", {

@@ -20,6 +20,18 @@ export interface EventPayloads {
   "game:resumed": void;
 
   // ================================================
+  // GAME SYSTEM COMMANDS
+  // ================================================
+  "command:create_entities": void;
+  "command:reset_all": void;
+  "command:spawn_entities": void;
+  "command:reset_positions": void;
+  "command:exit_lair_all": void;
+  "command:init_all": void;
+  "command:clear_canvases": void;
+  "command:setup_environment": void;
+
+  // ================================================
   // LEVEL LIFECYCLE
   // ================================================
   "level:start": { level: number; totalDots: number };
@@ -27,6 +39,13 @@ export interface EventPayloads {
   "level:intermission_start": { nextLevel: number };
   "level:transition_start": { duration: number };
   "level:transition_end": void;
+
+  // ================================================
+  // ENTITY INTERACTIONS
+  // ================================================
+  "dot:collect": { position: { i: number; j: number } };
+  "power_pill:collect": { position: { i: number; j: number } };
+  "ghost:collect": { ghostName: string; ghostIndex: number };
 
   // ================================================
   // ENTITY: PACMAN

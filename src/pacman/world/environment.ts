@@ -5,6 +5,7 @@ import type { TileType } from "../types.js";
 import { GameState } from "../game/gameState.js";
 import { GameRegistry } from "../game/gameRegistry.js";
 import { Collision } from "../core/collision.js";
+import { eventBus } from "../core/eventBus.js";
 
 /**
  * Управляет созданием графа лабиринта для навигации призраков,
@@ -13,13 +14,19 @@ import { Collision } from "../core/collision.js";
 export class Environment {
   private static instance: Environment;
 
-  private constructor() {}
+  private constructor() {
+    this.initEventListeners();
+  }
 
   static getInstance(): Environment {
     if (!Environment.instance) {
       Environment.instance = new Environment();
     }
     return Environment.instance;
+  }
+
+  private initEventListeners(): void {
+    eventBus.on("command:setup_environment", () => this.setup());
   }
 
   /**

@@ -3,11 +3,11 @@
 import { Ghost } from "../actors/ghost.js";
 import { Pacman } from "../actors/pacman.js";
 import { GHOSTS_CONFIG } from "../config/entities.js";
+import { eventBus } from "../core/eventBus.js";
 import type { Drawable, Updatable } from "../interfaces.js";
 import { Dot } from "../world/dot.js";
 import { Maze } from "../world/maze.js";
 import { Pill } from "../world/pill.js";
-
 
 /**
  * Центральный реестр всех игровых объектов.
@@ -23,7 +23,9 @@ export class GameRegistry {
   /** Динамические объекты (обновление + отрисовка каждый кадр) */
   private _dynamicUpdatables: Map<string, Updatable[]> = new Map();
 
-  private constructor() {}
+  private constructor() {
+    this.initEventListeners();
+  }
 
   /** Получить единственный экземпляр реестра */
   static getInstance(): GameRegistry {
@@ -31,6 +33,16 @@ export class GameRegistry {
       GameRegistry.instance = new GameRegistry();
     }
     return GameRegistry.instance;
+  }
+
+  private initEventListeners(): void {
+    eventBus.on("command:create_entities", () => this.createEntities());
+    eventBus.on("command:reset_all", () => this.resetAll());
+    eventBus.on("command:spawn_entities", () => this.spawnEntities());
+    eventBus.on("command:exit_lair_all", () => this.exitLairAll());
+    eventBus.on("command:init_all", () => this.initAll());
+    eventBus.on("command:reset_positions", () => this.resetPositionsForDeath());
+    eventBus.on("command:clear_canvases", () => this.clearAllCanvases());
   }
 
   /**

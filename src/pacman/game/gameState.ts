@@ -48,11 +48,6 @@ export class GameState {
   }
 
   private initEventListeners(): void {
-    eventBus.on("ghost:eaten", (data) => {
-      this.tally.addGhost();
-      this.tally.checkBonusLife();
-    });
-
     eventBus.on("dot:eaten", (data) => {
       if (this.isProcessingLevelTransition) return;
       this.dotsEaten++;
@@ -66,7 +61,6 @@ export class GameState {
     });
 
     eventBus.on("power_pill:eaten", () => {
-      this.tally.resetGhostMultiplier();
       this.buffClock.stop();
       this.isBuffed = true;
       this.buffClock.start(

@@ -24,7 +24,9 @@ export class Tally {
   /** Была ли уже получена бонусная жизнь на этом уровне */
   private _hasReceivedBonusLife: boolean = false;
 
-  private constructor() {}
+  private constructor() {
+    this.initEventListeners();
+  }
 
   static getInstance(): Tally {
     if (!Tally.instance) {
@@ -53,20 +55,45 @@ export class Tally {
     return this._hasReceivedBonusLife;
   }
 
+  private initEventListeners(): void {
+    // Listen to scoring events instead of being called directly
+    eventBus.on("dot:eaten", () => {
+      this.addDot();
+      this.checkBonusLife();
+    });
+
+    eventBus.on("power_pill:eaten", () => {
+      this.addPowerPellet();
+      this.checkBonusLife();
+    });
+
+    eventBus.on("ghost:eaten", () => {
+      this.addGhost();
+      this.checkBonusLife();
+    });
+
+    // Listen to lives changes
+    eventBus.on("lives:changed", (data) => {
+      this._lives = data.lives;
+      // Emit UI update event
+      eventBus.emit("ui:lives_display_update", { lives: data.lives });
+    });
+  }
+
   // --- Методы начисления очков ---
 
   /** Начислить очки за точку еды */
-  addDot(): void {
+  private addDot(): void {
     this._score += SCORE_CONFIG.DOTS.PELLET;
+    eventBus.emit("ui:score_display_update", { score: this._score });
   }
 
-  /** Начислить очки за энерджайзер */
-  addPowerPellet(): void {
+  private addPowerPellet(): void {
     this._score += SCORE_CONFIG.DOTS.POWER_PELLET;
+    eventBus.emit("ui:score_display_update", { score: this._score });
   }
 
-  /** Начислить очки за съедение призрака */
-  addGhost(): void {
+  private addGhost(): void {
     const multiplierIndex = Math.min(
       this._ghostMultiplier,
       SCORE_CONFIG.GHOSTS.MULTIPLIERS.length - 1,
@@ -75,6 +102,7 @@ export class Tally {
       SCORE_CONFIG.GHOSTS.BASE *
       SCORE_CONFIG.GHOSTS.MULTIPLIERS[multiplierIndex];
     this._ghostMultiplier++;
+    eventBus.emit("ui:score_display_update", { score: this._score });
   }
 
   /** Начислить очки за фрукт */

@@ -54,6 +54,15 @@ export class Pill implements Updatable, Collectible {
     this.canvasLayer.clear();
   }
 
+  initEventListeners(): void {
+    eventBus.on(
+      "power_pill:collect",
+      (data: { position: { i: number; j: number } }) => {
+        this.eat(data.position.i, data.position.j);
+      },
+    );
+  }
+
   // --- Collectible ---
 
   spawn(): void {
@@ -70,9 +79,17 @@ export class Pill implements Updatable, Collectible {
   }
 
   eat(i: number, j: number): void {
-    this.positions = this.positions.filter((p) => !(p.i === i && p.j === j));
-    this.clearCanvas();
-    eventBus.emit("power_pill:eaten", { position: { i, j } });
+    const index = this.positions.findIndex(
+      (pos: { i: number; j: number }) => pos.i === i && pos.j === j,
+    );
+
+    if (index !== -1) {
+      this.positions.splice(index, 1);
+      this.requestRedraw();
+
+      // Emit power_pill:eaten event that GameState listens to
+      eventBus.emit("power_pill:eaten", { position: { i, j } });
+    }
   }
 
   // --- Lifecycle ---

@@ -28,6 +28,7 @@ export class Dot implements Drawable, Collectible {
     this.tileSize = CANVAS_CONFIG.tile.size;
     this.color = "rgb(230, 230, 230)";
     this.radius = this.tileSize / 8;
+    this.initEventListeners();
   }
 
   get canvas(): HTMLCanvasElement {
@@ -44,6 +45,15 @@ export class Dot implements Drawable, Collectible {
 
   set needsRedraw(value: boolean) {
     this._needsRedraw = value;
+  }
+
+  initEventListeners(): void {
+    eventBus.on(
+      "dot:collect",
+      (data: { position: { i: number; j: number } }) => {
+        this.eat(data.position.i, data.position.j);
+      },
+    );
   }
 
   requestRedraw(): void {
