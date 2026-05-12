@@ -28,6 +28,7 @@ export class Pill implements Updatable, Collectible {
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pills);
     this.tileSize = CFG_CANVAS.tile.size;
     this.pillColor = "#F0F4FF";
+    this.initEventListeners();
   }
 
   get canvas(): HTMLCanvasElement {
