@@ -20,7 +20,6 @@ async function initAudio(): Promise<void> {
     await Promise.all(
       CFG_SFX.map((sound) => sfx.loadSound(sound.name, sound.url)),
     );
-    console.log("Audio assets pre-loaded (buffers cached).");
   } catch (err) {
     console.error("Failed to pre-load audio:", err);
   }
