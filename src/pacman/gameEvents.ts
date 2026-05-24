@@ -91,8 +91,9 @@ export interface EventPayloads {
   // SCORING
   // ================================================
   "score:updated": { score: number; delta: number; reason: string };
-  "lives:changed": { lives: number; delta: number; reason: string };
-  "bonus_life:earned": { newTotal: number; threshold: number };
+  "lives:changed": { lives: number };
+  "bonus_life:earned": void;
+  "bonus_life:acquired": { lives: number };
 
   // ================================================
   // AUDIO

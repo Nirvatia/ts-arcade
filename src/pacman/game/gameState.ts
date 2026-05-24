@@ -8,6 +8,7 @@ import { Tally } from "./tally.js";
 
 export class GameState {
   private static instance: GameState;
+
   private tally: Tally;
 
   public pathGraph: GraphType | null = null;
@@ -19,6 +20,7 @@ export class GameState {
   public isBuffed: boolean = false;
   public isProcessingLevelTransition: boolean = false;
 
+  private _lives: number = 3;
   private buffClock: Clock = new Clock();
   private buffDuration: number = 10;
   private buffThreshold: number = 3;
@@ -29,28 +31,35 @@ export class GameState {
     this.initEventListeners();
   }
 
-  static getInstance(): GameState {
+  public static getInstance(): GameState {
     if (!GameState.instance) {
       GameState.instance = new GameState();
     }
     return GameState.instance;
   }
 
-  // Прокси-геттеры для UI (Svelte)
-  get lives(): number {
-    return this.tally.lives;
+  // --- Getters & Setters ---
+
+  public get lives(): number {
+    return this._lives;
   }
-  set lives(v: number) {
-    this.tally.lives = v;
-  }
-  get score(): number {
-    return this.tally.score;
+
+  public set lives(value: number) {
+    const previousLives = this._lives;
+    this._lives = value;
+
+    if (previousLives !== this._lives) {
+      eventBus.emit("lives:changed", { lives: this._lives });
+      eventBus.emit("ui:lives_display_update", { lives: this._lives });
+    }
   }
 
   private initEventListeners(): void {
-    eventBus.on("dot:eaten", (data) => {
+    eventBus.on("dot:eaten", () => {
       if (this.isProcessingLevelTransition) return;
+
       this.dotsEaten++;
+
       if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
         this.isProcessingLevelTransition = true;
         eventBus.emit("level:complete", {
@@ -78,23 +87,38 @@ export class GameState {
       );
       eventBus.emit("power_pill:activated", { duration: this.buffDuration });
     });
+
+    eventBus.on("bonus_life:earned", () => {
+      this.lives++;
+      eventBus.emit("bonus_life:acquired", { lives: this.lives });
+    });
   }
 
-  setTotalDots(count: number): void {
+  public setTotalDots(count: number): void {
     this.totalDots = count;
-    this.dotsEaten = 0; // Сбрасываем счетчик съеденных при установке новых
-    this.isProcessingLevelTransition = false;
-  }
-
-  // Если нужно вручную сбросить прогресс уровня
-  resetLevelProgress(): void {
     this.dotsEaten = 0;
     this.isProcessingLevelTransition = false;
   }
 
-  // Хелпер для смены конфига (вызывается из Director)
-  updateLevelConfig(level: number): void {
+  public resetLevelProgress(): void {
+    this.dotsEaten = 0;
+    this.isProcessingLevelTransition = false;
+  }
+
+  public updateLevelConfig(level: number): void {
     this.currentLevel = level;
     this.levelData = generateLevelConfig(level);
+  }
+
+  public loseLife(): void {
+    if (this._lives - 1 < 0) {
+      eventBus.emit("game:over", {
+        finalScore: this.tally.score,
+        level: this.currentLevel,
+      });
+      return;
+    }
+
+    this.lives--;
   }
 }

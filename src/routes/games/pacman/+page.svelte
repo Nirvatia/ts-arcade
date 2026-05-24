@@ -68,8 +68,8 @@
       lives = data.lives;
     });
 
-    eventBus.on("bonus_life:earned", (data) => {
-      lives = data.newTotal;
+    eventBus.on("bonus_life:acquired", (data) => {
+      lives = data.lives;
     });
 
     eventBus.on("game:over", (data) => {
@@ -112,7 +112,7 @@
       // Update score/lives from Tally as fallback (in case we missed an event)
       if (tally) {
         score = tally.score;
-        lives = tally.lives;
+        lives = gameState.lives;
       }
       
       // Update game mode from GameState as source of truth
