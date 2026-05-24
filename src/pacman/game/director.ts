@@ -15,7 +15,8 @@ export class Director {
   private registry: GameRegistry;
   private tally: Tally;
   private gameLoop: GameLoop;
-  private activeClock: Clock | null = null;
+  private activeClock: Clock = new Clock();
+  private activeSequence: Sequence = new Sequence();
 
   private constructor() {
     this.gameState = GameState.getInstance();
@@ -47,24 +48,37 @@ export class Director {
     );
   }
 
-  private triggerGhostEatenSequence(data: { ghostName: string }): void {
-    this.stopActiveClock();
+  get currentClock(): Clock {
+    return this.activeClock;
+  }
+
+  private resetTickingState(): void {
+    this.activeClock.stop();
+    this.activeSequence.clear();
+  }
+
+  triggerGhostEatenSequence(data: { ghostName: string }): void {
+    this.resetTickingState();
 
     const ghostEatenDuration = 1000;
-    this.activeClock = new Clock();
     this.activeClock.start(
       ghostEatenDuration / 1000,
       ghostEatenDuration,
       () => {},
       () => {
-        this.gameState.mode = "PLAYING";
-        this.activeClock = null;
+        eventBus.emit("game:resumed"); // Centralized decoupled mode management
       },
     );
   }
 
-  get currentClock(): Clock | null {
-    return this.activeClock;
+  private handleGameOver(): void {
+    this.resetTickingState();
+  }
+
+  restartGame(): void {
+    this.resetTickingState();
+    this.loadLevel();
+    this.startGame();
   }
 
   loadGame(): void {
@@ -78,7 +92,7 @@ export class Director {
   }
 
   startGame(): void {
-    this.stopActiveClock();
+    this.resetTickingState();
 
     eventBus.emit("level:transition_start", { duration: 4 });
     eventBus.emit("command:spawn_entities");
@@ -87,7 +101,6 @@ export class Director {
     const trackDuration = sfx.getTrackDuration("start");
     const countdownTime = trackDuration > 0 ? Math.ceil(trackDuration) : 4;
 
-    this.activeClock = new Clock();
     this.activeClock.start(
       countdownTime,
       1000,
@@ -97,59 +110,56 @@ export class Director {
         eventBus.emit("command:init_all");
         eventBus.emit("game:started");
         eventBus.emit("level:transition_end");
-        this.activeClock = null;
       },
     );
   }
 
   triggerDeathSequence(): void {
+    this.resetTickingState();
+
     const pacman = this.registry.getPacman();
-    eventBus.emit("pacman:death_animation_start", {
-      x: pacman.x,
-      y: pacman.y,
-    });
+    eventBus.emit("pacman:death_animation_start", { x: pacman.x, y: pacman.y });
 
     const deathDuration = sfx.getTrackDuration("death") || 2;
+    const msDuration = deathDuration * 1000 + 200;
 
-    setTimeout(
-      () => {
+    this.activeSequence
+      .addWait(msDuration)
+      .addCallback(() => {
         eventBus.emit("command:execute_life_loss", {
           currentScore: this.tally.score,
         });
-      },
-      deathDuration * 1000 + 200,
-    );
+      })
+      .start();
   }
 
   // src/game/director.ts
   completeDeathSequence(): void {
-    this.stopActiveClock();
+    this.resetTickingState();
     eventBus.emit("command:reset_positions");
-
     eventBus.emit("level:transition_start", { duration: 3 });
     eventBus.emit("pacman:death_animation_end");
 
-    this.activeClock = new Clock();
     this.activeClock.start(
       3,
       1000,
       () => {},
       () => {
         eventBus.emit("command:exit_lair_all");
-        eventBus.emit("game:resumed");
+        eventBus.emit("game:resumed"); 
         eventBus.emit("level:transition_end");
-        this.gameState.mode = "PLAYING";
-        this.activeClock = null;
       },
     );
   }
 
   triggerIntermissionSequence(): void {
-    const maze = this.registry.getMaze();
-    const sequence = new Sequence();
+    this.resetTickingState();
 
+    const maze = this.registry.getMaze();
+
+    // 1. Flash the maze walls
     for (let i = 0; i < 4; i++) {
-      sequence
+      this.activeSequence
         .addCallback(() => {
           maze.isFlashing = true;
           maze.requestRedraw();
@@ -162,33 +172,19 @@ export class Director {
         .addWait(400);
     }
 
-    sequence.addCallback(() => {
-      eventBus.emit("command:clear_canvases");
-      eventBus.emit("level:intermission_start", {
-        nextLevel: this.gameState.currentLevel + 1,
-      });
-
-      setTimeout(() => {
+    // 2. Complete transition, show splash screen, wait 5 seconds, then boot next level
+    this.activeSequence
+      .addCallback(() => {
+        eventBus.emit("command:clear_canvases");
+        eventBus.emit("level:intermission_start", {
+          nextLevel: this.gameState.currentLevel + 1,
+        });
+      })
+      .addWait(5000)
+      .addCallback(() => {
         this.loadLevel();
         this.startGame();
-      }, 5000);
-    });
-    sequence.start();
-  }
-
-  private handleGameOver(): void {
-    this.stopActiveClock();
-  }
-
-  restartGame(): void {
-    this.loadLevel();
-    this.startGame();
-  }
-
-  private stopActiveClock(): void {
-    if (this.activeClock) {
-      this.activeClock.stop();
-      this.activeClock = null;
-    }
+      })
+      .start();
   }
 }

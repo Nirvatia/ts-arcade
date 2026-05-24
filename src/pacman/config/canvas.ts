@@ -7,6 +7,7 @@ export const CFG_CANVAS = {
     dots: "cvs-dots",
     pills: "cvs-pills",
     pacman: "cvs-pacman",
-    ghosts: "cvs-ghosts", 
+    ghosts: "cvs-ghosts",
+    scene: "cvs-scene",
   },
 };

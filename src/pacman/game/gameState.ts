@@ -50,6 +50,12 @@ export class GameState {
     }
   }
 
+  private reset(): void {
+    this.currentLevel = 1;
+    this.dotsEaten = 0;
+    this.lives = 3;
+  }
+
   private initEventListeners(): void {
     // Game Lifecycle Management via events
     eventBus.on("game:start", () => {
@@ -61,9 +67,8 @@ export class GameState {
     });
 
     eventBus.on("game:restart", () => {
-      this.currentLevel = 1;
-      this.dotsEaten = 0;
-      this.lives = 3;
+      this.reset();
+      this.mode = "LEVEL_TRANSITION";
       this.levelData = generateLevelConfig(this.currentLevel);
       eventBus.emit("ui:level_display_update", { level: this.currentLevel });
     });

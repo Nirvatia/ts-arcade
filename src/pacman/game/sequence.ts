@@ -10,15 +10,6 @@ type SequenceCompleteCallback = () => void;
  * Управляет последовательным выполнением цепочки событий.
  * Используется для сложных сценариев: интермиссия, смерть, сброс уровня.
  *
- * Пример использования:
- * ```
- * const seq = new Sequence();
- * seq.addWait(400);
- * seq.addCallback(() => maze.isFlashing = true);
- * seq.addWait(400);
- * seq.addCallback(() => maze.isFlashing = false);
- * seq.start(() => console.log("Sequence complete"));
- * ```
  */
 export class Sequence {
   private steps: SequenceStep[] = [];
@@ -83,7 +74,6 @@ export class Sequence {
 
     if (step.type === "callback") {
       step.action();
-      // Немедленный переход к следующему шагу
       this.runNext(onComplete);
     } else if (step.type === "wait") {
       this.timeoutId = window.setTimeout(() => {

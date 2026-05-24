@@ -12,6 +12,7 @@
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
   import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
   import { Environment } from "../../../pacman/world/environment.js";
+  import { CanvasLayer } from "../../../pacman/core/canvasLayer.js";
 
   let isLoading = $state(true);
   let score = $state(0);
@@ -53,7 +54,9 @@
     // FIXED: Use new event name
     eventBus.emit("game:load");
 
-    const mapCanvas = document.getElementById(CFG_CANVAS.canvasIds.maze) as HTMLCanvasElement;
+    const mapCanvas = document.getElementById(
+      CFG_CANVAS.canvasIds.maze,
+    ) as HTMLCanvasElement;
     if (mapCanvas) {
       canvasWidth = mapCanvas.width;
       canvasHeight = mapCanvas.height;
@@ -117,7 +120,7 @@
         score = tally.score;
         lives = gameState.lives;
       }
-      
+
       // Update game mode from GameState as source of truth
       if (gameState) {
         gameMode = gameState.mode;
@@ -147,11 +150,7 @@
       const ctx = intermissionCanvas.getContext("2d");
       if (!ctx) return;
 
-      intermissionInstance = new Intermission(
-        intermissionCanvas,
-        ctx,
-        "Jersey-Regular",
-      );
+      intermissionInstance = new Intermission();
       intermissionInstance.start(5, () => {});
 
       let animationId: number;
