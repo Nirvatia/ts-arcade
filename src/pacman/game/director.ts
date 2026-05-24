@@ -4,7 +4,6 @@ import { eventBus } from "../core/eventBus.js";
 import { GameLoop } from "../core/gameLoop.js";
 import { sfx } from "../sfx/sfx.js";
 import { createPathGraph } from "../utils.js";
-import { Environment } from "../world/environment.js";
 import { GameRegistry } from "./gameRegistry.js";
 import { GameState } from "./gameState.js";
 import { Sequence } from "./sequence.js";
@@ -13,20 +12,17 @@ import { Tally } from "./tally.js";
 export class Director {
   private static instance: Director;
   private gameState: GameState;
-  private gameLoop: GameLoop;
   private registry: GameRegistry;
-  private environment: Environment;
   private tally: Tally;
+  private gameLoop: GameLoop;
   private activeClock: Clock | null = null;
 
   private constructor() {
     this.gameState = GameState.getInstance();
     this.registry = GameRegistry.getInstance();
-    this.environment = Environment.getInstance();
     this.tally = Tally.getInstance();
     this.gameLoop = GameLoop.getInstance();
 
-    // ГЛАВНОЕ: Директор слушает команды из шины
     this.initCommandListeners();
     this.gameLoop.start();
   }
@@ -40,8 +36,12 @@ export class Director {
     eventBus.on("game:load", () => this.loadGame());
     eventBus.on("game:start", () => this.startGame());
     eventBus.on("game:restart", () => this.restartGame());
+    eventBus.on("game:over", () => this.handleGameOver());
     eventBus.on("level:complete", () => this.triggerIntermissionSequence());
     eventBus.on("pacman:death_triggered", () => this.triggerDeathSequence());
+    eventBus.on("command:death_sequence_continue", () =>
+      this.completeDeathSequence(),
+    );
     eventBus.on("command:ghost_eaten", (data: { ghostName: string }) =>
       this.triggerGhostEatenSequence(data),
     );
@@ -49,10 +49,8 @@ export class Director {
 
   private triggerGhostEatenSequence(data: { ghostName: string }): void {
     this.stopActiveClock();
-    this.gameState.mode = "GHOST_EATEN";
 
     const ghostEatenDuration = 1000;
-
     this.activeClock = new Clock();
     this.activeClock.start(
       ghostEatenDuration / 1000,
@@ -70,27 +68,20 @@ export class Director {
   }
 
   loadGame(): void {
-    this.registry.createEntities();
+    eventBus.emit("command:create_entities");
     this.loadLevel();
-    this.gameState.mode = "INIT";
   }
 
   loadLevel(): void {
-    this.tally.resetForLevel();
-    eventBus.emit("command:reset_all"); // Instead of this.registry.resetAll()
-    this.gameState.updateLevelConfig(this.gameState.currentLevel);
-    this.gameState.dotsEaten = 0;
-    this.gameState.isProcessingLevelTransition = false;
-    eventBus.emit("command:setup_environment"); // Instead of this.environment.setup()
+    eventBus.emit("command:reset_all");
+    eventBus.emit("command:setup_environment");
   }
 
   startGame(): void {
-    if (this.gameState.mode === "LEVEL_TRANSITION") return;
     this.stopActiveClock();
-    this.gameState.mode = "LEVEL_TRANSITION";
 
     eventBus.emit("level:transition_start", { duration: 4 });
-    eventBus.emit("command:spawn_entities"); // Instead of this.registry.spawnEntities()
+    eventBus.emit("command:spawn_entities");
     this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
 
     const trackDuration = sfx.getTrackDuration("start");
@@ -102,20 +93,16 @@ export class Director {
       1000,
       () => {},
       () => {
-        eventBus.emit("command:exit_lair_all"); // Instead of this.registry.exitLairAll()
-        eventBus.emit("command:init_all"); // Instead of this.registry.initAll()
+        eventBus.emit("command:exit_lair_all");
+        eventBus.emit("command:init_all");
         eventBus.emit("game:started");
         eventBus.emit("level:transition_end");
-        this.gameState.mode = "PLAYING";
         this.activeClock = null;
       },
     );
   }
 
   triggerDeathSequence(): void {
-    this.gameState.mode = "PACMAN_DEAD";
-
-    // Get Pacman's actual position for the death animation
     const pacman = this.registry.getPacman();
     eventBus.emit("pacman:death_animation_start", {
       x: pacman.x,
@@ -126,21 +113,18 @@ export class Director {
 
     setTimeout(
       () => {
-        const remainingLives = this.tally.loseLife();
-        if (remainingLives < 0) {
-          this.handleGameOver();
-        } else {
-          this.completeDeathSequence();
-        }
+        eventBus.emit("command:execute_life_loss", {
+          currentScore: this.tally.score,
+        });
       },
       deathDuration * 1000 + 200,
     );
   }
 
+  // src/game/director.ts
   completeDeathSequence(): void {
     this.stopActiveClock();
-    eventBus.emit("command:reset_positions"); // Instead of this.registry.resetPositionsForDeath()
-    this.gameState.mode = "LEVEL_TRANSITION";
+    eventBus.emit("command:reset_positions");
 
     eventBus.emit("level:transition_start", { duration: 3 });
     eventBus.emit("pacman:death_animation_end");
@@ -161,11 +145,9 @@ export class Director {
   }
 
   triggerIntermissionSequence(): void {
-    this.gameState.mode = "LEVEL_COMPLETE";
     const maze = this.registry.getMaze();
     const sequence = new Sequence();
 
-    // Maze flash
     for (let i = 0; i < 4; i++) {
       sequence
         .addCallback(() => {
@@ -182,36 +164,23 @@ export class Director {
 
     sequence.addCallback(() => {
       eventBus.emit("command:clear_canvases");
-      this.registry.clearAllCanvases();
-      this.gameState.mode = "INTERMISSION";
       eventBus.emit("level:intermission_start", {
         nextLevel: this.gameState.currentLevel + 1,
       });
 
-      setTimeout(() => this.nextLevel(), 5000);
+      setTimeout(() => {
+        this.loadLevel();
+        this.startGame();
+      }, 5000);
     });
     sequence.start();
   }
 
-  nextLevel(): void {
-    this.gameState.currentLevel++;
-    this.loadLevel();
-    this.startGame();
-  }
-
   private handleGameOver(): void {
-    this.gameState.mode = "GAME_OVER";
     this.stopActiveClock();
-    eventBus.emit("game:over", {
-      finalScore: this.tally.score,
-      level: this.gameState.currentLevel,
-    });
   }
 
   restartGame(): void {
-    this.tally.reset();
-    this.gameState.currentLevel = 1;
-    this.gameState.dotsEaten = 0;
     this.loadLevel();
     this.startGame();
   }

@@ -30,6 +30,8 @@ export interface EventPayloads {
   "command:init_all": void;
   "command:clear_canvases": void;
   "command:setup_environment": void;
+  "command:execute_life_loss": { currentScore: number };
+  "command:death_sequence_continue": void;
 
   // ================================================
   // LEVEL LIFECYCLE
@@ -86,6 +88,7 @@ export interface EventPayloads {
   // ENTITY: DOTS
   // ================================================
   "dot:eaten": { position: { i: number; j: number }; dotsRemaining: number };
+  "dot:spawned": { count: number };
 
   // ================================================
   // SCORING

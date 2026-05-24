@@ -54,6 +54,14 @@ export class Tally {
   }
 
   private initEventListeners(): void {
+    eventBus.on("game:restart", () => {
+      this.reset();
+    });
+
+    eventBus.on("level:start", () => {
+      this.resetForLevel();
+    });
+
     eventBus.on("dot:eaten", () => {
       this.addDot();
     });
@@ -65,16 +73,20 @@ export class Tally {
     eventBus.on("ghost:eaten", () => {
       this.addGhost();
     });
+
+    eventBus.on("power_pill:activated", () => {
+      this.resetGhostMultiplier();
+    });
   }
 
   // --- Scoring Methods ---
 
   private addDot(): void {
-    this.score += CFG_SCORE.DOTS.PELLET; // Uses setter now
+    this.score += CFG_SCORE.DOTS.PELLET;
   }
 
   private addPowerPellet(): void {
-    this.score += CFG_SCORE.DOTS.POWER_PELLET; // Uses setter now
+    this.score += CFG_SCORE.DOTS.POWER_PELLET;
   }
 
   private addGhost(): void {
@@ -96,10 +108,6 @@ export class Tally {
     this._ghostMultiplier = 0;
   }
 
-  /**
-   * Checks thresholds and rewards bonus life.
-   * Automatically invoked whenever score properties change.
-   */
   private checkBonusLife(): boolean {
     if (
       !this._hasReceivedBonusLife &&

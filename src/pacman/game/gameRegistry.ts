@@ -10,24 +10,23 @@ import { Maze } from "../world/maze.js";
 import { Pill } from "../world/pill.js";
 
 /**
- * Центральный реестр всех игровых объектов.
- * Управляет созданием, доступом и жизненным циклом сущностей.
- * Разделяет объекты на статические (Drawable) и динамические (Updatable).
+ * Central registry for actor entities.
+ * Delegates world layer responsibilities out to the Environment system.
  */
 export class GameRegistry {
   private static instance: GameRegistry | null = null;
 
-  /** Статические объекты (только отрисовка, перерисовка по флагу) */
-  private _staticDrawables: Map<string, Drawable[]> = new Map();
-
-  /** Динамические объекты (обновление + отрисовка каждый кадр) */
-  private _dynamicUpdatables: Map<string, Updatable[]> = new Map();
+  // Concrete, explicitly typed references—no structural type guessing!
+  private _pacman!: Pacman;
+  private _ghosts: Ghost[] = [];
+  private _maze!: Maze;
+  private _dot!: Dot;
+  private _pill!: Pill;
 
   private constructor() {
     this.initEventListeners();
   }
 
-  /** Получить единственный экземпляр реестра */
   static getInstance(): GameRegistry {
     if (!GameRegistry.instance) {
       GameRegistry.instance = new GameRegistry();
@@ -45,129 +44,82 @@ export class GameRegistry {
     eventBus.on("command:clear_canvases", () => this.clearAllCanvases());
   }
 
-  /**
-   * Создаёт все игровые объекты и регистрирует их.
-   * Вызывается один раз при загрузке игры.
-   */
   createEntities(): void {
-    // Статические объекты (Drawable)
-    this._staticDrawables.set("maze", [new Maze()]);
-    this._staticDrawables.set("dot", [new Dot()]);
-
-    // Динамические объекты (Updatable)
-    this._dynamicUpdatables.set("pacman", [new Pacman()]);
-    this._dynamicUpdatables.set(
-      "ghosts",
-      Object.values(CFG_GHOSTS).map(
-        ({ name, color }) => new Ghost(name, color),
-      ),
+    this._maze = new Maze();
+    this._dot = new Dot();
+    this._pill = new Pill();
+    this._pacman = new Pacman();
+    this._ghosts = Object.values(CFG_GHOSTS).map(
+      ({ name, color }) => new Ghost(name, color),
     );
-    this._dynamicUpdatables.set("pill", [new Pill()]);
   }
 
-  /** Получить все динамические сущности (Updatable) */
-  getAllUpdatable(): Updatable[] {
-    return Array.from(this._dynamicUpdatables.values()).flat();
-  }
-
-  /** Получить все статические сущности (Drawable) */
-  getAllDrawable(): Drawable[] {
-    return Array.from(this._staticDrawables.values()).flat();
-  }
-
-  /** Получить Пакмана */
+  // --- Strict Type Getters ---
   getPacman(): Pacman {
-    return this._dynamicUpdatables.get("pacman")![0] as Pacman;
+    return this._pacman;
   }
-
-  /** Получить всех призраков */
   getGhosts(): Ghost[] {
-    return (this._dynamicUpdatables.get("ghosts") || []) as Ghost[];
+    return this._ghosts;
   }
-
-  /** Получить все точки (Dot) */
-  getDots(): Dot {
-    return this._staticDrawables.get("dot")![0] as Dot;
-  }
-
-  /** Получить все энерджайзеры (Pill) */
-  getPills(): Pill {
-    return this._dynamicUpdatables.get("pill")![0] as Pill;
-  }
-
-  /** Получить лабиринт (Maze) */
   getMaze(): Maze {
-    return this._staticDrawables.get("maze")![0] as Maze;
+    return this._maze;
+  }
+  getDots(): Dot {
+    return this._dot;
+  }
+  getPills(): Pill {
+    return this._pill;
   }
 
-  // --- Жизненный цикл ---
+  /** Combined arrays for direct GameLoop cycle access */
+  getAllUpdatable(): Updatable[] {
+    return [this._pacman, ...this._ghosts, this._pill];
+  }
 
-  /** Инициализировать все сущности */
+  getAllDrawable(): Drawable[] {
+    return [this._maze, this._dot, this._pill, this._pacman, ...this._ghosts];
+  }
+
+  // --- Type-Safe, Explicit Lifecycles (No reflection or "as any" hacks) ---
   initAll(): void {
-    [...this.getAllDrawable(), ...this.getAllUpdatable()].forEach((e) => {
-      if ("init" in e && typeof (e as any).init === "function") {
-        (e as any).init();
-      }
-    });
+    this._maze.init();
+    this._dot.init();
+    this._pill.init();
+    this._pacman.init();
+    this._ghosts.forEach((g) => g.init());
   }
 
-  /** Сбросить все сущности */
   resetAll(): void {
-    [...this.getAllDrawable(), ...this.getAllUpdatable()].forEach((e) => {
-      if ("reset" in e && typeof (e as any).reset === "function") {
-        (e as any).reset();
-      }
-    });
+    this._maze.reset();
+    this._dot.reset();
+    this._pill.reset();
+    this._pacman.reset();
+    this._ghosts.forEach((g) => g.reset());
   }
 
-  /** Сбросить и заспавнить объекты для нового уровня */
-  spawnObjects(): void {
-    const dot = this.getDots();
-    const pill = this.getPills();
-
-    if (dot && typeof dot.spawn === "function") dot.spawn();
-    if (pill && typeof pill.spawn === "function") pill.spawn();
-  }
-
-  /** Заспавнить всех акторов (Пакман + призраки) */
   spawnEntities(): void {
-    this.getPacman().spawn();
-    this.getGhosts().forEach((g) => g.spawn());
+    this._pacman.spawn();
+    this._ghosts.forEach((g) => g.spawn());
   }
 
-  /** Запустить выход призраков из логова */
   exitLairAll(): void {
-    this.getGhosts().forEach((ghost: Ghost) => {
-      ghost.calculateExitPath();
-    });
+    this._ghosts.forEach((g) => g.calculateExitPath());
   }
 
-  /** Сброс позиций после смерти Пакмана */
   resetPositionsForDeath(): void {
-    const pacman = this.getPacman();
-    const ghosts = this.getGhosts();
-
-    pacman.reset();
-    ghosts.forEach((ghost) => {
-      ghost.spawn();
-      ghost.reset();
+    this._pacman.reset();
+    this._ghosts.forEach((g) => {
+      g.spawn();
+      g.reset();
     });
   }
 
-  /** Сброс позиций для нового уровня */
-  resetPositionsForLevel(): void {
-    this.getPacman().spawn();
-    this.getGhosts().forEach((g: Ghost) => g.spawn());
-  }
-
-  /** Очистить холсты всех сущностей */
   clearAllCanvases(): void {
-    [...this.getAllDrawable(), ...this.getAllUpdatable()].forEach((e) => {
-      if ("canvas" in e && (e as any).canvas) {
-        const canvas = (e as any).canvas as HTMLCanvasElement;
-        const ctx = canvas.getContext("2d");
-        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    });
+    // 1. Clear static/world layer canvases
+    this._maze.clearCanvas();
+    this._dot.clearCanvas();
+    this._pill.clearCanvas();
+    this._pacman.clearCanvas();
+    this._ghosts.forEach((ghost) => ghost.clearCanvas());
   }
 }

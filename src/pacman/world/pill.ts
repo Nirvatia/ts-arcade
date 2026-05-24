@@ -100,14 +100,10 @@ export class Pill implements Updatable, Collectible {
   }
 
   reset(): void {
-    this.positions = [];
-    this.animationCounter = 0;
-  }
-
-  resetForLevel(): void {
-    this.animationCounter = 0;
     this.clearCanvas();
     this.canvasLayer.resize();
+    this.positions = [];
+    this.animationCounter = 0;
     this._needsRedraw = true;
   }
 
@@ -118,7 +114,6 @@ export class Pill implements Updatable, Collectible {
   }
 
   draw(animate: boolean, _dt?: number): void {
-    // Очищаем холст перед каждым кадром для анимации пульсации
     this.clearCanvas();
 
     this.positions.forEach(({ i, j }) => {

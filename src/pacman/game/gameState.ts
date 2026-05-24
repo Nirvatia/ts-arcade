@@ -4,12 +4,9 @@ import { eventBus } from "../core/eventBus.js";
 import type { GameMode } from "../gameModes.js";
 import type { GraphType, LevelConfigType } from "../types.js";
 import { generateLevelConfig } from "../utils.js";
-import { Tally } from "./tally.js";
 
 export class GameState {
   private static instance: GameState;
-
-  private tally: Tally;
 
   public pathGraph: GraphType | null = null;
   public mode: GameMode = "INIT";
@@ -26,7 +23,6 @@ export class GameState {
   private buffThreshold: number = 3;
 
   private constructor() {
-    this.tally = Tally.getInstance();
     this.levelData = generateLevelConfig(this.currentLevel);
     this.initEventListeners();
   }
@@ -55,6 +51,48 @@ export class GameState {
   }
 
   private initEventListeners(): void {
+    // Game Lifecycle Management via events
+    eventBus.on("game:start", () => {
+      this.mode = "LEVEL_TRANSITION";
+    });
+
+    eventBus.on("game:started", () => {
+      this.mode = "PLAYING";
+    });
+
+    eventBus.on("game:restart", () => {
+      this.currentLevel = 1;
+      this.dotsEaten = 0;
+      this.lives = 3;
+      this.levelData = generateLevelConfig(this.currentLevel);
+      eventBus.emit("ui:level_display_update", { level: this.currentLevel });
+    });
+
+    eventBus.on("level:complete", () => {
+      this.mode = "LEVEL_COMPLETE";
+    });
+
+    eventBus.on("level:intermission_start", (data) => {
+      this.mode = "INTERMISSION";
+      this.currentLevel = data.nextLevel;
+      this.dotsEaten = 0;
+      this.isProcessingLevelTransition = false;
+      this.levelData = generateLevelConfig(this.currentLevel);
+    });
+
+    eventBus.on("pacman:death_triggered", () => {
+      this.mode = "PACMAN_DEAD";
+    });
+
+    eventBus.on("command:ghost_eaten", () => {
+      this.mode = "GHOST_EATEN";
+    });
+
+    eventBus.on("game:resumed", () => {
+      this.mode = "PLAYING";
+    });
+
+    // Core Rules Progress
     eventBus.on("dot:eaten", () => {
       if (this.isProcessingLevelTransition) return;
 
@@ -64,7 +102,7 @@ export class GameState {
         this.isProcessingLevelTransition = true;
         eventBus.emit("level:complete", {
           level: this.currentLevel,
-          score: this.tally.score,
+          score: 0,
         });
       }
     });
@@ -92,33 +130,28 @@ export class GameState {
       this.lives++;
       eventBus.emit("bonus_life:acquired", { lives: this.lives });
     });
-  }
 
-  public setTotalDots(count: number): void {
-    this.totalDots = count;
-    this.dotsEaten = 0;
-    this.isProcessingLevelTransition = false;
-  }
+    // Decoupled Lifecycle Execution Hook
+    eventBus.on(
+      "command:execute_life_loss",
+      (data: { currentScore: number }) => {
+        if (this._lives - 1 < 0) {
+          this.mode = "GAME_OVER";
+          eventBus.emit("game:over", {
+            finalScore: data.currentScore,
+            level: this.currentLevel,
+          });
+        } else {
+          this.lives--;
+          eventBus.emit("command:death_sequence_continue");
+        }
+      },
+    );
 
-  public resetLevelProgress(): void {
-    this.dotsEaten = 0;
-    this.isProcessingLevelTransition = false;
-  }
-
-  public updateLevelConfig(level: number): void {
-    this.currentLevel = level;
-    this.levelData = generateLevelConfig(level);
-  }
-
-  public loseLife(): void {
-    if (this._lives - 1 < 0) {
-      eventBus.emit("game:over", {
-        finalScore: this.tally.score,
-        level: this.currentLevel,
-      });
-      return;
-    }
-
-    this.lives--;
+    eventBus.on("dot:spawned", (data) => {
+      this.totalDots = data.count;
+      this.dotsEaten = 0;
+      this.isProcessingLevelTransition = false;
+    });
   }
 }

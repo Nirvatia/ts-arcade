@@ -1,20 +1,23 @@
 // src/world/Environment.ts
 
 import { createPathGraph } from "../utils.js";
-import type { TileType } from "../types.js";
 import { GameState } from "../game/gameState.js";
 import { GameRegistry } from "../game/gameRegistry.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
 
 /**
- * Управляет созданием графа лабиринта для навигации призраков,
- * а также инициализацией декораций (точек, пилюль, телепортов, лабиринта).
+ * Manages the generation of the maze graph configuration,
+ * teleport coordinate calculations, and level structural spawns.
  */
 export class Environment {
   private static instance: Environment;
+  private gameState: GameState;
+  private registry: GameRegistry;
 
   private constructor() {
+    this.gameState = GameState.getInstance();
+    this.registry = GameRegistry.getInstance();
     this.initEventListeners();
   }
 
@@ -29,31 +32,40 @@ export class Environment {
     eventBus.on("command:setup_environment", () => this.setup());
   }
 
-  /**
-   * Полная настройка окружения для текущего уровня:
-   * - Создание графа путей
-   * - Инициализация телепортов
-   * - Спавн точек, пилюль, лабиринта
-   */
+
   setup(): void {
-    const gameState = GameState.getInstance();
-    const registry = GameRegistry.getInstance();
+    const map = this.gameState.levelData.map;
 
-    // 1. Граф путей для призраков
-    gameState.pathGraph = createPathGraph(gameState.levelData.map);
+    // 1. Build navigation path node definitions for AI routing paths
+    this.gameState.pathGraph = createPathGraph(map);
 
-    // 2. Телепорты
-    Collision.initTeleports(gameState.levelData.map);
+    // 2. Refresh physical teleport wrap boundaries
+    Collision.initTeleports(map);
 
-    // 3. Декорации
-    registry.spawnObjects();
+    // 3. Command specific world components to read map grids and build instances
+    const mazeLayer = this.registry.getMaze();
+    const dotLayer = this.registry.getDots();
+    const pillLayer = this.registry.getPills();
+
+    // Prepare structural canvas sheets for sizing transformations
+    mazeLayer.reset();
+    dotLayer.reset();
+    pillLayer.reset();
+
+    // Spawn elements from map configuration matrix coordinates
+    dotLayer.spawn();
+    pillLayer.spawn();
+    
+    // Flag elements to trigger initial rendering cycles
+    mazeLayer.requestRedraw();
+    dotLayer.requestRedraw();
+    pillLayer.requestRedraw();
   }
 
   /**
-   * Обновить граф путей (при смене уровня).
+   * Safe operational utility hook for ad-hoc runtime modifications
    */
   updatePathGraph(): void {
-    const gameState = GameState.getInstance();
-    gameState.pathGraph = createPathGraph(gameState.levelData.map);
+    this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
   }
 }

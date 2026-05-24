@@ -75,19 +75,19 @@ export class Dot implements Drawable, Collectible {
     this.clearCanvas();
 
     const map = this.gameState.levelData.map;
-    let dotCount = 0;
+    let cnt = 0;
 
     for (let i = 0; i < map.length; i++) {
       for (let j = 0; j < map[i].length; j++) {
         if (map[i][j] === "FD") {
           this.positions.add(`${i},${j}`);
-          dotCount++;
+          cnt++;
         }
       }
     }
 
     this._needsRedraw = true;
-    this.gameState.setTotalDots(dotCount);
+    eventBus.emit("dot:spawned", { count: cnt });
   }
 
   /**
@@ -115,13 +115,9 @@ export class Dot implements Drawable, Collectible {
   }
 
   reset(): void {
-    this.positions.clear();
-    this._needsRedraw = true;
-  }
-
-  resetForLevel(): void {
     this.clearCanvas();
     this.canvasLayer.resize();
+    this.positions.clear();
     this._needsRedraw = true;
   }
 
@@ -130,11 +126,11 @@ export class Dot implements Drawable, Collectible {
   draw(_animate: boolean, _dt?: number): void {
     this.positions.forEach((pos) => {
       const [i, j] = pos.split(",").map(Number);
-      this.drawSingleDot(i, j);
+      this.drawDot(i, j);
     });
   }
 
-  private drawSingleDot(i: number, j: number): void {
+  private drawDot(i: number, j: number): void {
     this.ctx.fillStyle = this.color;
     this.ctx.beginPath();
     this.ctx.arc(

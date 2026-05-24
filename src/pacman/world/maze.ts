@@ -61,23 +61,14 @@ export class Maze implements Drawable {
     this.canvasLayer.clear();
   }
 
-  /**
-   * Подготовка к новому уровню:
-   * очистка холста, обновление цвета, ресайз под новую карту.
-   */
-  resetForLevel(): void {
-    this.clearCanvas();
-    this.canvasLayer.resize();
-    this.lineColor = this.gameState.levelData.mapColor;
-    this._needsRedraw = true;
-  }
-
   init(): void {
     this._needsRedraw = true;
   }
 
   reset(): void {
     this.clearCanvas();
+    this.canvasLayer.resize();
+    this.lineColor = this.gameState.levelData.mapColor; // FIX
     this._needsRedraw = true;
   }
 

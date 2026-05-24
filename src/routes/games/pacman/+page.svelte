@@ -11,6 +11,7 @@
   import { eventBus } from "../../../pacman/core/eventBus.js";
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
   import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
+  import { Environment } from "../../../pacman/world/environment.js";
 
   let isLoading = $state(true);
   let score = $state(0);
@@ -26,6 +27,7 @@
 
   let gameState: GameState;
   let director: Director;
+  let environment: Environment;
   let tally: Tally;
 
   let uiUpdateInterval: number | null = null;
@@ -45,6 +47,7 @@
 
     gameState = GameState.getInstance();
     director = Director.getInstance();
+    environment = Environment.getInstance();
     tally = Tally.getInstance();
 
     // FIXED: Use new event name
