@@ -8,6 +8,7 @@ export const CFG_CANVAS = {
     pills: "cvs-pills",
     pacman: "cvs-pacman",
     ghosts: "cvs-ghosts",
+    ui: "cvs-ui",
     scene: "cvs-scene",
   },
 };

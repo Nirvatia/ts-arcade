@@ -200,6 +200,7 @@
         <canvas id={CFG_CANVAS.canvasIds.pacman}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.scene}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.ghosts}></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.ui}></canvas>
 
         {#if gameMode === "INIT" || gameMode === "GAME_OVER"}
           <div
