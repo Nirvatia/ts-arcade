@@ -90,7 +90,7 @@ export abstract class Actor implements Updatable {
    * Проверка и выполнение телепортации при входе на телепорт.
    * Должна вызываться в update() движущихся сущностей.
    */
-  protected checkAndTeleport(): void {
+  protected teleport(): void {
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
 
     // Защита от повторного входа
@@ -128,5 +128,5 @@ export abstract class Actor implements Updatable {
   abstract update(dt: number): void;
 
   /** Отрисовка актора */
-  abstract draw(animate: boolean, dt?: number): void;
+  abstract draw(): void;
 }

@@ -53,7 +53,7 @@ export class Renderer {
       }
 
       if (isPlaying || isFrozen) {
-        entity.draw(shouldAnimate, dt);
+        entity.draw();
       }
     });
 
@@ -68,7 +68,7 @@ export class Renderer {
           clearedCanvases.add(canvas);
         }
 
-        entity.draw(shouldAnimate, dt);
+        entity.draw();
         entity.needsRedraw = false;
       }
     });

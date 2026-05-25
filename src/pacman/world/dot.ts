@@ -51,7 +51,7 @@ export class Dot implements Drawable, Collectible {
     eventBus.on(
       "dot:collect",
       (data: { position: { i: number; j: number } }) => {
-        this.eat(data.position.i, data.position.j);
+        this.collect(data.position.i, data.position.j);
       },
     );
   }
@@ -94,7 +94,7 @@ export class Dot implements Drawable, Collectible {
    * Съесть точку по координатам тайла.
    * Удаляет точку из набора и зачищает её пиксели на холсте.
    */
-  eat(i: number, j: number): void {
+  collect(i: number, j: number): void {
     this.positions.delete(`${i},${j}`);
     this.clearCanvas(
       j * this.tileSize,
@@ -123,7 +123,7 @@ export class Dot implements Drawable, Collectible {
 
   // --- Drawable ---
 
-  draw(_animate: boolean, _dt?: number): void {
+  draw(): void {
     this.positions.forEach((pos) => {
       const [i, j] = pos.split(",").map(Number);
       this.drawDot(i, j);

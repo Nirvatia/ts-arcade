@@ -76,7 +76,7 @@ export class Maze implements Drawable {
    * Отрисовка лабиринта.
    * При isFlashing = true применяет эффект пульсации прозрачности.
    */
-  draw(animate: boolean, _dt?: number): void {
+  draw(): void {
     const map = this.gameState.levelData.map;
 
     this.lineColor = this.gameState.levelData.mapColor;

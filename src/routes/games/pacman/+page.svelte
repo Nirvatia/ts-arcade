@@ -12,7 +12,7 @@
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
   import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
   import { Environment } from "../../../pacman/world/environment.js";
-  import { CanvasLayer } from "../../../pacman/core/canvasLayer.js";
+  import { GameLoop } from "../../../pacman/core/gameLoop.js";
 
   let isLoading = $state(true);
   let score = $state(0);
@@ -27,6 +27,7 @@
   let intermissionInstance: Intermission | null = null;
 
   let gameState: GameState;
+  let gameLoop: GameLoop;
   let director: Director;
   let environment: Environment;
   let tally: Tally;
@@ -47,6 +48,7 @@
     await tick();
 
     gameState = GameState.getInstance();
+    gameLoop = GameLoop.getInstance();
     director = Director.getInstance();
     environment = Environment.getInstance();
     tally = Tally.getInstance();

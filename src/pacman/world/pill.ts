@@ -59,7 +59,7 @@ export class Pill implements Updatable, Collectible {
     eventBus.on(
       "power_pill:collect",
       (data: { position: { i: number; j: number } }) => {
-        this.eat(data.position.i, data.position.j);
+        this.collect(data.position.i, data.position.j);
       },
     );
   }
@@ -79,7 +79,7 @@ export class Pill implements Updatable, Collectible {
     }
   }
 
-  eat(i: number, j: number): void {
+  collect(i: number, j: number): void {
     const index = this.positions.findIndex(
       (pos: { i: number; j: number }) => pos.i === i && pos.j === j,
     );
@@ -113,7 +113,7 @@ export class Pill implements Updatable, Collectible {
     this.animationCounter += this.animationSpeed;
   }
 
-  draw(animate: boolean, _dt?: number): void {
+  draw(): void {
     this.clearCanvas();
 
     this.positions.forEach(({ i, j }) => {
