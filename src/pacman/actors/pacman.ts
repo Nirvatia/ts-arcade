@@ -77,7 +77,7 @@ export class Pacman extends Actor {
     if (this.gameState.mode !== "PLAYING") return;
 
     this.updateMovement();
-    this.checkAndTeleport();
+    this.teleport();
 
     const collidedGhost = this.getCollidedGhost();
 
@@ -238,11 +238,11 @@ export class Pacman extends Actor {
 
   // --- Draw ---
 
-  draw(animate: boolean, dt: number): void {
+  draw(): void {
     if (this.state === "DYING") {
-      this.drawDead(dt);
+      this.drawDead();
     } else {
-      this.drawNormal(animate);
+      this.drawAlive();
     }
   }
 
@@ -254,7 +254,7 @@ export class Pacman extends Actor {
     return 0;
   }
 
-  private drawNormal(animate: boolean): void {
+  private drawAlive(): void {
     const cx = this.x;
     const cy = this.y;
     const r = this.r;
@@ -265,32 +265,34 @@ export class Pacman extends Actor {
     this.ctx.translate(cx, cy);
     this.ctx.rotate(rotation);
 
-    if (animate) {
-      const maxMouthAngle = Math.PI / 2.8;
-      const animationSpeed = 0.015;
-      const currentAperture =
-        Math.abs(Math.sin(Date.now() * animationSpeed)) * maxMouthAngle;
+    // Check if Pacman is actively moving
+    const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
 
-      this.ctx.beginPath();
-      this.ctx.arc(0, 0, r, currentAperture, 2 * Math.PI - currentAperture);
-      this.ctx.lineTo(0, 0);
-      this.ctx.closePath();
-      this.ctx.fill();
+    const maxMouthAngle = Math.PI / 2.8;
+    let currentAperture = 0;
+
+    if (isMoving) {
+      // Animate mouth only when moving
+      const animationSpeed = 0.015;
+      currentAperture =
+        Math.abs(Math.sin(Date.now() * animationSpeed)) * maxMouthAngle;
     } else {
-      this.ctx.beginPath();
-      this.ctx.arc(0, 0, r, 0, 2 * Math.PI);
-      this.ctx.fill();
+      // Keep mouth static (slightly open) when hitting a wall / stationary
+      currentAperture = maxMouthAngle * 0.5;
     }
+
+    this.ctx.beginPath();
+    this.ctx.arc(0, 0, r, currentAperture, 2 * Math.PI - currentAperture);
+    this.ctx.lineTo(0, 0);
+    this.ctx.closePath();
+    this.ctx.fill();
 
     this.ctx.restore();
   }
 
-  private drawDead(dt: number): void {
-    this.deathTimer += dt;
+  private drawDead(): void {
     const customDeathDuration = 1500;
 
-    // THE FIX: Never transition to ALIVE here.
-    // Director controls when Pacman resets via resetPositionsForDeath()
     const p = Math.min(1, this.deathTimer / customDeathDuration);
 
     const cx = this.x;
