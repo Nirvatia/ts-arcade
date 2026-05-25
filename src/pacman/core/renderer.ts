@@ -10,9 +10,11 @@ import { GameState } from "../game/gameState.js";
  */
 export class Renderer {
   private static instance: Renderer | null = null;
+  private gameState: GameState;
   private registry: GameRegistry;
 
   private constructor() {
+    this.gameState = GameState.getInstance();
     this.registry = GameRegistry.getInstance();
   }
 
@@ -28,21 +30,16 @@ export class Renderer {
    * @param dt - дельта времени между кадрами
    */
   render(dt?: number): void {
-    const gameState = GameState.getInstance();
-
-    if (gameState.mode === "INTERMISSION" || gameState.mode === "GAME_OVER") {
+    if (this.gameState.mode === "INTERMISSION" || this.gameState.mode === "GAME_OVER") {
       return;
     }
 
     const clearedCanvases = new Set<HTMLCanvasElement>();
 
-    const mode = gameState.mode;
+    const mode = this.gameState.mode;
     const isPlaying = mode === "PLAYING";
     const isFrozen = mode === "PACMAN_DEAD" || mode === "GHOST_EATEN";
     const isTransition = mode === "LEVEL_TRANSITION";
-
-    // THE FIX: Only animate during PLAYING.
-    // During freeze modes (DEAD, GHOST_EATEN) draw but don't animate.
     const shouldAnimate = isPlaying;
 
     // 1. DYNAMIC ENTITIES (Pacman, Ghosts, Pills)
@@ -56,8 +53,6 @@ export class Renderer {
       }
 
       if (isPlaying || isFrozen) {
-        // THE FIX: Pass shouldAnimate (false during freeze) but still pass dt
-        // so death animation can progress frame count if needed
         entity.draw(shouldAnimate, dt);
       }
     });
@@ -73,7 +68,6 @@ export class Renderer {
           clearedCanvases.add(canvas);
         }
 
-        // Static entities don't animate during freeze either
         entity.draw(shouldAnimate, dt);
         entity.needsRedraw = false;
       }

@@ -2,6 +2,7 @@
 
 import { GameRegistry } from "../game/gameRegistry.js";
 import { GameState } from "../game/gameState.js";
+import { eventBus } from "./eventBus.js";
 import { Renderer } from "./renderer.js";
 
 /**
@@ -10,7 +11,7 @@ import { Renderer } from "./renderer.js";
  */
 export class GameLoop {
   private static instance: GameLoop;
-
+  private gameState: GameState;
   private renderer: Renderer;
   private registry: GameRegistry;
 
@@ -20,11 +21,13 @@ export class GameLoop {
   private timer: number | null = null;
 
   constructor(fps: number = 60) {
+    this.gameState = GameState.getInstance();
     this.renderer = Renderer.getInstance();
     this.registry = GameRegistry.getInstance();
     this.fps = fps;
     this.then = Date.now();
     this.interval = 1000 / this.fps;
+    this.initEventListeners();
   }
 
   static getInstance(): GameLoop {
@@ -32,6 +35,11 @@ export class GameLoop {
       GameLoop.instance = new GameLoop();
     }
     return GameLoop.instance;
+  }
+
+  private initEventListeners() {
+    eventBus.on("game:start", () => this.start());
+    eventBus.on("game:over", () => this.stop());
   }
 
   /** Запустить или продолжить цикл */
@@ -49,30 +57,25 @@ export class GameLoop {
     }
   }
 
-private loop(): void {
-  this.timer = requestAnimationFrame(() => this.loop());
+  private loop(): void {
+    this.timer = requestAnimationFrame(() => this.loop());
 
-  const now = Date.now();
-  const delta = now - this.then;
+    const now = performance.now();
+    const delta = now - this.then;
 
-  if (delta > this.interval) {
-    this.then = now - (delta % this.interval);
-    const gameState = GameState.getInstance();
+    if (delta > this.interval) {
+      this.then = now - (delta % this.interval);
 
-    // THE FIX: Update entities only when playing
-    if (gameState.mode === "PLAYING") {
-      this.registry.getAllUpdatable().forEach((e) => e.update(delta));
-    }
+      if (this.gameState.mode === "PLAYING") {
+        this.registry.getAllUpdatable().forEach((e) => e.update(delta));
+      }
 
-    // THE FIX: Still render during freeze modes so animations play
-    // Render everything except INTERMISSION and GAME_OVER
-    const shouldRender =
-      gameState.mode !== "INTERMISSION" && gameState.mode !== "GAME_OVER";
+      const shouldRender =
+        this.gameState.mode !== "INTERMISSION" && this.gameState.mode !== "GAME_OVER";
 
-    if (shouldRender) {
-      // Pass delta even during freezes so death animations progress
-      this.renderer.render(delta);
+      if (shouldRender) {
+        this.renderer.render(delta);
+      }
     }
   }
-}
 }

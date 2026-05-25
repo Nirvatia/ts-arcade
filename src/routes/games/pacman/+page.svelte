@@ -198,6 +198,7 @@
         <canvas id={CFG_CANVAS.canvasIds.dots}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.pills}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.pacman}></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.scene}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.ghosts}></canvas>
 
         {#if gameMode === "INIT" || gameMode === "GAME_OVER"}

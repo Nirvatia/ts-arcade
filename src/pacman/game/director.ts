@@ -1,7 +1,6 @@
 // src/game/director.ts
 import { Clock } from "../core/clock.js";
 import { eventBus } from "../core/eventBus.js";
-import { GameLoop } from "../core/gameLoop.js";
 import { sfx } from "../sfx/sfx.js";
 import { createPathGraph } from "../utils.js";
 import { GameRegistry } from "./gameRegistry.js";
@@ -14,7 +13,6 @@ export class Director {
   private gameState: GameState;
   private registry: GameRegistry;
   private tally: Tally;
-  private gameLoop: GameLoop;
   private activeClock: Clock = new Clock();
   private activeSequence: Sequence = new Sequence();
 
@@ -22,10 +20,7 @@ export class Director {
     this.gameState = GameState.getInstance();
     this.registry = GameRegistry.getInstance();
     this.tally = Tally.getInstance();
-    this.gameLoop = GameLoop.getInstance();
-
-    this.initCommandListeners();
-    this.gameLoop.start();
+    this.initEventListeners();
   }
 
   static getInstance(): Director {
@@ -33,7 +28,7 @@ export class Director {
     return Director.instance;
   }
 
-  private initCommandListeners(): void {
+  private initEventListeners(): void {
     eventBus.on("game:load", () => this.loadGame());
     eventBus.on("game:start", () => this.startGame());
     eventBus.on("game:restart", () => this.restartGame());
@@ -66,7 +61,7 @@ export class Director {
       ghostEatenDuration,
       () => {},
       () => {
-        eventBus.emit("game:resumed"); // Centralized decoupled mode management
+        eventBus.emit("game:resumed"); 
       },
     );
   }
@@ -76,7 +71,6 @@ export class Director {
   }
 
   restartGame(): void {
-    this.resetTickingState();
     this.loadLevel();
     this.startGame();
   }

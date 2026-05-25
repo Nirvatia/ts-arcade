@@ -16,7 +16,6 @@ import { Pill } from "../world/pill.js";
 export class GameRegistry {
   private static instance: GameRegistry | null = null;
 
-  // Concrete, explicitly typed references—no structural type guessing!
   private _pacman!: Pacman;
   private _ghosts: Ghost[] = [];
   private _maze!: Maze;
@@ -80,7 +79,6 @@ export class GameRegistry {
     return [this._maze, this._dot, this._pill, this._pacman, ...this._ghosts];
   }
 
-  // --- Type-Safe, Explicit Lifecycles (No reflection or "as any" hacks) ---
   initAll(): void {
     this._maze.init();
     this._dot.init();
@@ -115,7 +113,6 @@ export class GameRegistry {
   }
 
   clearAllCanvases(): void {
-    // 1. Clear static/world layer canvases
     this._maze.clearCanvas();
     this._dot.clearCanvas();
     this._pill.clearCanvas();
