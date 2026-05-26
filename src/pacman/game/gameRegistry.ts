@@ -43,15 +43,15 @@ export class GameRegistry {
     eventBus.on("command:clear_canvases", () => this.clearAllCanvases());
   }
 
-  createEntities(): void {
+createEntities(): void {
     this._maze = new Maze();
     this._dot = new Dot();
     this._pill = new Pill();
     this._pacman = new Pacman();
     this._ghosts = Object.values(CFG_GHOSTS).map(
-      ({ name, color }) => new Ghost(name, color),
+      (config) => new Ghost(config),
     );
-  }
+}
 
   // --- Strict Type Getters ---
   getPacman(): Pacman {

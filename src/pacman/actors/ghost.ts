@@ -1,5 +1,6 @@
 // src/entities/Ghost.ts
 import { CFG_CANVAS } from "../config/canvas.js";
+import type { GhostConfig } from "../config/ghosts.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
 import { findLairExit, findShortestPath } from "../utils.js";
@@ -22,18 +23,26 @@ export class Ghost extends Actor {
   private spawnGridY: number = 0;
   private defaultSpeed: number;
   private frightenedSpeed: number;
+  private eatenSpeed: number;
+  public personality: "shadow" | "ambush" | "wild" | "shy";
   private isReturningHome: boolean = false;
   private isFlashing: boolean = false;
   private flashSpeed: number = 200;
 
-  constructor(name: string, color: string) {
+  // In Ghost.ts constructor
+  constructor(config: GhostConfig) {
     super(CFG_CANVAS.canvasIds.ghosts);
-    this.name = name;
-    this.defaultColor = color;
-    this.color = color;
-    this.defaultSpeed = this.tileSize * 4.4;
+    this.name = config.name;
+    this.defaultColor = config.defaultColor;
+    this.color = config.color;
+    this.personality = config.personality;
+
+    const tileSize = CFG_CANVAS.tile.size;
+    this.defaultSpeed = tileSize * config.speedMultiplier;
     this.speed = this.defaultSpeed;
-    this.frightenedSpeed = this.tileSize * 2.2;
+    this.frightenedSpeed = tileSize * config.frightenedSpeedMultiplier;
+    this.eatenSpeed = tileSize * config.eatenSpeedMultiplier;
+
     this.direction = { dx: 0, dy: 0 };
   }
 
@@ -146,7 +155,10 @@ export class Ghost extends Actor {
   private moveAlongPath(dt: number): void {
     let budgetDistance = this.speed * dt;
 
-    while (budgetDistance > 0 && (this.currentPathTarget || this.path.length > 0)) {
+    while (
+      budgetDistance > 0 &&
+      (this.currentPathTarget || this.path.length > 0)
+    ) {
       if (!this.currentPathTarget && this.path.length > 0) {
         const nextTileStr = this.path[0];
         const [ty, tx] = nextTileStr.split(",").map(Number);
@@ -272,7 +284,7 @@ export class Ghost extends Actor {
     for (const dir of preferredDirs) {
       const targetTileX = currentTile.tileX + dir.dx;
       const targetTileY = currentTile.tileY + dir.dy;
-      
+
       if (!Collision.isWall(targetTileX, targetTileY)) {
         this.direction = dir;
         return;
@@ -282,7 +294,7 @@ export class Ghost extends Actor {
     for (const dir of directions) {
       const targetTileX = currentTile.tileX + dir.dx;
       const targetTileY = currentTile.tileY + dir.dy;
-      
+
       if (!Collision.isWall(targetTileX, targetTileY)) {
         this.direction = dir;
         return;
