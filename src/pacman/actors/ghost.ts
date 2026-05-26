@@ -117,9 +117,7 @@ export class Ghost extends Actor {
       return;
     }
 
-    // Check if we are inside the precise core of the tile center intersection
     if (this.isAtTileCenter(dt)) {
-      // If we are hitting a wall or it's time to make a decision, change direction without teleporting
       if (this.willHitWall(dt)) {
         this.snapToCenter();
         this.getRandomDirection();
@@ -146,68 +144,74 @@ export class Ghost extends Actor {
   }
 
   private moveAlongPath(dt: number): void {
-    if (!this.currentPathTarget && this.path.length > 0) {
-      const nextTileStr = this.path[0];
-      const [ty, tx] = nextTileStr.split(",").map(Number);
-      this.currentPathTarget = {
-        x: tx * this.tileSize + this.tileSize / 2,
-        y: ty * this.tileSize + this.tileSize / 2,
-      };
-    }
+    let budgetDistance = this.speed * dt;
 
-    if (this.currentPathTarget) {
-      const dx = this.currentPathTarget.x - this.x;
-      const dy = this.currentPathTarget.y - this.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      if (Math.abs(dx) > Math.abs(dy)) {
-        this.direction = { dx: Math.sign(dx), dy: 0 };
-      } else {
-        this.direction = { dx: 0, dy: Math.sign(dy) };
+    while (budgetDistance > 0 && (this.currentPathTarget || this.path.length > 0)) {
+      if (!this.currentPathTarget && this.path.length > 0) {
+        const nextTileStr = this.path[0];
+        const [ty, tx] = nextTileStr.split(",").map(Number);
+        this.currentPathTarget = {
+          x: tx * this.tileSize + this.tileSize / 2,
+          y: ty * this.tileSize + this.tileSize / 2,
+        };
       }
 
-      const frameStepDistance = this.speed * dt;
+      if (this.currentPathTarget) {
+        const dx = this.currentPathTarget.x - this.x;
+        const dy = this.currentPathTarget.y - this.y;
+        const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < frameStepDistance) {
-        this.x = this.currentPathTarget.x;
-        this.y = this.currentPathTarget.y;
-        this.currentPathTarget = null;
-        this.path.shift();
-
-        if (this.path.length === 0) {
-          if (this.isReturningHome) {
-            const previousState = this.state;
-            this.state = "CHASE";
-            this.speed = this.defaultSpeed;
-            this.color = this.defaultColor;
-            this.isReturningHome = false;
-
-            eventBus.emit("ghost:state_changed", {
-              ghostName: this.name,
-              from: previousState,
-              to: "CHASE",
-            });
-
-            eventBus.emit("ghost:returned_home", { ghostName: this.name });
-            this.calculateExitPath();
+        // Map facing vector to standard look directions
+        if (distanceToTarget > 0.001) {
+          if (Math.abs(dx) > Math.abs(dy)) {
+            this.direction = { dx: Math.sign(dx), dy: 0 };
           } else {
-            this.getRandomDirection();
+            this.direction = { dx: 0, dy: Math.sign(dy) };
           }
         }
-      } else {
-        this.x += (dx / distance) * frameStepDistance;
-        this.y += (dy / distance) * frameStepDistance;
+
+        if (distanceToTarget <= budgetDistance) {
+          // Snap directly to this layout crossroads target
+          this.x = this.currentPathTarget.x;
+          this.y = this.currentPathTarget.y;
+          budgetDistance -= distanceToTarget; // Spend distance allocation
+          this.currentPathTarget = null;
+          this.path.shift();
+
+          if (this.path.length === 0) {
+            if (this.isReturningHome) {
+              const previousState = this.state;
+              this.state = "CHASE";
+              this.speed = this.defaultSpeed;
+              this.color = this.defaultColor;
+              this.isReturningHome = false;
+
+              eventBus.emit("ghost:state_changed", {
+                ghostName: this.name,
+                from: previousState,
+                to: "CHASE",
+              });
+
+              eventBus.emit("ghost:returned_home", { ghostName: this.name });
+              this.calculateExitPath();
+            } else {
+              this.getRandomDirection();
+            }
+            break;
+          }
+        } else {
+          // Normal linear frame step translation
+          this.x += (dx / distanceToTarget) * budgetDistance;
+          this.y += (dy / distanceToTarget) * budgetDistance;
+          budgetDistance = 0; // Exhausted frame time budget
+        }
       }
     }
   }
 
   private isAtTileCenter(dt: number): boolean {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-
-    // Tighten tolerance down to the exact distance covered in a single frame step.
-    // This stops ghosts from micro-teleporting across large distances.
     const tolerance = this.speed * dt;
-
     return (
       Math.abs(this.x - centerX) <= tolerance &&
       Math.abs(this.y - centerY) <= tolerance
@@ -263,13 +267,12 @@ export class Ghost extends Actor {
       ];
     }
 
-    // Get current tile coordinates using the centralized math handler
     const currentTile = Collision.getTile(this.x, this.y);
 
     for (const dir of preferredDirs) {
       const targetTileX = currentTile.tileX + dir.dx;
       const targetTileY = currentTile.tileY + dir.dy;
-
+      
       if (!Collision.isWall(targetTileX, targetTileY)) {
         this.direction = dir;
         return;
@@ -279,7 +282,7 @@ export class Ghost extends Actor {
     for (const dir of directions) {
       const targetTileX = currentTile.tileX + dir.dx;
       const targetTileY = currentTile.tileY + dir.dy;
-
+      
       if (!Collision.isWall(targetTileX, targetTileY)) {
         this.direction = dir;
         return;
@@ -523,8 +526,8 @@ export class Ghost extends Actor {
         rightPupilY -= pupilOffset;
         break;
       case "DOWN":
-        leftPupilY += pupilOffset;
-        rightPupilY += pupilOffset;
+        leftPupilY -= pupilOffset;
+        rightPupilY -= pupilOffset;
         break;
     }
 
