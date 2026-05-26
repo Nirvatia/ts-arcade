@@ -3,15 +3,9 @@ import { CFG_CANVAS } from "../config/canvas.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
 import { GameRegistry } from "../game/gameRegistry.js";
-
-import { Tally } from "../game/tally.js";
 import { Actor } from "./actor.js";
 import type { Ghost } from "./ghost.js";
 
-/**
- * Пакман — главный игровой персонаж.
- * Управляется игроком, ест точки и призраков.
- */
 export class Pacman extends Actor {
   private registry: GameRegistry;
 
@@ -20,13 +14,13 @@ export class Pacman extends Actor {
 
   private isBuffed: boolean = false;
   private deathTimer: number = 0;
-  private color: string = "rgb(255, 255, 0)";
+  private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
 
   constructor() {
     super(CFG_CANVAS.canvasIds.pacman);
     this.registry = GameRegistry.getInstance();
     this.speed = this.tileSize * 4.4;
-    this.r = this.tileSize * 0.5;
+    this.r = this.tileSize * 0.45;
   }
 
   // --- Lifecycle ---
@@ -41,12 +35,12 @@ export class Pacman extends Actor {
     this.state = "ALIVE";
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
+    this.lastDirection = { dx: 1, dy: 0 };
     this.spawn();
   }
 
   spawn(): void {
     const map = this.gameState.levelData.map;
-
     for (let y = 0; y < map.length; y++) {
       const x = map[y].findIndex((tile: string) => tile === "PM");
       if (x !== -1) {
@@ -63,7 +57,6 @@ export class Pacman extends Actor {
     eventBus.on("power_pill:activated", () => {
       this.isBuffed = true;
     });
-
     eventBus.on("power_pill:expired", () => {
       this.isBuffed = false;
     });
@@ -72,15 +65,16 @@ export class Pacman extends Actor {
   // --- Update ---
 
   update(dt: number): void {
-    if (this.state === "DYING") return;
-
+    if (this.state === "DYING") {
+      this.deathTimer += dt;
+      return;
+    }
     if (this.gameState.mode !== "PLAYING") return;
 
     this.updateMovement(dt);
     this.teleport();
 
     const collidedGhost = this.getCollidedGhost();
-
     if (collidedGhost) {
       if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
         eventBus.emit("command:ghost_eaten", { ghostName: collidedGhost.name });
@@ -116,6 +110,10 @@ export class Pacman extends Actor {
     const { newX, newY } = this.getNextPosition(dt);
     this.x = newX;
     this.y = newY;
+    
+    if (this.direction.dx !== 0 || this.direction.dy !== 0) {
+      this.lastDirection = { ...this.direction };
+    }
 
     this.smoothAlignToAxis();
 
@@ -137,7 +135,6 @@ export class Pacman extends Actor {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
 
-    // Разворот на 180
     if (
       this.nextDirection.dx === -this.direction.dx &&
       this.nextDirection.dy === -this.direction.dy
@@ -167,7 +164,6 @@ export class Pacman extends Actor {
   private smoothAlignToAxis(): void {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
     const pullSpeed = 0.3;
-
     if (this.direction.dx !== 0) {
       this.y += (centerY - this.y) * pullSpeed;
     }
@@ -184,12 +180,10 @@ export class Pacman extends Actor {
 
   private willHitWall(dir: { dx: number; dy: number }, dt: number): boolean {
     if (dir.dx === 0 && dir.dy === 0) return false;
-
     const moveDistance = this.speed * dt;
     const lookAheadDistance = moveDistance + this.r;
     const boundX = this.x + dir.dx * lookAheadDistance;
     const boundY = this.y + dir.dy * lookAheadDistance;
-
     const { tileX, tileY } = Collision.getTile(boundX, boundY);
     return Collision.isWall(tileX, tileY);
   }
@@ -221,7 +215,6 @@ export class Pacman extends Actor {
     const pillIndex = pill.positions.findIndex(
       (pos: { i: number; j: number }) => pos.i === tileY && pos.j === tileX,
     );
-
     if (pillIndex !== -1) {
       eventBus.emit("power_pill:collect", { position: { i: tileY, j: tileX } });
     }
@@ -233,7 +226,6 @@ export class Pacman extends Actor {
     if (this.state === "DYING") return;
     this.state = "DYING";
     this.deathTimer = 0;
-
     eventBus.emit("pacman:death_triggered");
   }
 
@@ -248,10 +240,13 @@ export class Pacman extends Actor {
   }
 
   private getRotation(): number {
-    if (this.direction.dx === -1) return Math.PI;
-    if (this.direction.dx === 1) return 0;
-    if (this.direction.dy === -1) return -Math.PI / 2;
-    if (this.direction.dy === 1) return Math.PI / 2;
+    const dir = this.direction.dx !== 0 || this.direction.dy !== 0 
+      ? this.direction 
+      : this.lastDirection;
+    if (dir.dx === -1) return Math.PI;
+    if (dir.dx === 1) return 0;
+    if (dir.dy === -1) return -Math.PI / 2;
+    if (dir.dy === 1) return Math.PI / 2;
     return 0;
   }
 
@@ -260,71 +255,95 @@ export class Pacman extends Actor {
     const cy = this.y;
     const r = this.r;
     const rotation = this.getRotation();
+    const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
 
-    this.ctx.fillStyle = this.color;
+    const maxMouthAngle = Math.PI / 2.8;
+    let mouthAngle: number;
+    if (isMoving) {
+      mouthAngle = Math.abs(Math.sin(Date.now() * 0.015)) * maxMouthAngle;
+    } else {
+      mouthAngle = maxMouthAngle * 0.5;
+    }
+
     this.ctx.save();
     this.ctx.translate(cx, cy);
     this.ctx.rotate(rotation);
 
-    // Check if Pacman is actively moving
-    const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
+    // Glow behind
+    const glowColor = this.isBuffed ? "#00ffff" : "#00ff66";
+    this.ctx.shadowColor = glowColor;
+    this.ctx.shadowBlur = 8;
 
-    const maxMouthAngle = Math.PI / 2.8;
-    let currentAperture = 0;
-
-    if (isMoving) {
-      // Animate mouth only when moving
-      const animationSpeed = 0.015;
-      currentAperture =
-        Math.abs(Math.sin(Date.now() * animationSpeed)) * maxMouthAngle;
+    // Body - bright fill with slight gradient
+    const gradient = this.ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
+    if (this.isBuffed) {
+      gradient.addColorStop(0, "#aaffff");
+      gradient.addColorStop(0.5, "#00ffff");
+      gradient.addColorStop(1, "#009999");
     } else {
-      // Keep mouth static (slightly open) when hitting a wall / stationary
-      currentAperture = maxMouthAngle * 0.5;
+      gradient.addColorStop(0, "#aaffaa");
+      gradient.addColorStop(0.5, "#00ff66");
+      gradient.addColorStop(1, "#009933");
     }
-
+    
+    this.ctx.fillStyle = gradient;
     this.ctx.beginPath();
-    this.ctx.arc(0, 0, r, currentAperture, 2 * Math.PI - currentAperture);
+    this.ctx.arc(0, 0, r, mouthAngle, 2 * Math.PI - mouthAngle);
     this.ctx.lineTo(0, 0);
     this.ctx.closePath();
     this.ctx.fill();
+
+    // Sharp outline
+    this.ctx.shadowBlur = 0;
+    this.ctx.strokeStyle = this.isBuffed ? "#00ffff" : "#00ff66";
+    this.ctx.lineWidth = 1.5;
+    this.ctx.stroke();
 
     this.ctx.restore();
   }
 
   private drawDead(): void {
-    const customDeathDuration = 1500;
-
-    const p = Math.min(1, this.deathTimer / customDeathDuration);
-
+    const deathDuration = 1.5;
+    const p = Math.min(1, this.deathTimer / deathDuration);
     const cx = this.x;
     const cy = this.y;
     const r = this.r;
+    const rotation = this.getRotation();
 
     this.ctx.save();
+    this.ctx.translate(cx, cy);
+    this.ctx.rotate(rotation);
 
-    if (p > 0.7 && p < 0.9) {
-      const shakeX = (Math.random() - 0.5) * 4;
-      const shakeY = (Math.random() - 0.5) * 4;
-      this.ctx.translate(cx + shakeX, cy + shakeY);
-    } else {
-      this.ctx.translate(cx, cy);
-    }
+    const startAngle = Math.PI / 4;
+    const mouthAngle = startAngle + (Math.PI - startAngle) * p;
 
-    this.ctx.rotate(this.getRotation());
-    this.ctx.fillStyle = this.color;
+    // Glow
+    this.ctx.shadowColor = "#00ff66";
+    this.ctx.shadowBlur = 6;
+
+    // Gradient body
+    const gradient = this.ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
+    gradient.addColorStop(0, "#aaffaa");
+    gradient.addColorStop(0.5, "#00ff66");
+    gradient.addColorStop(1, "#009933");
+    
+    this.ctx.fillStyle = gradient;
     this.ctx.beginPath();
     this.ctx.moveTo(0, 0);
-
-    const startMouthAngle = Math.PI / 4;
-    const mouthAperture = startMouthAngle + (Math.PI - startMouthAngle) * p;
-
-    this.ctx.arc(0, 0, r, mouthAperture, 2 * Math.PI - mouthAperture);
+    this.ctx.arc(0, 0, r, mouthAngle, 2 * Math.PI - mouthAngle);
     this.ctx.lineTo(0, 0);
     this.ctx.closePath();
     this.ctx.fill();
 
+    // Outline
+    this.ctx.shadowBlur = 0;
+    this.ctx.strokeStyle = "#00ff66";
+    this.ctx.lineWidth = 1.5;
+    this.ctx.stroke();
+
+    // Final flash
     if (p > 0.9) {
-      this.ctx.fillStyle = "#FFFFFF";
+      this.ctx.fillStyle = "#ffffff";
       this.ctx.beginPath();
       this.ctx.arc(0, 0, r * (1 - p) * 8, 0, Math.PI * 2);
       this.ctx.fill();
