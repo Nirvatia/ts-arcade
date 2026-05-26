@@ -21,6 +21,7 @@ export class Ghost extends Actor {
   private spawnGridX: number = 0;
   private spawnGridY: number = 0;
   private defaultSpeed: number;
+  private frightenedSpeed: number;
   private isReturningHome: boolean = false;
   private isFlashing: boolean = false;
   private flashSpeed: number = 200;
@@ -30,8 +31,9 @@ export class Ghost extends Actor {
     this.name = name;
     this.defaultColor = color;
     this.color = color;
-    this.defaultSpeed = this.tileSize / 16;
+    this.defaultSpeed = this.tileSize * 4.4;
     this.speed = this.defaultSpeed;
+    this.frightenedSpeed = this.tileSize * 2.2;
     this.direction = { dx: 0, dy: 0 };
   }
 
@@ -65,6 +67,7 @@ export class Ghost extends Actor {
       if (this.state !== "EATEN") {
         this.state = "FRIGHTENED";
         this.isFlashing = false;
+        this.speed = this.frightenedSpeed;
         this.reverseDirection();
         eventBus.emit("ghost:state_changed", {
           ghostName: this.name,
@@ -84,6 +87,7 @@ export class Ghost extends Actor {
       this.isFlashing = false;
       if (this.state === "FRIGHTENED") {
         const previousState = this.state;
+        this.speed = this.defaultSpeed;
         this.state = "CHASE";
         eventBus.emit("ghost:state_changed", {
           ghostName: this.name,
@@ -96,12 +100,10 @@ export class Ghost extends Actor {
     eventBus.on("command:ghost_eaten", (data: { ghostName: string }) => {
       if (data && this.name === data.ghostName && this.state === "FRIGHTENED") {
         this.beEaten();
-        // Let the Director/Tally handle the scoring and freeze frame
-        // The ghost:eaten event is now emitted by the entity itself
         eventBus.emit("ghost:eaten", {
           ghostName: this.name,
-          points: 0, // Points will be calculated by Tally
-          ghostIndex: 0, // Set by Ghost config
+          points: 0,
+          ghostIndex: 0,
         });
       }
     });
@@ -111,35 +113,39 @@ export class Ghost extends Actor {
 
   update(dt: number): void {
     if (this.path.length > 0) {
-      this.moveAlongPath();
+      this.moveAlongPath(dt);
       return;
     }
 
-    if (this.isAtTileCenter() && this.willHitWall()) {
-      this.snapToCenter();
-      this.getRandomDirection();
+    // Check if we are inside the precise core of the tile center intersection
+    if (this.isAtTileCenter(dt)) {
+      // If we are hitting a wall or it's time to make a decision, change direction without teleporting
+      if (this.willHitWall(dt)) {
+        this.snapToCenter();
+        this.getRandomDirection();
+      }
     }
 
     this.teleport();
 
     if (
       (this.direction.dx !== 0 || this.direction.dy !== 0) &&
-      !this.willHitWall()
+      !this.willHitWall(dt)
     ) {
-      const { newX, newY } = this.getNextPosition();
+      const { newX, newY } = this.getNextPosition(dt);
       this.x = newX;
       this.y = newY;
     }
   }
 
-  private getNextPosition(): { newX: number; newY: number } {
+  private getNextPosition(dt: number): { newX: number; newY: number } {
     return {
-      newX: this.x + this.direction.dx * this.speed,
-      newY: this.y + this.direction.dy * this.speed,
+      newX: this.x + this.direction.dx * this.speed * dt,
+      newY: this.y + this.direction.dy * this.speed * dt,
     };
   }
 
-  private moveAlongPath(): void {
+  private moveAlongPath(dt: number): void {
     if (!this.currentPathTarget && this.path.length > 0) {
       const nextTileStr = this.path[0];
       const [ty, tx] = nextTileStr.split(",").map(Number);
@@ -160,7 +166,9 @@ export class Ghost extends Actor {
         this.direction = { dx: 0, dy: Math.sign(dy) };
       }
 
-      if (distance < this.speed) {
+      const frameStepDistance = this.speed * dt;
+
+      if (distance < frameStepDistance) {
         this.x = this.currentPathTarget.x;
         this.y = this.currentPathTarget.y;
         this.currentPathTarget = null;
@@ -187,15 +195,19 @@ export class Ghost extends Actor {
           }
         }
       } else {
-        this.x += (dx / distance) * this.speed;
-        this.y += (dy / distance) * this.speed;
+        this.x += (dx / distance) * frameStepDistance;
+        this.y += (dy / distance) * frameStepDistance;
       }
     }
   }
 
-  private isAtTileCenter(): boolean {
+  private isAtTileCenter(dt: number): boolean {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    const tolerance = this.speed * 2;
+
+    // Tighten tolerance down to the exact distance covered in a single frame step.
+    // This stops ghosts from micro-teleporting across large distances.
+    const tolerance = this.speed * dt;
+
     return (
       Math.abs(this.x - centerX) <= tolerance &&
       Math.abs(this.y - centerY) <= tolerance
@@ -208,14 +220,18 @@ export class Ghost extends Actor {
     if (this.direction.dy !== 0) this.y = centerY;
   }
 
-  private willHitWall(): boolean {
-    const boundX =
-      this.x + this.direction.dx * (this.speed + this.tileSize / 2);
-    const boundY =
-      this.y + this.direction.dy * (this.speed + this.tileSize / 2);
+  private willHitWall(dt: number): boolean {
+    if (this.direction.dx === 0 && this.direction.dy === 0) return false;
+
+    const moveDistance = this.speed * dt;
+    const lookAheadDistance = moveDistance + this.r;
+
+    const boundX = this.x + this.direction.dx * lookAheadDistance;
+    const boundY = this.y + this.direction.dy * lookAheadDistance;
 
     const { tileX, tileY } = Collision.getTile(boundX, boundY);
     const isExiting = this.path.length > 0;
+
     return Collision.isWall(tileX, tileY, isExiting);
   }
 
@@ -231,7 +247,6 @@ export class Ghost extends Actor {
     const verticalDirs = directions.filter((dir) => dir.dx === 0);
 
     const isCurrentlyHorizontal = this.direction.dy === 0;
-    const isCurrentlyVertical = this.direction.dx === 0;
 
     let preferredDirs;
     if (Math.random() < 0.7) {
@@ -248,27 +263,24 @@ export class Ghost extends Actor {
       ];
     }
 
+    // Get current tile coordinates using the centralized math handler
+    const currentTile = Collision.getTile(this.x, this.y);
+
     for (const dir of preferredDirs) {
-      const tileX = Math.floor(
-        (this.x + dir.dx * (this.tileSize / 2 + this.speed)) / this.tileSize,
-      );
-      const tileY = Math.floor(
-        (this.y + dir.dy * (this.tileSize / 2 + this.speed)) / this.tileSize,
-      );
-      if (!Collision.isWall(tileX, tileY)) {
+      const targetTileX = currentTile.tileX + dir.dx;
+      const targetTileY = currentTile.tileY + dir.dy;
+
+      if (!Collision.isWall(targetTileX, targetTileY)) {
         this.direction = dir;
         return;
       }
     }
 
     for (const dir of directions) {
-      const tileX = Math.floor(
-        (this.x + dir.dx * (this.tileSize / 2 + this.speed)) / this.tileSize,
-      );
-      const tileY = Math.floor(
-        (this.y + dir.dy * (this.tileSize / 2 + this.speed)) / this.tileSize,
-      );
-      if (!Collision.isWall(tileX, tileY)) {
+      const targetTileX = currentTile.tileX + dir.dx;
+      const targetTileY = currentTile.tileY + dir.dy;
+
+      if (!Collision.isWall(targetTileX, targetTileY)) {
         this.direction = dir;
         return;
       }
@@ -367,7 +379,7 @@ export class Ghost extends Actor {
         bodyColor = "#0000FF";
       }
     } else if (this.state === "EATEN") {
-      shouldDrawBody = false; // Just floating eyes when eaten!
+      shouldDrawBody = false;
     }
 
     if (shouldDrawBody) {
@@ -375,7 +387,6 @@ export class Ghost extends Actor {
       ctx.beginPath();
       this.drawBaseShape(left, top, s);
 
-      // Only freeze the wavy skirt animation if the whole game is frozen/paused
       const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
 
       if (isGamePlaying) {
@@ -403,7 +414,7 @@ export class Ghost extends Actor {
     const bottomBaseY = top + s;
     const waveCount = 4;
     const segmentWidth = s / waveCount;
-    const waveAmplitude = 2.2; // Sweet spot between 2.5 and 1.8
+    const waveAmplitude = 2.2;
 
     let currentX = left + s;
     let currentY = bottomBaseY + Math.sin(0) * waveAmplitude;
@@ -441,7 +452,7 @@ export class Ghost extends Actor {
     const bottomBaseY = top + s;
     const waveCount = 4;
     const segmentWidth = s / waveCount;
-    const waveAmplitude = 2.2; // Match static
+    const waveAmplitude = 2.2;
 
     const now = Date.now();
     const animationPhase = ((now % 1000) / 1000) * Math.PI * 2;
@@ -483,14 +494,12 @@ export class Ghost extends Actor {
   private drawEyes(left: number, top: number, s: number, dir: string): void {
     const ctx = this.ctx;
 
-    // Eye whites
     ctx.fillStyle = "#FFFFFF";
     ctx.beginPath();
     ctx.arc(left + s * 0.3, top + s / 2, s / 6, 0, Math.PI * 2);
     ctx.arc(left + s * 0.7, top + s / 2, s / 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // Pupils
     ctx.fillStyle = "#0000AA";
     ctx.beginPath();
 

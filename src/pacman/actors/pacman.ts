@@ -25,7 +25,7 @@ export class Pacman extends Actor {
   constructor() {
     super(CFG_CANVAS.canvasIds.pacman);
     this.registry = GameRegistry.getInstance();
-    this.speed = Math.round((this.tileSize / 8) * 10) / 10;
+    this.speed = this.tileSize * 4.4;
     this.r = this.tileSize * 0.5;
   }
 
@@ -76,7 +76,7 @@ export class Pacman extends Actor {
 
     if (this.gameState.mode !== "PLAYING") return;
 
-    this.updateMovement();
+    this.updateMovement(dt);
     this.teleport();
 
     const collidedGhost = this.getCollidedGhost();
@@ -93,7 +93,7 @@ export class Pacman extends Actor {
     }
   }
 
-  private updateMovement(): void {
+  private updateMovement(dt: number): void {
     if (
       this.direction.dx === 0 &&
       this.direction.dy === 0 &&
@@ -107,13 +107,13 @@ export class Pacman extends Actor {
       this.tryExecuteTurn();
     }
 
-    const isHittingWall = this.willHitWall(this.direction);
+    const isHittingWall = this.willHitWall(this.direction, dt);
     if (isHittingWall) {
       this.snapToTileCenter();
       return;
     }
 
-    const { newX, newY } = this.getNextPosition();
+    const { newX, newY } = this.getNextPosition(dt);
     this.x = newX;
     this.y = newY;
 
@@ -124,10 +124,10 @@ export class Pacman extends Actor {
     this.tryEatPill(tileX, tileY);
   }
 
-  private getNextPosition(): { newX: number; newY: number } {
+  private getNextPosition(dt: number): { newX: number; newY: number } {
     return {
-      newX: this.x + this.direction.dx * this.speed,
-      newY: this.y + this.direction.dy * this.speed,
+      newX: this.x + this.direction.dx * this.speed * dt,
+      newY: this.y + this.direction.dy * this.speed * dt,
     };
   }
 
@@ -182,10 +182,11 @@ export class Pacman extends Actor {
     this.y = centerY;
   }
 
-  private willHitWall(dir: { dx: number; dy: number }): boolean {
+  private willHitWall(dir: { dx: number; dy: number }, dt: number): boolean {
     if (dir.dx === 0 && dir.dy === 0) return false;
 
-    const lookAheadDistance = this.speed + this.r;
+    const moveDistance = this.speed * dt;
+    const lookAheadDistance = moveDistance + this.r;
     const boundX = this.x + dir.dx * lookAheadDistance;
     const boundY = this.y + dir.dy * lookAheadDistance;
 
