@@ -6,28 +6,22 @@ import { eventBus } from "../core/eventBus.js";
 import { GameState } from "../game/gameState.js";
 import type { Collectible, Drawable } from "../interfaces.js";
 
-/**
- * Управляет точками еды (dots) на карте.
- * Статический объект с интерфейсами Drawable и Collectible.
- */
 export class Dot implements Drawable, Collectible {
   private gameState: GameState;
   private canvasLayer: CanvasLayer;
   private tileSize: number;
-  private color: string;
-  private radius: number;
+  private dotSize: number;
 
   private _needsRedraw: boolean = true;
 
-  /** Позиции точек: ключ "row,col" -> true */
   public positions: Set<string> = new Set<string>();
 
   constructor() {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
     this.tileSize = CFG_CANVAS.tile.size;
-    this.color = "rgb(230, 230, 230)";
-    this.radius = this.tileSize / 8;
+    // Perfectly matched to the pill architecture line width boundary
+    this.dotSize = this.tileSize * 0.18;
     this.initEventListeners();
   }
 
@@ -64,12 +58,6 @@ export class Dot implements Drawable, Collectible {
     this.canvasLayer.clear(x, y, w, h);
   }
 
-  // --- Collectible ---
-
-  /**
-   * Сканирует карту уровня и создаёт точки на всех позициях "FD".
-   * Вызывается при загрузке уровня.
-   */
   spawn(): void {
     this.positions.clear();
     this.clearCanvas();
@@ -90,17 +78,13 @@ export class Dot implements Drawable, Collectible {
     eventBus.emit("dot:spawned", { count: cnt });
   }
 
-  /**
-   * Съесть точку по координатам тайла.
-   * Удаляет точку из набора и зачищает её пиксели на холсте.
-   */
   collect(i: number, j: number): void {
     this.positions.delete(`${i},${j}`);
     this.clearCanvas(
-      j * this.tileSize,
-      i * this.tileSize,
-      this.tileSize,
-      this.tileSize,
+      j * this.tileSize - 2,
+      i * this.tileSize - 2,
+      this.tileSize + 4,
+      this.tileSize + 4,
     );
     eventBus.emit("dot:eaten", {
       position: { i, j },
@@ -108,11 +92,7 @@ export class Dot implements Drawable, Collectible {
     });
   }
 
-  // --- Lifecycle ---
-
-  init(): void {
-    // Пусто — точки создаются в spawn()
-  }
+  init(): void {}
 
   reset(): void {
     this.clearCanvas();
@@ -121,26 +101,28 @@ export class Dot implements Drawable, Collectible {
     this._needsRedraw = true;
   }
 
-  // --- Drawable ---
-
   draw(): void {
+    this.clearCanvas();
+    const ctx = this.ctx;
+
+    ctx.strokeStyle = "#00778c";
+    ctx.lineWidth = 1.5;
+
     this.positions.forEach((pos) => {
       const [i, j] = pos.split(",").map(Number);
-      this.drawDot(i, j);
-    });
-  }
+      const cx = this.tileSize * j + this.tileSize / 2;
+      const cy = this.tileSize * i + this.tileSize / 2;
+      const half = this.dotSize / 2;
 
-  private drawDot(i: number, j: number): void {
-    this.ctx.fillStyle = this.color;
-    this.ctx.beginPath();
-    this.ctx.arc(
-      this.tileSize * j + this.tileSize / 2,
-      this.tileSize * i + this.tileSize / 2,
-      this.radius,
-      0,
-      Math.PI * 2,
-    );
-    this.ctx.fill();
-    this.ctx.closePath();
+      // Draw the open vector crosshair (+)
+      ctx.beginPath();
+      // Horizontal node axis
+      ctx.moveTo(cx - half, cy);
+      ctx.lineTo(cx + half, cy);
+      // Vertical node axis
+      ctx.moveTo(cx, cy - half);
+      ctx.lineTo(cx, cy + half);
+      ctx.stroke();
+    });
   }
 }
