@@ -14,7 +14,6 @@ export class Pacman extends Actor {
   public state: "ALIVE" | "EATEN" | "DYING" = "ALIVE";
   public nextDirection: { dx: number; dy: number } | null = null;
 
-  private isBuffed: boolean = false;
   private deathTimer: number = 0;
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
 
@@ -36,13 +35,15 @@ export class Pacman extends Actor {
 
   // --- Lifecycle ---
 
+  private get isBuffed(): boolean {
+    return this.gameState.isBuffed;
+  }
+
   init(): void {
     this.spawn();
-    this.initEventListeners();
   }
 
   reset(): void {
-    this.isBuffed = false;
     this.state = "ALIVE";
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
@@ -65,18 +66,6 @@ export class Pacman extends Actor {
     console.warn("Pac-Man spawn point (PM) not found on the current map!");
   }
 
-  private initEventListeners(): void {
-    eventBus.on("power_pill:activated", () => {
-      this.isBuffed = true;
-      this.speed = this.buffedSpeed;
-    });
-
-    eventBus.on("power_pill:expired", () => {
-      this.isBuffed = false;
-      this.speed = this.normalSpeed;
-    });
-  }
-
   // --- Update ---
 
   update(dt: number): void {
@@ -89,6 +78,8 @@ export class Pacman extends Actor {
     }
     if (this.gameState.mode !== "PLAYING") return;
 
+    this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
+    
     this.updateMovement(dt);
     this.teleport();
 
