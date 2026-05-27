@@ -383,168 +383,182 @@ export class Ghost extends Actor {
     const left = this.x - s / 2;
     const top = this.y - s / 2;
 
-    let bodyColor = this.defaultColor;
+    let primaryColor = this.defaultColor;
+    let coreGradientTop = this.defaultColor;
+    let coreGradientBottom = "#000000"; // Deep base fade
+    let glowColor = this.defaultColor;
+    let fillOpacity = 0.45; // Increased from 0.15 for a much more solid body presence
     let shouldDrawBody = true;
 
+    // Determine state color schemes and enhance the blue contrast
     if (this.state === "FRIGHTENED") {
       if (this.isFlashing) {
         const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        bodyColor = isWhite ? "#FFFFFF" : "#0000FF";
+        primaryColor = isWhite ? "#FFFFFF" : "#00d9ff"; // Electric high-vis cyan
+        glowColor = isWhite ? "#FFFFFF" : "#0055ff";
+        coreGradientTop = isWhite ? "#FFFFFF" : "#0077ff";
+        coreGradientBottom = isWhite ? "#B0B0B0" : "#001144";
+        fillOpacity = isWhite ? 0.7 : 0.55;
       } else {
-        bodyColor = "#0000FF";
+        // High-contrast neon cyan/blue mix to pop perfectly off dark backgrounds
+        primaryColor = "#00f3ff";
+        glowColor = "#0055ff";
+        coreGradientTop = "#00bdff";
+        coreGradientBottom = "#001155";
+        fillOpacity = 0.55;
       }
     } else if (this.state === "EATEN") {
       shouldDrawBody = false;
     }
 
+    const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
+    const timeScale = isGamePlaying ? Date.now() * 0.003 : 0;
+
     if (shouldDrawBody) {
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      this.drawBaseShape(left, top, s);
+      // 1. Biological breathing scale translation matrix
+      const breath = isGamePlaying ? Math.sin(timeScale * 2.2) * 3.5 : 0;
+      const breathPercentY = breath * 0.01;
 
-      const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
+      ctx.save();
+      // Anchor expansion from the absolute center baseline of the tile coordinate
+      ctx.translate(this.x, top + s);
+      ctx.scale(1 + breathPercentY * 1.2, 1 - breathPercentY);
+      ctx.translate(-this.x, -(top + s));
 
-      if (isGamePlaying) {
-        this.animateWavyBottom(left, top, s);
-      } else {
-        this.drawStaticBottom(left, top, s);
-      }
+      // 2. Layer A: High-Visibility Solid/Translucent Core Gradient
+      ctx.save();
+      this.traceMasterGhostShape(left, top, s, timeScale);
+      ctx.clip();
 
-      ctx.closePath();
-      ctx.fill();
+      let bodyGrad = ctx.createLinearGradient(left, top, left, top + s);
+      bodyGrad.addColorStop(0, coreGradientTop);
+      bodyGrad.addColorStop(1, coreGradientBottom);
+
+      ctx.globalAlpha = fillOpacity;
+      ctx.fillStyle = bodyGrad;
+      ctx.fillRect(left - 2, top - 2, s + 4, s + 4);
+      ctx.restore();
+
+      // 3. Layer B: Premium Clean Neon Glow Border
+      ctx.save();
+      ctx.shadowBlur = s * 0.5; // Slightly larger bloom to emphasize position
+      ctx.shadowColor = glowColor;
+      ctx.strokeStyle = primaryColor;
+      ctx.lineWidth = Math.max(2.0, s * 0.085); // Thickened stroke edge for clarity
+      this.traceMasterGhostShape(left, top, s, timeScale);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.restore(); // End of breathing translation matrix
     }
 
+    // 4. Layer C: Sentient Ocular Array
     const dir = this.getDirectionLabel();
-    this.drawEyes(left, top, s, dir);
+    this.drawEyes(
+      left,
+      top,
+      s,
+      dir,
+      isGamePlaying ? Math.sin(timeScale * 2.2) * 3.5 : 0,
+    );
   }
 
-  private drawBaseShape(left: number, top: number, s: number): void {
+  /**
+   * Generates a definitive, high-accuracy master vector boundary
+   */
+  private traceMasterGhostShape(
+    left: number,
+    top: number,
+    s: number,
+    timeScale: number,
+  ): void {
+    const ctx = this.ctx;
     const centerX = left + s / 2;
-    const centerY = top + s / 2;
-    this.ctx.arc(centerX, centerY, s / 2, Math.PI, 0, false);
-  }
+    const waveHeight = s * 0.06; // Tight, optimized amplitude ceiling for stable reading profiles
+    const waveCount = 3;
 
-  private drawStaticBottom(left: number, top: number, s: number): void {
-    const ctx = this.ctx;
-    const bottomBaseY = top + s;
-    const waveCount = 4;
-    const segmentWidth = s / waveCount;
-    const waveAmplitude = 2.2;
-
-    let currentX = left + s;
-    let currentY = bottomBaseY + Math.sin(0) * waveAmplitude;
-    ctx.lineTo(currentX, currentY);
-
-    for (let i = waveCount - 1; i >= 0; i--) {
-      const segmentStartX = left + (i + 1) * segmentWidth;
-      const segmentEndX = left + i * segmentWidth;
-      const segmentThirdX = segmentStartX - segmentWidth / 3;
-      const segmentTwoThirdsX = segmentStartX - (2 * segmentWidth) / 3;
-
-      const startPhase = ((i + 1) / waveCount) * Math.PI * 3;
-      const thirdPhase = ((i + 2 / 3) / waveCount) * Math.PI * 3;
-      const twoThirdsPhase = ((i + 1 / 3) / waveCount) * Math.PI * 3;
-      const endPhase = (i / waveCount) * Math.PI * 3;
-
-      const startY = bottomBaseY + Math.sin(startPhase) * waveAmplitude;
-      const thirdY = bottomBaseY + Math.sin(thirdPhase) * waveAmplitude;
-      const twoThirdsY = bottomBaseY + Math.sin(twoThirdsPhase) * waveAmplitude;
-      const endY = bottomBaseY + Math.sin(endPhase) * waveAmplitude;
-
-      ctx.bezierCurveTo(
-        segmentThirdX,
-        thirdY,
-        segmentTwoThirdsX,
-        twoThirdsY,
-        segmentEndX,
-        endY,
-      );
-    }
-  }
-
-  private animateWavyBottom(left: number, top: number, s: number): void {
-    const ctx = this.ctx;
-    const bottomBaseY = top + s;
-    const waveCount = 4;
-    const segmentWidth = s / waveCount;
-    const waveAmplitude = 2.2;
-
-    const now = Date.now();
-    const animationPhase = ((now % 1000) / 1000) * Math.PI * 2;
-
-    let currentX = left + s;
-    let currentY = bottomBaseY + Math.sin(animationPhase * 3) * waveAmplitude;
-    ctx.lineTo(currentX, currentY);
-
-    for (let i = waveCount - 1; i >= 0; i--) {
-      const segmentStartX = left + (i + 1) * segmentWidth;
-      const segmentEndX = left + i * segmentWidth;
-      const segmentThirdX = segmentStartX - segmentWidth / 3;
-      const segmentTwoThirdsX = segmentStartX - (2 * segmentWidth) / 3;
-
-      const startPhase =
-        ((i + 1) / waveCount) * Math.PI * 3 + animationPhase * 3;
-      const thirdPhase =
-        ((i + 2 / 3) / waveCount) * Math.PI * 3 + animationPhase * 3;
-      const twoThirdsPhase =
-        ((i + 1 / 3) / waveCount) * Math.PI * 3 + animationPhase * 3;
-      const endPhase = (i / waveCount) * Math.PI * 3 + animationPhase * 3;
-
-      const startY = bottomBaseY + Math.sin(startPhase) * waveAmplitude;
-      const thirdY = bottomBaseY + Math.sin(thirdPhase) * waveAmplitude;
-      const twoThirdsY = bottomBaseY + Math.sin(twoThirdsPhase) * waveAmplitude;
-      const endY = bottomBaseY + Math.sin(endPhase) * waveAmplitude;
-
-      ctx.bezierCurveTo(
-        segmentThirdX,
-        thirdY,
-        segmentTwoThirdsX,
-        twoThirdsY,
-        segmentEndX,
-        endY,
-      );
-    }
-  }
-
-  private drawEyes(left: number, top: number, s: number, dir: string): void {
-    const ctx = this.ctx;
-
-    ctx.fillStyle = "#FFFFFF";
     ctx.beginPath();
-    ctx.arc(left + s * 0.3, top + s / 2, s / 6, 0, Math.PI * 2);
-    ctx.arc(left + s * 0.7, top + s / 2, s / 6, 0, Math.PI * 2);
-    ctx.fill();
+    // Dome top perimeter configuration
+    ctx.arc(centerX, top + s / 2, s / 2, Math.PI, 0, false);
 
-    ctx.fillStyle = "#0000AA";
-    ctx.beginPath();
+    // Smooth master mathematical base wave loop
+    ctx.lineTo(left + s, top + s - waveHeight);
+    const precisionSteps = 40;
+    const waveOffset = timeScale * 1.8;
 
-    const pupilOffset = s / 10;
-    let leftPupilX = left + s * 0.3;
-    let leftPupilY = top + s / 2;
-    let rightPupilX = left + s * 0.7;
-    let rightPupilY = top + s / 2;
+    for (let i = 0; i <= precisionSteps; i++) {
+      const pct = i / precisionSteps;
+      const currX = left + s - s * pct;
+      const angle = pct * Math.PI * 2 * waveCount + waveOffset;
+      const currY = top + s - waveHeight + Math.sin(angle) * waveHeight;
+      ctx.lineTo(currX, currY);
+    }
+
+    ctx.lineTo(left, top + s - waveHeight);
+    ctx.closePath();
+  }
+
+  private drawEyes(
+    left: number,
+    top: number,
+    s: number,
+    dir: string,
+    breath: number,
+  ): void {
+    const ctx = this.ctx;
+
+    // Compute targeted look angles mapped to actual facing direction labels
+    let lookX = 0;
+    let lookY = 0;
+    const pupilOffset = s * 0.06;
 
     switch (dir) {
       case "LEFT":
-        leftPupilX -= pupilOffset;
-        rightPupilX -= pupilOffset;
+        lookX = -pupilOffset;
         break;
       case "RIGHT":
-        leftPupilX += pupilOffset;
-        rightPupilX += pupilOffset;
+        lookX = pupilOffset;
         break;
       case "UP":
-        leftPupilY -= pupilOffset;
-        rightPupilY -= pupilOffset;
+        lookY = -pupilOffset;
         break;
       case "DOWN":
-        leftPupilY -= pupilOffset;
-        rightPupilY -= pupilOffset;
+        lookY = pupilOffset;
         break;
     }
 
-    ctx.arc(leftPupilX, leftPupilY, s / 12, 0, Math.PI * 2);
-    ctx.arc(rightPupilX, rightPupilY, s / 12, 0, Math.PI * 2);
-    ctx.fill();
+    // Track vertical frame height shift linked directly with the breathing cycle context
+    const finalEyeY = top + s * 0.48 + breath * 0.04;
+    const eyeX1 = left + s * 0.32;
+    const eyeX2 = left + s * 0.68;
+
+    if (this.state !== "FRIGHTENED") {
+      // Sclera base lens vector
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath();
+      ctx.arc(eyeX1, finalEyeY, s * 0.1, 0, Math.PI * 2);
+      ctx.arc(eyeX2, finalEyeY, s * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Active targeted iris core tracker
+      const irisColor = this.state === "EATEN" ? "#00f3ff" : this.defaultColor;
+      ctx.fillStyle = irisColor;
+      ctx.beginPath();
+      ctx.arc(eyeX1 + lookX, finalEyeY + lookY, s * 0.045, 0, Math.PI * 2);
+      ctx.arc(eyeX2 + lookX, finalEyeY + lookY, s * 0.045, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Enhanced arcade expressions for the blue vulnerable phase
+      ctx.fillStyle = "#ffcc00"; // High visibility retro tracking yellow
+      ctx.shadowBlur = s * 0.15;
+      ctx.shadowColor = "#ffcc00";
+
+      ctx.beginPath();
+      ctx.arc(eyeX1, finalEyeY, s * 0.04, 0, Math.PI * 2);
+      ctx.arc(eyeX2, finalEyeY, s * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+    }
   }
 }
