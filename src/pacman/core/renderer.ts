@@ -1,17 +1,18 @@
 // src/game/Renderer.ts
-
 import { GameRegistry } from "../game/gameRegistry.js";
 import { GameState } from "../game/gameState.js";
 
 /**
  * Отрисовщик всех игровых объектов.
- * Разделяет логику: динамические обновляются и рисуются каждый кадр,
- * статические — только при необходимости (по флагу needsRedraw).
+ * Полностью избавлен от выделения памяти (Garbage Collection Free) во время игрового цикла.
  */
 export class Renderer {
   private static instance: Renderer | null = null;
   private gameState: GameState;
   private registry: GameRegistry;
+
+  // Кэшированный экземпляр Set, выделяемый в памяти ОДИН раз при запуске игры
+  private clearedContexts: Set<CanvasRenderingContext2D> = new Set();
 
   private constructor() {
     this.gameState = GameState.getInstance();
@@ -27,48 +28,43 @@ export class Renderer {
 
   /**
    * Главный метод рендеринга. Вызывается из GameLoop на каждом кадре.
-   * @param dt - дельта времени между кадрами
    */
   render(): void {
-    if (
-      this.gameState.mode === "INTERMISSION" ||
-      this.gameState.mode === "GAME_OVER"
-    ) {
+    const mode = this.gameState.mode;
+    
+    if (mode === "INTERMISSION" || mode === "GAME_OVER") {
       return;
     }
 
-    const clearedCanvases = new Set<HTMLCanvasElement>();
-
-    const mode = this.gameState.mode;
     const isPlaying = mode === "PLAYING";
     const isFrozen = mode === "PACMAN_DEAD" || mode === "GHOST_EATEN";
     const isTransition = mode === "LEVEL_TRANSITION";
-    const shouldAnimate = isPlaying;
+
+    // Очищаем существующий Set вместо создания нового. Мусор не генерируется!
+    this.clearedContexts.clear();
 
     // 1. DYNAMIC ENTITIES (Pacman, Ghosts, Pills)
-    this.registry.getAllUpdatable().forEach((entity) => {
-      const canvas = (entity as any).canvas as HTMLCanvasElement | undefined;
+    if (isPlaying || isFrozen) {
+      this.registry.getAllUpdatable().forEach((entity) => {
+        const ctx = entity.ctx;
 
-      if (canvas && !clearedCanvases.has(canvas)) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        clearedCanvases.add(canvas);
-      }
-
-      if (isPlaying || isFrozen) {
+        if (!this.clearedContexts.has(ctx)) {
+          ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+          this.clearedContexts.add(ctx);
+        }
+        
         entity.draw();
-      }
-    });
+      });
+    }
 
     // 2. STATIC ENTITIES (Maze, Dots)
     this.registry.getAllDrawable().forEach((entity) => {
       if (entity.needsRedraw || isTransition || isFrozen || isPlaying) {
-        const canvas = (entity as any).canvas as HTMLCanvasElement | undefined;
+        const ctx = entity.ctx;
 
-        if (canvas && !clearedCanvases.has(canvas)) {
-          const ctx = canvas.getContext("2d");
-          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-          clearedCanvases.add(canvas);
+        if (!this.clearedContexts.has(ctx)) {
+          ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+          this.clearedContexts.add(ctx);
         }
 
         entity.draw();
