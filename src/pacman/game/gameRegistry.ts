@@ -3,6 +3,7 @@
 import { Ghost } from "../actors/ghost.js";
 import { Pacman } from "../actors/pacman.js";
 import { CFG_GHOSTS } from "../config/ghosts.js";
+import { CFG_PACMAN } from "../config/pacman.js";
 import { eventBus } from "../core/eventBus.js";
 import type { Drawable, Updatable } from "../interfaces.js";
 import { Dot } from "../world/dot.js";
@@ -47,7 +48,7 @@ createEntities(): void {
     this._maze = new Maze();
     this._dot = new Dot();
     this._pill = new Pill();
-    this._pacman = new Pacman();
+    this._pacman = new Pacman(CFG_PACMAN);
     this._ghosts = Object.values(CFG_GHOSTS).map(
       (config) => new Ghost(config),
     );

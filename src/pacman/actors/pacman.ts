@@ -1,5 +1,6 @@
 // src/entities/Pacman.ts
 import { CFG_CANVAS } from "../config/canvas.js";
+import type { PacmanConfig } from "../config/pacman.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
 import { GameRegistry } from "../game/gameRegistry.js";
@@ -8,6 +9,7 @@ import type { Ghost } from "./ghost.js";
 
 export class Pacman extends Actor {
   private registry: GameRegistry;
+  private config: PacmanConfig;
 
   public state: "ALIVE" | "EATEN" | "DYING" = "ALIVE";
   public nextDirection: { dx: number; dy: number } | null = null;
@@ -16,11 +18,20 @@ export class Pacman extends Actor {
   private deathTimer: number = 0;
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
 
-  constructor() {
+  private normalSpeed: number;
+  private buffedSpeed: number;
+
+  constructor(config: PacmanConfig) {
     super(CFG_CANVAS.canvasIds.pacman);
     this.registry = GameRegistry.getInstance();
-    this.speed = this.tileSize * 4.4;
-    this.r = this.tileSize * 0.5;
+    this.config = config;
+
+    const tileSize = CFG_CANVAS.tile.size;
+    this.normalSpeed = tileSize * config.normalSpeedMultiplier;
+    this.buffedSpeed = tileSize * config.buffedSpeedMultiplier;
+
+    this.speed = this.normalSpeed;
+    this.r = tileSize * config.radiusMultiplier;
   }
 
   // --- Lifecycle ---
@@ -36,6 +47,7 @@ export class Pacman extends Actor {
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
     this.lastDirection = { dx: 1, dy: 0 };
+    this.speed = this.normalSpeed;
     this.spawn();
   }
 
@@ -56,9 +68,12 @@ export class Pacman extends Actor {
   private initEventListeners(): void {
     eventBus.on("power_pill:activated", () => {
       this.isBuffed = true;
+      this.speed = this.buffedSpeed;
     });
+
     eventBus.on("power_pill:expired", () => {
       this.isBuffed = false;
+      this.speed = this.normalSpeed;
     });
   }
 
@@ -67,6 +82,9 @@ export class Pacman extends Actor {
   update(dt: number): void {
     if (this.state === "DYING") {
       this.deathTimer += dt;
+      if (this.deathTimer >= this.config.deathAnimationDuration) {
+        eventBus.emit("pacman:death_animation_end");
+      }
       return;
     }
     if (this.gameState.mode !== "PLAYING") return;
@@ -79,6 +97,7 @@ export class Pacman extends Actor {
       if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
         eventBus.emit("command:ghost_eaten", { ghostName: collidedGhost.name });
       } else if (
+        !this.isBuffed &&
         collidedGhost.state !== "FRIGHTENED" &&
         collidedGhost.state !== "EATEN"
       ) {
@@ -110,7 +129,7 @@ export class Pacman extends Actor {
     const { newX, newY } = this.getNextPosition(dt);
     this.x = newX;
     this.y = newY;
-    
+
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
       this.lastDirection = { ...this.direction };
     }
@@ -148,7 +167,7 @@ export class Pacman extends Actor {
     const targetTileY = tileY + this.nextDirection.dy;
     if (Collision.isWall(targetTileX, targetTileY)) return;
 
-    const turnThreshold = this.tileSize * 0.5;
+    const turnThreshold = this.tileSize * this.config.turnThreshold;
     const distanceToCenter = Math.sqrt(
       (this.x - centerX) ** 2 + (this.y - centerY) ** 2,
     );
@@ -163,7 +182,7 @@ export class Pacman extends Actor {
 
   private smoothAlignToAxis(): void {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    const pullSpeed = 0.3;
+    const pullSpeed = this.config.axisAlignSpeed;
     if (this.direction.dx !== 0) {
       this.y += (centerY - this.y) * pullSpeed;
     }
@@ -226,7 +245,9 @@ export class Pacman extends Actor {
     if (this.state === "DYING") return;
     this.state = "DYING";
     this.deathTimer = 0;
+    this.speed = 0;
     eventBus.emit("pacman:death_triggered");
+    eventBus.emit("pacman:death_animation_start", { x: this.x, y: this.y });
   }
 
   // --- Draw ---
@@ -240,9 +261,10 @@ export class Pacman extends Actor {
   }
 
   private getRotation(): number {
-    const dir = this.direction.dx !== 0 || this.direction.dy !== 0 
-      ? this.direction 
-      : this.lastDirection;
+    const dir =
+      this.direction.dx !== 0 || this.direction.dy !== 0
+        ? this.direction
+        : this.lastDirection;
     if (dir.dx === -1) return Math.PI;
     if (dir.dx === 1) return 0;
     if (dir.dy === -1) return -Math.PI / 2;
@@ -257,31 +279,31 @@ export class Pacman extends Actor {
     const rotation = this.getRotation();
     const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
 
-    const maxMouthAngle = Math.PI / 2.8;
     let mouthAngle: number;
     if (isMoving) {
-      mouthAngle = Math.abs(Math.sin(Date.now() * 0.015)) * maxMouthAngle;
+      mouthAngle =
+        Math.abs(Math.sin(Date.now() * this.config.mouthSpeed)) *
+        this.config.maxMouthAngle;
     } else {
-      mouthAngle = maxMouthAngle * 0.5;
+      mouthAngle = this.config.idleMouthAngle;
     }
 
     const startAngle = mouthAngle;
     const endAngle = 2 * Math.PI - mouthAngle;
 
+    const colors = this.isBuffed
+      ? this.config.colors.buffed
+      : this.config.colors.normal;
+
     this.ctx.save();
     this.ctx.translate(cx, cy);
     this.ctx.rotate(rotation);
 
-    const bodyColor = this.isBuffed ? "#00c8d4" : "#e6c800";
-    const strokeColor = this.isBuffed ? "#008a94" : "#b8a000";
-    
-    // Very subtle outer glow
-    this.ctx.shadowColor = bodyColor;
+    this.ctx.shadowColor = colors.glow;
     this.ctx.shadowBlur = 4;
-    
-    // Solid body
-    this.ctx.fillStyle = bodyColor;
-    this.ctx.strokeStyle = strokeColor;
+
+    this.ctx.fillStyle = colors.body;
+    this.ctx.strokeStyle = colors.stroke;
     this.ctx.lineWidth = 1.5;
     this.ctx.beginPath();
     this.ctx.arc(0, 0, r - 1, startAngle, endAngle);
@@ -289,8 +311,7 @@ export class Pacman extends Actor {
     this.ctx.closePath();
     this.ctx.fill();
     this.ctx.stroke();
-    
-    // Inner highlight arc
+
     this.ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
     this.ctx.lineWidth = 1.5;
     this.ctx.shadowBlur = 0;
@@ -303,8 +324,7 @@ export class Pacman extends Actor {
   }
 
   private drawDead(): void {
-    const deathDuration = 1.5;
-    const p = Math.min(1, this.deathTimer / deathDuration);
+    const p = Math.min(1, this.deathTimer / this.config.deathAnimationDuration);
     const cx = this.x;
     const cy = this.y;
     const r = this.r;
@@ -324,9 +344,13 @@ export class Pacman extends Actor {
     this.ctx.shadowBlur = 3 * (1 - p);
     this.ctx.lineWidth = 1.5;
 
-    const collapseScale = 1 - p; 
+    const collapseScale = 1 - p;
     if (collapseScale > 0.05) {
-      for (let currentR = r * collapseScale; currentR > r * 0.05; currentR -= r * 0.3) {
+      for (
+        let currentR = r * collapseScale;
+        currentR > r * 0.05;
+        currentR -= r * 0.3
+      ) {
         this.ctx.beginPath();
         this.ctx.arc(0, 0, currentR, start, end, false);
         this.ctx.stroke();
