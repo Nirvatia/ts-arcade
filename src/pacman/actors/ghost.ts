@@ -389,19 +389,19 @@ export class Ghost extends Actor {
 
     let primaryColor = this.defaultColor;
     let glowColor = this.defaultColor;
-    let fillOpacity = 0.75;
+    let fillOpacity = 0.7;
     let shouldDrawBody = true;
 
     if (this.state === "FRIGHTENED") {
       if (this.isFlashing) {
         const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        primaryColor = isWhite ? "#FFFFFF" : "#00f0ff";
-        glowColor = isWhite ? "#FFFFFF" : "#0ff";
-        fillOpacity = isWhite ? 0.85 : 0.7;
+        primaryColor = isWhite ? "#FFFFFF" : "#00c8d4";
+        glowColor = isWhite ? "#FFFFFF" : "#0aa";
+        fillOpacity = isWhite ? 0.8 : 0.65;
       } else {
-        primaryColor = "#00f0ff";
-        glowColor = "#0ff";
-        fillOpacity = 0.7;
+        primaryColor = "#00c8d4";
+        glowColor = "#0aa";
+        fillOpacity = 0.65;
       }
     } else if (this.state === "EATEN") {
       shouldDrawBody = false;
@@ -431,12 +431,12 @@ export class Ghost extends Actor {
       ctx.fillRect(left - 2, top - 2, s + 4, s + 4);
       ctx.restore();
 
-      // Neon outline
+      // Neon outline - reduced glow
       ctx.save();
-      ctx.shadowBlur = s * 0.45;
+      ctx.shadowBlur = s * 0.3;
       ctx.shadowColor = glowColor;
       ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = 2.4;
+      ctx.lineWidth = 2;
       this.traceMasterGhostShape(left, top, s, timeScale);
       ctx.stroke();
       ctx.restore();
@@ -520,7 +520,7 @@ export class Ghost extends Actor {
       ctx.fill();
 
       // Colored iris
-      const irisColor = this.state === "EATEN" ? "#00f0ff" : this.defaultColor;
+      const irisColor = this.state === "EATEN" ? "#00c8d4" : this.defaultColor;
       ctx.fillStyle = irisColor;
       ctx.beginPath();
       ctx.arc(eyeX1 + lookX, finalEyeY + lookY, s * 0.05, 0, Math.PI * 2);
@@ -541,10 +541,10 @@ export class Ghost extends Actor {
       ctx.arc(eyeX2 + lookX * 0.5, finalEyeY - 1.8, s * 0.016, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      // Frightened eyes
-      ctx.fillStyle = "#ffcc00";
-      ctx.shadowBlur = s * 0.12;
-      ctx.shadowColor = "#ffcc00";
+      // Frightened eyes - reduced glow
+      ctx.fillStyle = "#cc9900";
+      ctx.shadowBlur = s * 0.08;
+      ctx.shadowColor = "#cc9900";
       ctx.beginPath();
       ctx.arc(eyeX1, finalEyeY, s * 0.04, 0, Math.PI * 2);
       ctx.arc(eyeX2, finalEyeY, s * 0.04, 0, Math.PI * 2);

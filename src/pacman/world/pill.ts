@@ -92,48 +92,44 @@ export class Pill implements Updatable, Collectible {
   }
 
   update(dt: number): void {
-    this.animationCounter += 4.5 * dt;
+    this.animationCounter += 3 * dt;
   }
 
   draw(): void {
     this.clearCanvas();
     const ctx = this.ctx;
 
-    const cyberCyan = "#0ff";
-    const baseRadius = this.tileSize * 0.22;
+    const baseRadius = this.tileSize * 0.2;
 
     this.positions.forEach(({ i, j }) => {
       const cx = this.tileSize * j + this.tileSize / 2;
       const cy = this.tileSize * i + this.tileSize / 2;
 
-      const pulse = 0.5 + 0.5 * Math.sin(this.animationCounter * 4);
-      const radius = baseRadius + pulse * 3;
+      const pulse = 0.5 + 0.5 * Math.sin(this.animationCounter * 3);
+      const radius = baseRadius + pulse * 2;
 
       ctx.save();
       
-      // Outer pulsing ring
-      ctx.shadowColor = cyberCyan;
-      ctx.shadowBlur = 16 * pulse;
-      ctx.strokeStyle = cyberCyan;
-      ctx.lineWidth = 2.5;
+      // Outer glowing ring - clearly visible
+      ctx.shadowColor = "#0aa";
+      ctx.shadowBlur = 10 * pulse;
+      ctx.strokeStyle = "#0dd";
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
       
-      // Inner filled circle
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = cyberCyan;
-      ctx.globalAlpha = 0.5 + pulse * 0.3;
+      // Inner diamond - Tron data crystal
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = "#0cc";
+      ctx.globalAlpha = 0.6 + pulse * 0.2;
+      const innerSize = radius * 0.6;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius - 3, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Bright center
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = "#ffffff";
-      ctx.globalAlpha = 0.9;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      ctx.moveTo(cx, cy - innerSize);
+      ctx.lineTo(cx + innerSize, cy);
+      ctx.lineTo(cx, cy + innerSize);
+      ctx.lineTo(cx - innerSize, cy);
+      ctx.closePath();
       ctx.fill();
       
       ctx.restore();

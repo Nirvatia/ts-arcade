@@ -323,10 +323,11 @@ function generateLevelConfig(level: number): LevelConfigType {
 
   // Deep dark palette — цвета стен лабиринта
   const colors = [
-    "hsl(220, 70%, 35%)", // Deep Cobalt Blue
-    "hsl(340, 70%, 35%)", // Deep Crimson Red
-    "hsl(160, 70%, 30%)", // Deep Forest Green
-    "hsl(280, 70%, 35%)", // Dark Amethyst Purple
+    "hsl(195, 75%, 48%)", // Classic Tron Blue
+    "hsl(330, 65%, 50%)", // Tron Magenta
+    "hsl(45, 80%, 50%)", // Tron Amber/Gold
+    "hsl(160, 55%, 45%)", // Tron Teal
+    "hsl(275, 60%, 52%)", // Tron Violet
   ];
   const colorIndex = (level - 1) % colors.length;
 

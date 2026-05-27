@@ -20,7 +20,7 @@ export class Dot implements Drawable, Collectible {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
     this.tileSize = CFG_CANVAS.tile.size;
-    this.dotSize = this.tileSize * 0.13; // Balanced size
+    this.dotSize = this.tileSize * 0.09;
     this.initEventListeners();
   }
 
@@ -112,19 +112,12 @@ export class Dot implements Drawable, Collectible {
 
       ctx.save();
       
-      // Main dot with moderate glow
+      // Visible Tron dot with glow
       ctx.shadowColor = "#0a8a9a";
       ctx.shadowBlur = 4;
-      ctx.fillStyle = "#0aaabc";
+      ctx.fillStyle = "#0cc0d4";
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Subtle center highlight
-      ctx.shadowBlur = 2;
-      ctx.fillStyle = "#c0f0ff";
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
       ctx.fill();
       
       ctx.restore();

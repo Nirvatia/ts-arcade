@@ -18,7 +18,7 @@ export class Maze implements Drawable {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.maze);
     this.tileSize = CFG_CANVAS.tile.size;
-    this.lineWidth = Math.max(2, Math.floor(this.tileSize * 0.08));
+    this.lineWidth = Math.max(2, Math.floor(this.tileSize * 0.1));
   }
 
   get canvas(): HTMLCanvasElement {
@@ -63,6 +63,31 @@ export class Maze implements Drawable {
     this._needsRedraw = true;
   }
 
+  private getTronWallColor(): { stroke: string; shadow: string } {
+    const mapColor = this.gameState.levelData.mapColor;
+    const hslMatch = mapColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    
+    if (hslMatch) {
+      const hue = parseInt(hslMatch[1]);
+      const saturation = parseInt(hslMatch[2]);
+      
+      // Balanced Tron colors: visible but not overwhelming
+      const visibleSaturation = Math.max(40, saturation * 0.7);
+      const strokeLightness = 30; // Dark enough for style, light enough to see
+      const shadowLightness = 15;
+      
+      return {
+        stroke: `hsla(${hue}, ${visibleSaturation}%, ${strokeLightness}%, 0.9)`,
+        shadow: `hsla(${hue}, ${visibleSaturation}%, ${shadowLightness}%, 0.4)`
+      };
+    }
+    
+    return {
+      stroke: "hsla(200, 50%, 30%, 0.9)",
+      shadow: "hsla(200, 50%, 15%, 0.4)"
+    };
+  }
+
   draw(): void {
     const map = this.gameState.levelData.map;
     const ctx = this.ctx;
@@ -70,12 +95,14 @@ export class Maze implements Drawable {
     const lw = this.lineWidth;
     const half = ts / 2;
 
+    const tronColors = this.getTronWallColor();
+
     ctx.save();
-    ctx.strokeStyle = "#1a3a4a";
+    ctx.strokeStyle = tronColors.stroke;
     ctx.lineWidth = lw;
     ctx.lineCap = "round";
-    ctx.shadowColor = "#0a3a4a";
-    ctx.shadowBlur = 3;
+    ctx.shadowColor = tronColors.shadow;
+    ctx.shadowBlur = 4;
 
     if (this._isFlashing) {
       const time = Date.now() / 150;
@@ -90,7 +117,6 @@ export class Maze implements Drawable {
 
         switch (tile) {
           case "WH":
-            // Horizontal line through center
             ctx.beginPath();
             ctx.moveTo(x, y + half);
             ctx.lineTo(x + ts, y + half);
@@ -98,7 +124,6 @@ export class Maze implements Drawable {
             break;
 
           case "WV":
-            // Vertical line through center
             ctx.beginPath();
             ctx.moveTo(x + half, y);
             ctx.lineTo(x + half, y + ts);
@@ -106,7 +131,6 @@ export class Maze implements Drawable {
             break;
 
           case "TL":
-            // Top-left corner curve
             ctx.beginPath();
             ctx.moveTo(x + half, y + ts);
             ctx.lineTo(x + half, y + half);
@@ -115,7 +139,6 @@ export class Maze implements Drawable {
             break;
 
           case "TR":
-            // Top-right corner curve
             ctx.beginPath();
             ctx.moveTo(x, y + half);
             ctx.lineTo(x + half, y + half);
@@ -124,7 +147,6 @@ export class Maze implements Drawable {
             break;
 
           case "BL":
-            // Bottom-left corner curve
             ctx.beginPath();
             ctx.moveTo(x + half, y);
             ctx.lineTo(x + half, y + half);
@@ -133,7 +155,6 @@ export class Maze implements Drawable {
             break;
 
           case "BR":
-            // Bottom-right corner curve
             ctx.beginPath();
             ctx.moveTo(x, y + half);
             ctx.lineTo(x + half, y + half);
