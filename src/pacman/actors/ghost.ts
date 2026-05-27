@@ -121,11 +121,13 @@ export class Ghost extends Actor {
   // --- Update ---
 
   update(dt: number): void {
-    if (this.path.length > 0) {
+    // 1. Path routing overrides take precedence (EATEN or exiting lair)
+    if (this.path.length > 0 || this.currentPathTarget !== null) {
       this.moveAlongPath(dt);
       return;
     }
 
+    // 2. Fallback to normal map grid-locked navigation loops
     if (this.isAtTileCenter(dt)) {
       if (this.willHitWall(dt)) {
         this.snapToCenter();
@@ -155,75 +157,95 @@ export class Ghost extends Actor {
   private moveAlongPath(dt: number): void {
     let budgetDistance = this.speed * dt;
 
-    while (
-      budgetDistance > 0 &&
-      (this.currentPathTarget || this.path.length > 0)
-    ) {
-      if (!this.currentPathTarget && this.path.length > 0) {
-        const nextTileStr = this.path[0];
-        const [ty, tx] = nextTileStr.split(",").map(Number);
-        this.currentPathTarget = {
-          x: tx * this.tileSize + this.tileSize / 2,
-          y: ty * this.tileSize + this.tileSize / 2,
-        };
+    // Process movement tracking as long as distance allocation remains
+    while (budgetDistance > 0) {
+      // If we don't have a specific coordinate target, look at the front of our path stack
+      if (!this.currentPathTarget) {
+        if (this.path.length > 0) {
+          const nextTileStr = this.path[0];
+          const [ty, tx] = nextTileStr.split(",").map(Number);
+          this.currentPathTarget = {
+            x: tx * this.tileSize + this.tileSize / 2,
+            y: ty * this.tileSize + this.tileSize / 2,
+          };
+        } else {
+          // Both path array and intermediate target are completely exhausted
+          break;
+        }
       }
 
-      if (this.currentPathTarget) {
-        const dx = this.currentPathTarget.x - this.x;
-        const dy = this.currentPathTarget.y - this.y;
-        const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
+      const dx = this.currentPathTarget.x - this.x;
+      const dy = this.currentPathTarget.y - this.y;
+      const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
 
-        // Map facing vector to standard look directions
-        if (distanceToTarget > 0.001) {
-          if (Math.abs(dx) > Math.abs(dy)) {
-            this.direction = { dx: Math.sign(dx), dy: 0 };
-          } else {
-            this.direction = { dx: 0, dy: Math.sign(dy) };
-          }
-        }
-
-        if (distanceToTarget <= budgetDistance) {
-          // Snap directly to this layout crossroads target
-          this.x = this.currentPathTarget.x;
-          this.y = this.currentPathTarget.y;
-          budgetDistance -= distanceToTarget; // Spend distance allocation
-          this.currentPathTarget = null;
-          this.path.shift();
-
-          if (this.path.length === 0) {
-            if (this.isReturningHome) {
-              const previousState = this.state;
-              this.state = "CHASE";
-              this.speed = this.defaultSpeed;
-              this.color = this.defaultColor;
-              this.isReturningHome = false;
-
-              eventBus.emit("ghost:state_changed", {
-                ghostName: this.name,
-                from: previousState,
-                to: "CHASE",
-              });
-
-              eventBus.emit("ghost:returned_home", { ghostName: this.name });
-              this.calculateExitPath();
-            } else {
-              this.getRandomDirection();
-            }
-            break;
-          }
+      // Map looking angles directly onto our animation tracking system
+      if (distanceToTarget > 0.001) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          this.direction = { dx: Math.sign(dx), dy: 0 };
         } else {
-          // Normal linear frame step translation
-          this.x += (dx / distanceToTarget) * budgetDistance;
-          this.y += (dy / distanceToTarget) * budgetDistance;
-          budgetDistance = 0; // Exhausted frame time budget
+          this.direction = { dx: 0, dy: Math.sign(dy) };
         }
+      }
+
+      if (distanceToTarget <= budgetDistance) {
+        // Snap perfectly to this junction point and deduct the distance spent
+        this.x = this.currentPathTarget.x;
+        this.y = this.currentPathTarget.y;
+        budgetDistance -= distanceToTarget;
+
+        // Target achieved, pop it off our collections
+        this.currentPathTarget = null;
+        if (this.path.length > 0) {
+          this.path.shift();
+        }
+
+        // Check if path is exhausted, handling state swaps or exits mid-frame safely
+        if (this.path.length === 0) {
+          if (this.isReturningHome) {
+            const previousState = this.state;
+            this.state = "CHASE";
+            this.speed = this.defaultSpeed;
+            this.color = this.defaultColor;
+            this.isReturningHome = false;
+
+            eventBus.emit("ghost:state_changed", {
+              ghostName: this.name,
+              from: previousState,
+              to: "CHASE",
+            });
+
+            eventBus.emit("ghost:returned_home", { ghostName: this.name });
+
+            // Re-populate path configuration instantly; loop keeps consuming remaining budgetDistance
+            this.calculateExitPath();
+          } else {
+            this.getRandomDirection();
+            // Drop out of pathing mode to let regular update cycle take over for the remainder of the frame
+            if (
+              budgetDistance > 0 &&
+              (this.direction.dx !== 0 || this.direction.dy !== 0) &&
+              !this.willHitWall(budgetDistance / this.speed)
+            ) {
+              this.x += this.direction.dx * budgetDistance;
+              this.y += this.direction.dy * budgetDistance;
+            }
+            budgetDistance = 0;
+          }
+        }
+      } else {
+        // Target is further away than this frame's remaining budget. Move linearly toward it.
+        this.x += (dx / distanceToTarget) * budgetDistance;
+        this.y += (dy / distanceToTarget) * budgetDistance;
+        budgetDistance = 0; // Budget fully spent
       }
     }
   }
 
   private isAtTileCenter(dt: number): boolean {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    const tolerance = this.speed * dt;
+    // Use maximum possible velocity profile for tolerance matching to prevent axis overshooting
+    const maxSpeed = Math.max(this.defaultSpeed, this.eatenSpeed, this.speed);
+    const tolerance = maxSpeed * dt;
     return (
       Math.abs(this.x - centerX) <= tolerance &&
       Math.abs(this.y - centerY) <= tolerance
