@@ -77,7 +77,11 @@ export class GameLoop {
       // Запуск замера времени выполнения логики и рендеринга
       const workStart = performance.now();
 
-      if (this.gameState.mode === "PLAYING") {
+      const shouldUpdate =
+        this.gameState.mode === "PLAYING" ||
+        this.gameState.mode === "PACMAN_DEAD";
+
+      if (shouldUpdate) {
         const dt = delta / 1000;
         this.registry.getAllUpdatable().forEach((e) => e.update(dt));
       }
@@ -87,7 +91,7 @@ export class GameLoop {
         this.gameState.mode !== "GAME_OVER";
 
       if (shouldRender) {
-        this.renderer.render(delta);
+        this.renderer.render();
       }
 
       // Фиксация времени выполнения кадра

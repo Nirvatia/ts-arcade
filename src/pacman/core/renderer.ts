@@ -29,8 +29,11 @@ export class Renderer {
    * Главный метод рендеринга. Вызывается из GameLoop на каждом кадре.
    * @param dt - дельта времени между кадрами
    */
-  render(dt?: number): void {
-    if (this.gameState.mode === "INTERMISSION" || this.gameState.mode === "GAME_OVER") {
+  render(): void {
+    if (
+      this.gameState.mode === "INTERMISSION" ||
+      this.gameState.mode === "GAME_OVER"
+    ) {
       return;
     }
 
