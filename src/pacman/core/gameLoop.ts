@@ -116,9 +116,9 @@ export class GameLoop {
           memoryLog = `${(perfMem.usedJSHeapSize / 1024 / 1024).toFixed(2)} MB`;
         }
 
-        // console.log(
-        //   `[Engine Performance] FPS: ${actualFps} | Avg Work: ${avgFrameTime.toFixed(2)}ms | Max Spike: ${this.maxFrameTime.toFixed(2)}ms | Heap: ${memoryLog}`,
-        // );
+        console.log(
+          `[Engine Performance] FPS: ${actualFps} | Avg Work: ${avgFrameTime.toFixed(2)}ms | Max Spike: ${this.maxFrameTime.toFixed(2)}ms | Heap: ${memoryLog}`,
+        );
 
         // Сброс счетчиков для следующей секунды
         this.lastLogTime = now;
