@@ -33,14 +33,12 @@ export class Director {
     eventBus.on("game:start", () => this.startGame());
     eventBus.on("game:restart", () => this.restartGame());
     eventBus.on("game:over", () => this.handleGameOver());
-    eventBus.on("level:complete", () => this.triggerIntermissionSequence());
+    
+    // Explicit Payload Binding Fix matching EventPayloads layout definition
+    eventBus.on("level:complete", (payload) => this.triggerIntermissionSequence(payload));
     eventBus.on("pacman:death_triggered", () => this.triggerDeathSequence());
-    eventBus.on("command:death_sequence_continue", () =>
-      this.completeDeathSequence(),
-    );
-    eventBus.on("command:ghost_eaten", (data: { ghostName: string }) =>
-      this.triggerGhostEatenSequence(data),
-    );
+    eventBus.on("command:death_sequence_continue", () => this.completeDeathSequence());
+    eventBus.on("command:ghost_eaten", (data) => this.triggerGhostEatenSequence(data));
   }
 
   get currentClock(): Clock {
@@ -56,6 +54,7 @@ export class Director {
     this.resetTickingState();
 
     const ghostEatenDuration = 1000;
+    // Uses structural onComplete callback signature to emit the resumed state safely
     this.activeClock.start(
       ghostEatenDuration / 1000,
       ghostEatenDuration,
@@ -68,6 +67,11 @@ export class Director {
 
   private handleGameOver(): void {
     this.resetTickingState();
+    // Dispatch structural UI notification with historical data parameters
+    eventBus.emit("ui:game_over_show", { 
+      score: this.tally.score, 
+      level: this.gameState.currentLevel 
+    });
   }
 
   restartGame(): void {
@@ -112,6 +116,8 @@ export class Director {
     this.resetTickingState();
 
     const pacman = this.registry.getPacman();
+    if (!pacman) return; // Defensive guard statement
+
     eventBus.emit("pacman:death_animation_start", { x: pacman.x, y: pacman.y });
 
     const deathDuration = sfx.getTrackDuration("death") || 2;
@@ -127,7 +133,6 @@ export class Director {
       .start();
   }
 
-  // src/game/director.ts
   completeDeathSequence(): void {
     this.resetTickingState();
     eventBus.emit("command:reset_positions");
@@ -146,12 +151,13 @@ export class Director {
     );
   }
 
-  triggerIntermissionSequence(): void {
+  // Refactored to catch and handle payload arguments safely
+  triggerIntermissionSequence(payload: { level: number; score: number }): void {
     this.resetTickingState();
-
     const maze = this.registry.getMaze();
+    if (!maze) return;
 
-    // 1. Flash the maze walls
+    // 1. Loop-build the structured architectural sequence steps cleanly
     for (let i = 0; i < 4; i++) {
       this.activeSequence
         .addCallback(() => {
@@ -166,19 +172,19 @@ export class Director {
         .addWait(400);
     }
 
-    // 2. Complete transition, show splash screen, wait 5 seconds, then boot next level
+    // 2. Queue sequence finalization steps using explicit payload mapping properties
     this.activeSequence
       .addCallback(() => {
         eventBus.emit("command:clear_canvases");
         eventBus.emit("level:intermission_start", {
-          nextLevel: this.gameState.currentLevel + 1,
+          nextLevel: payload.level + 1,
         });
       })
       .addWait(5000)
-      .addCallback(() => {
+      .start(() => {
+        // Leverages native Sequence terminal execution strategy
         this.loadLevel();
         this.startGame();
-      })
-      .start();
+      });
   }
 }

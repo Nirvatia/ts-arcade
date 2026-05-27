@@ -6,45 +6,33 @@ type SequenceStep =
 
 type SequenceCompleteCallback = () => void;
 
-/**
- * Управляет последовательным выполнением цепочки событий.
- * Используется для сложных сценариев: интермиссия, смерть, сброс уровня.
- *
- */
 export class Sequence {
   private steps: SequenceStep[] = [];
   private currentIndex: number = 0;
   private timeoutId: number | null = null;
   private _isRunning: boolean = false;
 
-  constructor() {}
-
   get isRunning(): boolean {
     return this._isRunning;
   }
 
-  /** Добавить шаг ожидания (в миллисекундах) */
   addWait(duration: number): this {
     this.steps.push({ type: "wait", duration });
     return this;
   }
 
-  /** Добавить шаг с колбэком */
   addCallback(action: () => void): this {
     this.steps.push({ type: "callback", action });
     return this;
   }
 
-  /** Запустить последовательность */
   start(onComplete?: SequenceCompleteCallback): void {
-    if (this._isRunning) this.stop();
-
+    this.stop(); // Safe, clean restart
     this.currentIndex = 0;
     this._isRunning = true;
     this.runNext(onComplete);
   }
 
-  /** Остановить последовательность */
   stop(): void {
     if (this.timeoutId !== null) {
       clearTimeout(this.timeoutId);
@@ -53,7 +41,6 @@ export class Sequence {
     this._isRunning = false;
   }
 
-  /** Очистить все шаги */
   clear(): void {
     this.stop();
     this.steps = [];
@@ -61,6 +48,7 @@ export class Sequence {
   }
 
   private runNext(onComplete?: SequenceCompleteCallback): void {
+    // CRITICAL FIX: Guard clause checked immediately at every tick or recursive execution entry
     if (!this._isRunning) return;
 
     if (this.currentIndex >= this.steps.length) {
@@ -74,9 +62,15 @@ export class Sequence {
 
     if (step.type === "callback") {
       step.action();
+      
+      // CRITICAL FIX: Verify that the callback action did not invoke a clear() or stop() 
+      // which sets _isRunning to false midway through execution before spinning up recursion.
+      if (!this._isRunning) return;
+      
       this.runNext(onComplete);
     } else if (step.type === "wait") {
       this.timeoutId = window.setTimeout(() => {
+        this.timeoutId = null; // Clean out pointer ref
         this.runNext(onComplete);
       }, step.duration);
     }
