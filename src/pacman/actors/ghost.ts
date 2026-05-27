@@ -6,10 +6,6 @@ import { eventBus } from "../core/eventBus.js";
 import { findLairExit, findShortestPath } from "../utils.js";
 import { Actor } from "./actor.js";
 
-/**
- * Призрак — враг Пакмана.
- * Имеет 4 состояния: CHASE, SCATTER, FRIGHTENED, EATEN.
- */
 export class Ghost extends Actor {
   public name: string;
   public defaultColor: string;
@@ -29,7 +25,6 @@ export class Ghost extends Actor {
   private isFlashing: boolean = false;
   private flashSpeed: number = 200;
 
-  // In Ghost.ts constructor
   constructor(config: GhostConfig) {
     super(CFG_CANVAS.canvasIds.ghosts);
     this.name = config.name;
@@ -121,13 +116,11 @@ export class Ghost extends Actor {
   // --- Update ---
 
   update(dt: number): void {
-    // 1. Path routing overrides take precedence (EATEN or exiting lair)
     if (this.path.length > 0 || this.currentPathTarget !== null) {
       this.moveAlongPath(dt);
       return;
     }
 
-    // 2. Fallback to normal map grid-locked navigation loops
     if (this.isAtTileCenter(dt)) {
       if (this.willHitWall(dt)) {
         this.snapToCenter();
@@ -157,9 +150,7 @@ export class Ghost extends Actor {
   private moveAlongPath(dt: number): void {
     let budgetDistance = this.speed * dt;
 
-    // Process movement tracking as long as distance allocation remains
     while (budgetDistance > 0) {
-      // If we don't have a specific coordinate target, look at the front of our path stack
       if (!this.currentPathTarget) {
         if (this.path.length > 0) {
           const nextTileStr = this.path[0];
@@ -169,7 +160,6 @@ export class Ghost extends Actor {
             y: ty * this.tileSize + this.tileSize / 2,
           };
         } else {
-          // Both path array and intermediate target are completely exhausted
           break;
         }
       }
@@ -178,7 +168,6 @@ export class Ghost extends Actor {
       const dy = this.currentPathTarget.y - this.y;
       const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
 
-      // Map looking angles directly onto our animation tracking system
       if (distanceToTarget > 0.001) {
         if (Math.abs(dx) > Math.abs(dy)) {
           this.direction = { dx: Math.sign(dx), dy: 0 };
@@ -188,18 +177,15 @@ export class Ghost extends Actor {
       }
 
       if (distanceToTarget <= budgetDistance) {
-        // Snap perfectly to this junction point and deduct the distance spent
         this.x = this.currentPathTarget.x;
         this.y = this.currentPathTarget.y;
         budgetDistance -= distanceToTarget;
 
-        // Target achieved, pop it off our collections
         this.currentPathTarget = null;
         if (this.path.length > 0) {
           this.path.shift();
         }
 
-        // Check if path is exhausted, handling state swaps or exits mid-frame safely
         if (this.path.length === 0) {
           if (this.isReturningHome) {
             const previousState = this.state;
@@ -216,11 +202,9 @@ export class Ghost extends Actor {
 
             eventBus.emit("ghost:returned_home", { ghostName: this.name });
 
-            // Re-populate path configuration instantly; loop keeps consuming remaining budgetDistance
             this.calculateExitPath();
           } else {
             this.getRandomDirection();
-            // Drop out of pathing mode to let regular update cycle take over for the remainder of the frame
             if (
               budgetDistance > 0 &&
               (this.direction.dx !== 0 || this.direction.dy !== 0) &&
@@ -233,17 +217,15 @@ export class Ghost extends Actor {
           }
         }
       } else {
-        // Target is further away than this frame's remaining budget. Move linearly toward it.
         this.x += (dx / distanceToTarget) * budgetDistance;
         this.y += (dy / distanceToTarget) * budgetDistance;
-        budgetDistance = 0; // Budget fully spent
+        budgetDistance = 0;
       }
     }
   }
 
   private isAtTileCenter(dt: number): boolean {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    // Use maximum possible velocity profile for tolerance matching to prevent axis overshooting
     const maxSpeed = Math.max(this.defaultSpeed, this.eatenSpeed, this.speed);
     const tolerance = maxSpeed * dt;
     return (
@@ -406,28 +388,20 @@ export class Ghost extends Actor {
     const top = this.y - s / 2;
 
     let primaryColor = this.defaultColor;
-    let coreGradientTop = this.defaultColor;
-    let coreGradientBottom = "#000000"; // Deep base fade
     let glowColor = this.defaultColor;
-    let fillOpacity = 0.45; // Increased from 0.15 for a much more solid body presence
+    let fillOpacity = 0.75;
     let shouldDrawBody = true;
 
-    // Determine state color schemes and enhance the blue contrast
     if (this.state === "FRIGHTENED") {
       if (this.isFlashing) {
         const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        primaryColor = isWhite ? "#FFFFFF" : "#00d9ff"; // Electric high-vis cyan
-        glowColor = isWhite ? "#FFFFFF" : "#0055ff";
-        coreGradientTop = isWhite ? "#FFFFFF" : "#0077ff";
-        coreGradientBottom = isWhite ? "#B0B0B0" : "#001144";
-        fillOpacity = isWhite ? 0.7 : 0.55;
+        primaryColor = isWhite ? "#FFFFFF" : "#00f0ff";
+        glowColor = isWhite ? "#FFFFFF" : "#0ff";
+        fillOpacity = isWhite ? 0.85 : 0.7;
       } else {
-        // High-contrast neon cyan/blue mix to pop perfectly off dark backgrounds
-        primaryColor = "#00f3ff";
-        glowColor = "#0055ff";
-        coreGradientTop = "#00bdff";
-        coreGradientBottom = "#001155";
-        fillOpacity = 0.55;
+        primaryColor = "#00f0ff";
+        glowColor = "#0ff";
+        fillOpacity = 0.7;
       }
     } else if (this.state === "EATEN") {
       shouldDrawBody = false;
@@ -437,57 +411,44 @@ export class Ghost extends Actor {
     const timeScale = isGamePlaying ? Date.now() * 0.003 : 0;
 
     if (shouldDrawBody) {
-      // 1. Biological breathing scale translation matrix
-      const breath = isGamePlaying ? Math.sin(timeScale * 2.2) * 3.5 : 0;
-      const breathPercentY = breath * 0.01;
+      const breath = isGamePlaying ? Math.sin(timeScale * 2.2) * 2.2 : 0;
 
       ctx.save();
-      // Anchor expansion from the absolute center baseline of the tile coordinate
       ctx.translate(this.x, top + s);
-      ctx.scale(1 + breathPercentY * 1.2, 1 - breathPercentY);
+      ctx.scale(1 + breath * 0.006, 1 - breath * 0.006);
       ctx.translate(-this.x, -(top + s));
 
-      // 2. Layer A: High-Visibility Solid/Translucent Core Gradient
+      // Body gradient fill
       ctx.save();
       this.traceMasterGhostShape(left, top, s, timeScale);
       ctx.clip();
 
-      let bodyGrad = ctx.createLinearGradient(left, top, left, top + s);
-      bodyGrad.addColorStop(0, coreGradientTop);
-      bodyGrad.addColorStop(1, coreGradientBottom);
-
+      const bodyGrad = ctx.createLinearGradient(left, top, left, top + s);
+      bodyGrad.addColorStop(0, primaryColor);
+      bodyGrad.addColorStop(0.8, "#000000");
       ctx.globalAlpha = fillOpacity;
       ctx.fillStyle = bodyGrad;
       ctx.fillRect(left - 2, top - 2, s + 4, s + 4);
       ctx.restore();
 
-      // 3. Layer B: Premium Clean Neon Glow Border
+      // Neon outline
       ctx.save();
-      ctx.shadowBlur = s * 0.5; // Slightly larger bloom to emphasize position
+      ctx.shadowBlur = s * 0.45;
       ctx.shadowColor = glowColor;
       ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = Math.max(2.0, s * 0.085); // Thickened stroke edge for clarity
+      ctx.lineWidth = 2.4;
       this.traceMasterGhostShape(left, top, s, timeScale);
       ctx.stroke();
       ctx.restore();
 
-      ctx.restore(); // End of breathing translation matrix
+      ctx.restore();
     }
 
-    // 4. Layer C: Sentient Ocular Array
     const dir = this.getDirectionLabel();
-    this.drawEyes(
-      left,
-      top,
-      s,
-      dir,
-      isGamePlaying ? Math.sin(timeScale * 2.2) * 3.5 : 0,
-    );
+    const breathVal = isGamePlaying ? Math.sin(timeScale * 2.2) * 2.2 : 0;
+    this.drawEyes(left, top, s, dir, breathVal);
   }
 
-  /**
-   * Generates a definitive, high-accuracy master vector boundary
-   */
   private traceMasterGhostShape(
     left: number,
     top: number,
@@ -496,14 +457,12 @@ export class Ghost extends Actor {
   ): void {
     const ctx = this.ctx;
     const centerX = left + s / 2;
-    const waveHeight = s * 0.06; // Tight, optimized amplitude ceiling for stable reading profiles
+    const waveHeight = s * 0.06;
     const waveCount = 3;
 
     ctx.beginPath();
-    // Dome top perimeter configuration
     ctx.arc(centerX, top + s / 2, s / 2, Math.PI, 0, false);
 
-    // Smooth master mathematical base wave loop
     ctx.lineTo(left + s, top + s - waveHeight);
     const precisionSteps = 40;
     const waveOffset = timeScale * 1.8;
@@ -529,7 +488,6 @@ export class Ghost extends Actor {
   ): void {
     const ctx = this.ctx;
 
-    // Compute targeted look angles mapped to actual facing direction labels
     let lookX = 0;
     let lookY = 0;
     const pupilOffset = s * 0.06;
@@ -549,37 +507,48 @@ export class Ghost extends Actor {
         break;
     }
 
-    // Track vertical frame height shift linked directly with the breathing cycle context
-    const finalEyeY = top + s * 0.48 + breath * 0.04;
-    const eyeX1 = left + s * 0.32;
-    const eyeX2 = left + s * 0.68;
+    const finalEyeY = top + s * 0.44 + breath * 0.02;
+    const eyeX1 = left + s * 0.3;
+    const eyeX2 = left + s * 0.7;
 
     if (this.state !== "FRIGHTENED") {
-      // Sclera base lens vector
+      // White sclera
       ctx.fillStyle = "#FFFFFF";
       ctx.beginPath();
-      ctx.arc(eyeX1, finalEyeY, s * 0.1, 0, Math.PI * 2);
-      ctx.arc(eyeX2, finalEyeY, s * 0.1, 0, Math.PI * 2);
+      ctx.arc(eyeX1, finalEyeY, s * 0.11, 0, Math.PI * 2);
+      ctx.arc(eyeX2, finalEyeY, s * 0.11, 0, Math.PI * 2);
       ctx.fill();
 
-      // Active targeted iris core tracker
-      const irisColor = this.state === "EATEN" ? "#00f3ff" : this.defaultColor;
+      // Colored iris
+      const irisColor = this.state === "EATEN" ? "#00f0ff" : this.defaultColor;
       ctx.fillStyle = irisColor;
       ctx.beginPath();
-      ctx.arc(eyeX1 + lookX, finalEyeY + lookY, s * 0.045, 0, Math.PI * 2);
-      ctx.arc(eyeX2 + lookX, finalEyeY + lookY, s * 0.045, 0, Math.PI * 2);
+      ctx.arc(eyeX1 + lookX, finalEyeY + lookY, s * 0.05, 0, Math.PI * 2);
+      ctx.arc(eyeX2 + lookX, finalEyeY + lookY, s * 0.05, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Black pupil
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(eyeX1 + lookX * 1.2, finalEyeY + lookY * 1.2, s * 0.022, 0, Math.PI * 2);
+      ctx.arc(eyeX2 + lookX * 1.2, finalEyeY + lookY * 1.2, s * 0.022, 0, Math.PI * 2);
+      ctx.fill();
+
+      // White glint
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(eyeX1 + lookX * 0.5, finalEyeY - 1.8, s * 0.016, 0, Math.PI * 2);
+      ctx.arc(eyeX2 + lookX * 0.5, finalEyeY - 1.8, s * 0.016, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      // Enhanced arcade expressions for the blue vulnerable phase
-      ctx.fillStyle = "#ffcc00"; // High visibility retro tracking yellow
-      ctx.shadowBlur = s * 0.15;
+      // Frightened eyes
+      ctx.fillStyle = "#ffcc00";
+      ctx.shadowBlur = s * 0.12;
       ctx.shadowColor = "#ffcc00";
-
       ctx.beginPath();
       ctx.arc(eyeX1, finalEyeY, s * 0.04, 0, Math.PI * 2);
       ctx.arc(eyeX2, finalEyeY, s * 0.04, 0, Math.PI * 2);
       ctx.fill();
-
       ctx.shadowBlur = 0;
     }
   }

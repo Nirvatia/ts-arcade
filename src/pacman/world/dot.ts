@@ -20,8 +20,7 @@ export class Dot implements Drawable, Collectible {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
     this.tileSize = CFG_CANVAS.tile.size;
-    // Perfectly matched to the pill architecture line width boundary
-    this.dotSize = this.tileSize * 0.18;
+    this.dotSize = this.tileSize * 0.13; // Balanced size
     this.initEventListeners();
   }
 
@@ -105,24 +104,30 @@ export class Dot implements Drawable, Collectible {
     this.clearCanvas();
     const ctx = this.ctx;
 
-    ctx.strokeStyle = "#00778c";
-    ctx.lineWidth = 1.5;
-
     this.positions.forEach((pos) => {
       const [i, j] = pos.split(",").map(Number);
       const cx = this.tileSize * j + this.tileSize / 2;
       const cy = this.tileSize * i + this.tileSize / 2;
-      const half = this.dotSize / 2;
+      const r = this.dotSize;
 
-      // Draw the open vector crosshair (+)
+      ctx.save();
+      
+      // Main dot with moderate glow
+      ctx.shadowColor = "#0a8a9a";
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = "#0aaabc";
       ctx.beginPath();
-      // Horizontal node axis
-      ctx.moveTo(cx - half, cy);
-      ctx.lineTo(cx + half, cy);
-      // Vertical node axis
-      ctx.moveTo(cx, cy - half);
-      ctx.lineTo(cx, cy + half);
-      ctx.stroke();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Subtle center highlight
+      ctx.shadowBlur = 2;
+      ctx.fillStyle = "#c0f0ff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
     });
   }
 }

@@ -20,7 +20,7 @@ export class Pacman extends Actor {
     super(CFG_CANVAS.canvasIds.pacman);
     this.registry = GameRegistry.getInstance();
     this.speed = this.tileSize * 4.4;
-    this.r = this.tileSize * 0.45;
+    this.r = this.tileSize * 0.5;
   }
 
   // --- Lifecycle ---
@@ -265,38 +265,38 @@ export class Pacman extends Actor {
       mouthAngle = maxMouthAngle * 0.5;
     }
 
+    const startAngle = mouthAngle;
+    const endAngle = 2 * Math.PI - mouthAngle;
+
     this.ctx.save();
     this.ctx.translate(cx, cy);
     this.ctx.rotate(rotation);
 
-    // Glow behind
-    const glowColor = this.isBuffed ? "#00ffff" : "#00ff66";
-    this.ctx.shadowColor = glowColor;
-    this.ctx.shadowBlur = 8;
-
-    // Body - bright fill with slight gradient
-    const gradient = this.ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
-    if (this.isBuffed) {
-      gradient.addColorStop(0, "#aaffff");
-      gradient.addColorStop(0.5, "#00ffff");
-      gradient.addColorStop(1, "#009999");
-    } else {
-      gradient.addColorStop(0, "#aaffaa");
-      gradient.addColorStop(0.5, "#00ff66");
-      gradient.addColorStop(1, "#009933");
-    }
+    const bodyColor = this.isBuffed ? "#00c8d4" : "#e6c800";
+    const strokeColor = this.isBuffed ? "#008a94" : "#b8a000";
     
-    this.ctx.fillStyle = gradient;
+    // Very subtle outer glow
+    this.ctx.shadowColor = bodyColor;
+    this.ctx.shadowBlur = 4;
+    
+    // Solid body
+    this.ctx.fillStyle = bodyColor;
+    this.ctx.strokeStyle = strokeColor;
+    this.ctx.lineWidth = 1.5;
     this.ctx.beginPath();
-    this.ctx.arc(0, 0, r, mouthAngle, 2 * Math.PI - mouthAngle);
+    this.ctx.arc(0, 0, r - 1, startAngle, endAngle);
     this.ctx.lineTo(0, 0);
     this.ctx.closePath();
     this.ctx.fill();
-
-    // Sharp outline
-    this.ctx.shadowBlur = 0;
-    this.ctx.strokeStyle = this.isBuffed ? "#00ffff" : "#00ff66";
+    this.ctx.stroke();
+    
+    // Inner highlight arc
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
     this.ctx.lineWidth = 1.5;
+    this.ctx.shadowBlur = 0;
+    this.ctx.shadowColor = "transparent";
+    this.ctx.beginPath();
+    this.ctx.arc(0, 0, r * 0.6, startAngle + 0.3, endAngle - 0.3);
     this.ctx.stroke();
 
     this.ctx.restore();
@@ -316,34 +316,34 @@ export class Pacman extends Actor {
 
     const startAngle = Math.PI / 4;
     const mouthAngle = startAngle + (Math.PI - startAngle) * p;
+    const start = mouthAngle;
+    const end = 2 * Math.PI - mouthAngle;
 
-    // Glow
-    this.ctx.shadowColor = "#00ff66";
-    this.ctx.shadowBlur = 6;
-
-    // Gradient body
-    const gradient = this.ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
-    gradient.addColorStop(0, "#aaffaa");
-    gradient.addColorStop(0.5, "#00ff66");
-    gradient.addColorStop(1, "#009933");
-    
-    this.ctx.fillStyle = gradient;
-    this.ctx.beginPath();
-    this.ctx.moveTo(0, 0);
-    this.ctx.arc(0, 0, r, mouthAngle, 2 * Math.PI - mouthAngle);
-    this.ctx.lineTo(0, 0);
-    this.ctx.closePath();
-    this.ctx.fill();
-
-    // Outline
-    this.ctx.shadowBlur = 0;
-    this.ctx.strokeStyle = "#00ff66";
+    this.ctx.strokeStyle = "#e6c800";
+    this.ctx.shadowColor = "#e6c800";
+    this.ctx.shadowBlur = 3 * (1 - p);
     this.ctx.lineWidth = 1.5;
-    this.ctx.stroke();
 
-    // Final flash
+    const collapseScale = 1 - p; 
+    if (collapseScale > 0.05) {
+      for (let currentR = r * collapseScale; currentR > r * 0.05; currentR -= r * 0.3) {
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, currentR, start, end, false);
+        this.ctx.stroke();
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(Math.cos(start) * currentR, Math.sin(start) * currentR);
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(Math.cos(end) * currentR, Math.sin(end) * currentR);
+        this.ctx.stroke();
+      }
+    }
+
     if (p > 0.9) {
       this.ctx.fillStyle = "#ffffff";
+      this.ctx.shadowBlur = 8;
+      this.ctx.shadowColor = "#ffffff";
       this.ctx.beginPath();
       this.ctx.arc(0, 0, r * (1 - p) * 8, 0, Math.PI * 2);
       this.ctx.fill();

@@ -5,17 +5,11 @@ import { CanvasLayer } from "../core/canvasLayer.js";
 import { GameState } from "../game/gameState.js";
 import type { Drawable } from "../interfaces.js";
 
-/**
- * Отрисовывает лабиринт (стены, повороты) на canvas.
- * Статический объект — перерисовывается только при смене уровня
- * или по флагу needsRedraw.
- */
 export class Maze implements Drawable {
   private gameState: GameState;
   private canvasLayer: CanvasLayer;
   private tileSize: number;
   private lineWidth: number;
-  private lineColor: string;
 
   private _needsRedraw: boolean = true;
   private _isFlashing: boolean = false;
@@ -24,8 +18,7 @@ export class Maze implements Drawable {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.maze);
     this.tileSize = CFG_CANVAS.tile.size;
-    this.lineWidth = Math.floor((this.tileSize * 20) / 100);
-    this.lineColor = this.gameState.levelData.mapColor;
+    this.lineWidth = Math.max(2, Math.floor(this.tileSize * 0.08));
   }
 
   get canvas(): HTMLCanvasElement {
@@ -56,7 +49,6 @@ export class Maze implements Drawable {
     this._needsRedraw = true;
   }
 
-  /** Очистить холст лабиринта */
   clearCanvas(): void {
     this.canvasLayer.clear();
   }
@@ -68,115 +60,90 @@ export class Maze implements Drawable {
   reset(): void {
     this.clearCanvas();
     this.canvasLayer.resize();
-    this.lineColor = this.gameState.levelData.mapColor; // FIX
     this._needsRedraw = true;
   }
 
-  /**
-   * Отрисовка лабиринта.
-   * При isFlashing = true применяет эффект пульсации прозрачности.
-   */
   draw(): void {
     const map = this.gameState.levelData.map;
+    const ctx = this.ctx;
+    const ts = this.tileSize;
+    const lw = this.lineWidth;
+    const half = ts / 2;
 
-    this.lineColor = this.gameState.levelData.mapColor;
-    this.ctx.strokeStyle = this.lineColor;
-    this.ctx.lineWidth = this.lineWidth;
-    this.ctx.save();
+    ctx.save();
+    ctx.strokeStyle = "#1a3a4a";
+    ctx.lineWidth = lw;
+    ctx.lineCap = "round";
+    ctx.shadowColor = "#0a3a4a";
+    ctx.shadowBlur = 3;
 
-    // Эффект мигания лабиринта через прозрачность
     if (this._isFlashing) {
       const time = Date.now() / 150;
-      this.ctx.globalAlpha = 0.3 + Math.sin(time) * 0.3;
-    } else {
-      this.ctx.globalAlpha = 1.0;
+      ctx.globalAlpha = 0.3 + Math.sin(time) * 0.3;
     }
 
     for (let i = 0; i < map.length; i++) {
       for (let j = 0; j < map[i].length; j++) {
         const tile = map[i][j];
+        const x = j * ts;
+        const y = i * ts;
 
         switch (tile) {
           case "WH":
-            this.drawHorizontalLine(i, j);
+            // Horizontal line through center
+            ctx.beginPath();
+            ctx.moveTo(x, y + half);
+            ctx.lineTo(x + ts, y + half);
+            ctx.stroke();
             break;
+
           case "WV":
-            this.drawVerticalLine(i, j);
+            // Vertical line through center
+            ctx.beginPath();
+            ctx.moveTo(x + half, y);
+            ctx.lineTo(x + half, y + ts);
+            ctx.stroke();
             break;
+
           case "TL":
-            this.drawTopLeftCurve(i, j);
+            // Top-left corner curve
+            ctx.beginPath();
+            ctx.moveTo(x + half, y + ts);
+            ctx.lineTo(x + half, y + half);
+            ctx.lineTo(x + ts, y + half);
+            ctx.stroke();
             break;
+
           case "TR":
-            this.drawTopRightCurve(i, j);
+            // Top-right corner curve
+            ctx.beginPath();
+            ctx.moveTo(x, y + half);
+            ctx.lineTo(x + half, y + half);
+            ctx.lineTo(x + half, y + ts);
+            ctx.stroke();
             break;
-          case "BR":
-            this.drawBottomRightCurve(i, j);
-            break;
+
           case "BL":
-            this.drawBottomLeftCurve(i, j);
+            // Bottom-left corner curve
+            ctx.beginPath();
+            ctx.moveTo(x + half, y);
+            ctx.lineTo(x + half, y + half);
+            ctx.lineTo(x + ts, y + half);
+            ctx.stroke();
+            break;
+
+          case "BR":
+            // Bottom-right corner curve
+            ctx.beginPath();
+            ctx.moveTo(x, y + half);
+            ctx.lineTo(x + half, y + half);
+            ctx.lineTo(x + half, y);
+            ctx.stroke();
             break;
         }
       }
     }
 
-    this.ctx.restore();
-  }
-
-  // --- Приватные методы отрисовки ---
-
-  private drawLine(x1: number, y1: number, x2: number, y2: number): void {
-    this.ctx.beginPath();
-    this.ctx.moveTo(x1, y1);
-    this.ctx.lineTo(x2, y2);
-    this.ctx.stroke();
-    this.ctx.closePath();
-  }
-
-  private drawCurve(
-    x1: number, y1: number,
-    cx: number, cy: number,
-    x2: number, y2: number,
-  ): void {
-    this.ctx.beginPath();
-    this.ctx.moveTo(x1, y1);
-    this.ctx.quadraticCurveTo(cx, cy, x2, y2);
-    this.ctx.stroke();
-    this.ctx.closePath();
-  }
-
-  private drawHorizontalLine(i: number, j: number): void {
-    const x = this.tileSize * j;
-    const y = this.tileSize * i + this.tileSize / 2;
-    this.drawLine(x, y, x + this.tileSize, y);
-  }
-
-  private drawVerticalLine(i: number, j: number): void {
-    const x = this.tileSize * j + this.tileSize / 2;
-    const y = this.tileSize * i;
-    this.drawLine(x, y, x, y + this.tileSize);
-  }
-
-  private drawTopRightCurve(i: number, j: number): void {
-    const x = this.tileSize * j + this.tileSize / 2;
-    const y = this.tileSize * i + this.tileSize;
-    this.drawCurve(x, y, x, y - this.tileSize / 2, x - this.tileSize / 2, y - this.tileSize / 2);
-  }
-
-  private drawTopLeftCurve(i: number, j: number): void {
-    const x = this.tileSize * j + this.tileSize / 2;
-    const y = this.tileSize * i + this.tileSize;
-    this.drawCurve(x, y, x, y - this.tileSize / 2, x + this.tileSize / 2, y - this.tileSize / 2);
-  }
-
-  private drawBottomLeftCurve(i: number, j: number): void {
-    const x = this.tileSize * j + this.tileSize / 2;
-    const y = this.tileSize * i;
-    this.drawCurve(x, y, x, y + this.tileSize / 2, x + this.tileSize / 2, y + this.tileSize / 2);
-  }
-
-  private drawBottomRightCurve(i: number, j: number): void {
-    const x = this.tileSize * j + this.tileSize / 2;
-    const y = this.tileSize * i;
-    this.drawCurve(x, y, x, y + this.tileSize / 2, x - this.tileSize / 2, y + this.tileSize / 2);
+    ctx.restore();
   }
 }
