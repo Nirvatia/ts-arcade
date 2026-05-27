@@ -116,6 +116,8 @@ export class Ghost extends Actor {
   // --- Update ---
 
   update(dt: number): void {
+    if (this.gameState.mode !== "PLAYING") return;
+    
     if (this.path.length > 0 || this.currentPathTarget !== null) {
       this.moveAlongPath(dt);
       return;

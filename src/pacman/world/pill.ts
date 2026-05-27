@@ -92,6 +92,8 @@ export class Pill implements Updatable, Collectible {
   }
 
   update(dt: number): void {
+    if (this.gameState.mode !== "PLAYING") return;
+    
     this.animationCounter += 3 * dt;
   }
 
