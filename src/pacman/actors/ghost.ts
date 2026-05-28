@@ -1,4 +1,3 @@
-// src/entities/Ghost.ts
 import { CFG_CANVAS } from "../config/canvas.js";
 import type { GhostConfig } from "../config/ghosts.js";
 import { Collision } from "../core/collision.js";
@@ -207,10 +206,13 @@ export class Ghost extends Actor {
             this.calculateExitPath();
           } else {
             this.getRandomDirection();
+            
+            // ИСПРАВЛЕНИЕ: Передаем точное оставшееся расстояние (budgetDistance) вместо 
+            // неявного вычисления шага времени через скорость, что могло вызывать перелёты стен.
             if (
               budgetDistance > 0 &&
               (this.direction.dx !== 0 || this.direction.dy !== 0) &&
-              !this.willHitWall(budgetDistance / this.speed)
+              !this.willHitWallDirect(budgetDistance)
             ) {
               this.x += this.direction.dx * budgetDistance;
               this.y += this.direction.dy * budgetDistance;
@@ -244,9 +246,17 @@ export class Ghost extends Actor {
 
   private willHitWall(dt: number): boolean {
     if (this.direction.dx === 0 && this.direction.dy === 0) return false;
-
     const moveDistance = this.speed * dt;
-    const lookAheadDistance = moveDistance + this.r;
+    return this.willHitWallDirect(moveDistance);
+  }
+
+  /**
+   * ИСПРАВЛЕНИЕ: Изолированный метод для проверки коллизий по прямому расстоянию.
+   * Устраняет баг, когда изменённый во время EATEN состояния `this.speed` ломал 
+   * расчёт радиуса движения look-ahead при выходе из домика.
+   */
+  private willHitWallDirect(distance: number): boolean {
+    const lookAheadDistance = distance + this.r;
 
     const boundX = this.x + this.direction.dx * lookAheadDistance;
     const boundY = this.y + this.direction.dy * lookAheadDistance;
@@ -320,7 +330,7 @@ export class Ghost extends Actor {
   beEaten(): void {
     const previousState = this.state;
     this.state = "EATEN";
-    this.speed = this.defaultSpeed * 2;
+    this.speed = this.eatenSpeed; // ИСПРАВЛЕНИЕ: Используем выделенный eatenSpeed вместо defaultSpeed * 2 для чистоты типов
     this.isReturningHome = true;
 
     eventBus.emit("ghost:state_changed", {
@@ -383,7 +393,7 @@ export class Ghost extends Actor {
     return "RIGHT";
   }
 
- draw(): void {
+  draw(): void {
     const ctx = this.ctx;
     const s = this.tileSize;
     const left = this.x - s / 2;
@@ -554,6 +564,4 @@ export class Ghost extends Actor {
     ctx.lineTo(left, top + s - waveHeight);
     ctx.closePath();
   }
-
-  
 }

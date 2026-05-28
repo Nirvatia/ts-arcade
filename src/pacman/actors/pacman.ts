@@ -16,10 +16,21 @@ export class Pacman extends Actor {
 
   private deathTimer: number = 0;
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
-  
+
   // VFX state
-  private trailParticles: { x: number; y: number; life: number; maxLife: number }[] = [];
-  private eatParticles: { x: number; y: number; life: number; maxLife: number; color: string }[] = [];
+  private trailParticles: {
+    x: number;
+    y: number;
+    life: number;
+    maxLife: number;
+  }[] = [];
+  private eatParticles: {
+    x: number;
+    y: number;
+    life: number;
+    maxLife: number;
+    color: string;
+  }[] = [];
   private ghostEatFlash: number = 0;
 
   private normalSpeed: number;
@@ -77,7 +88,7 @@ export class Pacman extends Actor {
     this.updateTrail(dt);
     this.updateEatParticles(dt);
     if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
-    
+
     if (this.state === "DYING") {
       this.deathTimer += dt;
       if (this.deathTimer >= this.config.deathAnimationDuration) {
@@ -88,12 +99,12 @@ export class Pacman extends Actor {
     if (this.gameState.mode !== "PLAYING") return;
 
     this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
-    
+
     // Spawn trail particles while moving
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
       this.spawnTrailParticle();
     }
-    
+
     this.updateMovement(dt);
     this.teleport();
 
@@ -114,7 +125,11 @@ export class Pacman extends Actor {
   }
 
   private updateMovement(dt: number): void {
-    if (this.direction.dx === 0 && this.direction.dy === 0 && this.nextDirection) {
+    if (
+      this.direction.dx === 0 &&
+      this.direction.dy === 0 &&
+      this.nextDirection
+    ) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
     }
@@ -137,7 +152,7 @@ export class Pacman extends Actor {
       this.lastDirection = { ...this.direction };
     }
 
-    this.smoothAlignToAxis();
+    this.smoothAlignToAxis(dt);
 
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
     this.tryEatFood(tileX, tileY);
@@ -157,7 +172,10 @@ export class Pacman extends Actor {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
 
-    if (this.nextDirection.dx === -this.direction.dx && this.nextDirection.dy === -this.direction.dy) {
+    if (
+      this.nextDirection.dx === -this.direction.dx &&
+      this.nextDirection.dy === -this.direction.dy
+    ) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
       return;
@@ -168,7 +186,9 @@ export class Pacman extends Actor {
     if (Collision.isWall(targetTileX, targetTileY)) return;
 
     const turnThreshold = this.tileSize * this.config.turnThreshold;
-    const distanceToCenter = Math.sqrt((this.x - centerX) ** 2 + (this.y - centerY) ** 2);
+    const distanceToCenter = Math.sqrt(
+      (this.x - centerX) ** 2 + (this.y - centerY) ** 2,
+    );
 
     if (distanceToCenter < turnThreshold) {
       if (this.nextDirection.dx !== 0) this.y = centerY;
@@ -178,14 +198,16 @@ export class Pacman extends Actor {
     }
   }
 
-  private smoothAlignToAxis(): void {
+  private smoothAlignToAxis(dt: number): void {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    const pullSpeed = this.config.axisAlignSpeed;
+
+    const pullFactor = 1 - Math.exp(-this.config.axisAlignSpeed * dt);
+
     if (this.direction.dx !== 0) {
-      this.y += (centerY - this.y) * pullSpeed;
+      this.y += (centerY - this.y) * pullFactor;
     }
     if (this.direction.dy !== 0) {
-      this.x += (centerX - this.x) * pullSpeed;
+      this.x += (centerX - this.x) * pullFactor;
     }
   }
 
@@ -260,7 +282,7 @@ export class Pacman extends Actor {
         y: cy,
         life: 0.2 + Math.random() * 0.2,
         maxLife: 0.2 + Math.random() * 0.2,
-        color: '#0ff',
+        color: "#0ff",
       });
     }
   }
@@ -275,7 +297,7 @@ export class Pacman extends Actor {
         y: cy + Math.sin(angle) * 5,
         life: 0.4 + Math.random() * 0.3,
         maxLife: 0.4 + Math.random() * 0.3,
-        color: '#f0f',
+        color: "#f0f",
       });
     }
   }
@@ -289,7 +311,7 @@ export class Pacman extends Actor {
         y: gy + Math.sin(angle) * 10,
         life: 0.5 + Math.random() * 0.5,
         maxLife: 0.5 + Math.random() * 0.5,
-        color: '#fff',
+        color: "#fff",
       });
     }
   }
@@ -327,7 +349,7 @@ export class Pacman extends Actor {
     // Draw VFX behind Pacman
     this.drawTrailVFX();
     this.drawEatVFX();
-    
+
     if (this.state === "DYING") {
       this.drawDead();
     } else {
@@ -337,10 +359,10 @@ export class Pacman extends Actor {
 
   private drawTrailVFX(): void {
     if (this.state === "DYING") return;
-    
+
     const ctx = this.ctx;
-    const color = this.isBuffed ? '#0ff' : '#e6c800';
-    
+    const color = this.isBuffed ? "#0ff" : "#e6c800";
+
     for (const p of this.trailParticles) {
       const alpha = p.life / p.maxLife;
       const size = 2 * alpha;
@@ -358,7 +380,7 @@ export class Pacman extends Actor {
 
   private drawEatVFX(): void {
     const ctx = this.ctx;
-    
+
     for (const p of this.eatParticles) {
       const alpha = p.life / p.maxLife;
       const size = 3 * alpha;
@@ -381,7 +403,10 @@ export class Pacman extends Actor {
   }
 
   private getRotation(): number {
-    const dir = this.direction.dx !== 0 || this.direction.dy !== 0 ? this.direction : this.lastDirection;
+    const dir =
+      this.direction.dx !== 0 || this.direction.dy !== 0
+        ? this.direction
+        : this.lastDirection;
     if (dir.dx === -1) return Math.PI;
     if (dir.dx === 1) return 0;
     if (dir.dy === -1) return -Math.PI / 2;
@@ -398,7 +423,9 @@ export class Pacman extends Actor {
 
     let mouthAngle: number;
     if (isMoving) {
-      mouthAngle = Math.abs(Math.sin(Date.now() * this.config.mouthSpeed)) * this.config.maxMouthAngle;
+      mouthAngle =
+        Math.abs(Math.sin(Date.now() * this.config.mouthSpeed)) *
+        this.config.maxMouthAngle;
     } else {
       mouthAngle = this.config.idleMouthAngle;
     }
@@ -406,7 +433,9 @@ export class Pacman extends Actor {
     const startAngle = mouthAngle;
     const endAngle = 2 * Math.PI - mouthAngle;
 
-    const colors = this.isBuffed ? this.config.colors.buffed : this.config.colors.normal;
+    const colors = this.isBuffed
+      ? this.config.colors.buffed
+      : this.config.colors.normal;
 
     this.ctx.save();
     this.ctx.translate(cx, cy);
@@ -414,7 +443,7 @@ export class Pacman extends Actor {
 
     // Ghost eat flash
     if (this.ghostEatFlash > 0) {
-      this.ctx.shadowColor = '#fff';
+      this.ctx.shadowColor = "#fff";
       this.ctx.shadowBlur = 20 * this.ghostEatFlash;
       this.ctx.fillStyle = `rgba(255,255,255,${0.2 * this.ghostEatFlash})`;
       this.ctx.beginPath();
@@ -425,7 +454,7 @@ export class Pacman extends Actor {
     // Outer glow
     this.ctx.shadowColor = colors.glow;
     this.ctx.shadowBlur = this.ghostEatFlash > 0 ? 12 : 6;
-    
+
     // Solid body
     this.ctx.fillStyle = colors.body;
     this.ctx.strokeStyle = colors.stroke;
@@ -472,7 +501,11 @@ export class Pacman extends Actor {
 
     const collapseScale = 1 - p;
     if (collapseScale > 0.05) {
-      for (let currentR = r * collapseScale; currentR > r * 0.05; currentR -= r * 0.3) {
+      for (
+        let currentR = r * collapseScale;
+        currentR > r * 0.05;
+        currentR -= r * 0.3
+      ) {
         this.ctx.beginPath();
         this.ctx.arc(0, 0, currentR, start, end, false);
         this.ctx.stroke();

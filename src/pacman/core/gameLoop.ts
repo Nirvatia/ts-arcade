@@ -1,5 +1,3 @@
-// src/game/GameLoop.ts
-
 import { GameRegistry } from "../game/gameRegistry.js";
 import { GameState } from "../game/gameState.js";
 import { eventBus } from "./eventBus.js";
@@ -8,7 +6,7 @@ import { Renderer } from "./renderer.js";
 /**
  * Главный игровой цикл.
  * Управляет частотой кадров, вызывает update и render.
- * Включает встроенный мониторинг производительности (FPS, утечки памяти, дропы кадров).
+ * Гарантирует стабильный шаг дельты времени (dt) для физики при падении FPS.
  */
 export class GameLoop {
   private static instance: GameLoop;
@@ -52,6 +50,7 @@ export class GameLoop {
   /** Запустить или продолжить цикл */
   start(): void {
     if (!this.timer) {
+      this.then = performance.now(); // Фиксируем актуальное время при старте сцены
       this.loop();
     }
   }
@@ -71,6 +70,7 @@ export class GameLoop {
     const delta = now - this.then;
 
     if (delta > this.interval) {
+      // Исходное выравнивание интервала
       this.then = now - (delta % this.interval);
       this.frameCount++;
 
@@ -82,8 +82,8 @@ export class GameLoop {
         this.gameState.mode === "PACMAN_DEAD";
 
       if (shouldUpdate) {
-        const dt = delta / 1000;
-        this.registry.getAllUpdatable().forEach((e) => e.update(dt));
+        const fixedDt = 1 / this.fps; // Ровно 0.01666... сек (16.67мс)
+        this.registry.getAllUpdatable().forEach((e) => e.update(fixedDt));
       }
 
       const shouldRender =
