@@ -16,6 +16,11 @@ export class Pacman extends Actor {
 
   private deathTimer: number = 0;
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
+  
+  // VFX state
+  private trailParticles: { x: number; y: number; life: number; maxLife: number }[] = [];
+  private eatParticles: { x: number; y: number; life: number; maxLife: number; color: string }[] = [];
+  private ghostEatFlash: number = 0;
 
   private normalSpeed: number;
   private buffedSpeed: number;
@@ -33,8 +38,6 @@ export class Pacman extends Actor {
     this.r = tileSize * config.radiusMultiplier;
   }
 
-  // --- Lifecycle ---
-
   private get isBuffed(): boolean {
     return this.gameState.isBuffed;
   }
@@ -49,6 +52,9 @@ export class Pacman extends Actor {
     this.nextDirection = null;
     this.lastDirection = { dx: 1, dy: 0 };
     this.speed = this.normalSpeed;
+    this.trailParticles = [];
+    this.eatParticles = [];
+    this.ghostEatFlash = 0;
     this.spawn();
   }
 
@@ -66,9 +72,12 @@ export class Pacman extends Actor {
     console.warn("Pac-Man spawn point (PM) not found on the current map!");
   }
 
-  // --- Update ---
-
   update(dt: number): void {
+    // Update VFX
+    this.updateTrail(dt);
+    this.updateEatParticles(dt);
+    if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
+    
     if (this.state === "DYING") {
       this.deathTimer += dt;
       if (this.deathTimer >= this.config.deathAnimationDuration) {
@@ -80,12 +89,19 @@ export class Pacman extends Actor {
 
     this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
     
+    // Spawn trail particles while moving
+    if (this.direction.dx !== 0 || this.direction.dy !== 0) {
+      this.spawnTrailParticle();
+    }
+    
     this.updateMovement(dt);
     this.teleport();
 
     const collidedGhost = this.getCollidedGhost();
     if (collidedGhost) {
       if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
+        this.spawnGhostEatVFX(collidedGhost.x, collidedGhost.y);
+        this.ghostEatFlash = 1;
         eventBus.emit("command:ghost_eaten", { ghostName: collidedGhost.name });
       } else if (
         !this.isBuffed &&
@@ -98,11 +114,7 @@ export class Pacman extends Actor {
   }
 
   private updateMovement(dt: number): void {
-    if (
-      this.direction.dx === 0 &&
-      this.direction.dy === 0 &&
-      this.nextDirection
-    ) {
+    if (this.direction.dx === 0 && this.direction.dy === 0 && this.nextDirection) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
     }
@@ -145,10 +157,7 @@ export class Pacman extends Actor {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
 
-    if (
-      this.nextDirection.dx === -this.direction.dx &&
-      this.nextDirection.dy === -this.direction.dy
-    ) {
+    if (this.nextDirection.dx === -this.direction.dx && this.nextDirection.dy === -this.direction.dy) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
       return;
@@ -159,9 +168,7 @@ export class Pacman extends Actor {
     if (Collision.isWall(targetTileX, targetTileY)) return;
 
     const turnThreshold = this.tileSize * this.config.turnThreshold;
-    const distanceToCenter = Math.sqrt(
-      (this.x - centerX) ** 2 + (this.y - centerY) ** 2,
-    );
+    const distanceToCenter = Math.sqrt((this.x - centerX) ** 2 + (this.y - centerY) ** 2);
 
     if (distanceToCenter < turnThreshold) {
       if (this.nextDirection.dx !== 0) this.y = centerY;
@@ -202,8 +209,6 @@ export class Pacman extends Actor {
     this.nextDirection = dir;
   }
 
-  // --- Collision ---
-
   private getCollidedGhost(): Ghost | null {
     const ghosts = this.registry.getGhosts();
     for (const g of ghosts) {
@@ -216,6 +221,7 @@ export class Pacman extends Actor {
   private tryEatFood(tileX: number, tileY: number): void {
     const dot = this.registry.getDots();
     if (dot.positions.has(`${tileY},${tileX}`)) {
+      this.spawnDotEatVFX(tileX, tileY);
       eventBus.emit("dot:collect", { position: { i: tileY, j: tileX } });
     }
   }
@@ -226,11 +232,85 @@ export class Pacman extends Actor {
       (pos: { i: number; j: number }) => pos.i === tileY && pos.j === tileX,
     );
     if (pillIndex !== -1) {
+      this.spawnPillEatVFX(tileX, tileY);
       eventBus.emit("power_pill:collect", { position: { i: tileY, j: tileX } });
     }
   }
 
-  // --- Death ---
+  // --- VFX ---
+
+  private spawnTrailParticle(): void {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * this.r * 0.6;
+    this.trailParticles.push({
+      x: this.x + Math.cos(angle) * dist,
+      y: this.y + Math.sin(angle) * dist,
+      life: 0.3 + Math.random() * 0.3,
+      maxLife: 0.3 + Math.random() * 0.3,
+    });
+    if (this.trailParticles.length > 15) this.trailParticles.shift();
+  }
+
+  private spawnDotEatVFX(tileX: number, tileY: number): void {
+    const cx = tileX * this.tileSize + this.tileSize / 2;
+    const cy = tileY * this.tileSize + this.tileSize / 2;
+    for (let i = 0; i < 4; i++) {
+      this.eatParticles.push({
+        x: cx,
+        y: cy,
+        life: 0.2 + Math.random() * 0.2,
+        maxLife: 0.2 + Math.random() * 0.2,
+        color: '#0ff',
+      });
+    }
+  }
+
+  private spawnPillEatVFX(tileX: number, tileY: number): void {
+    const cx = tileX * this.tileSize + this.tileSize / 2;
+    const cy = tileY * this.tileSize + this.tileSize / 2;
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      this.eatParticles.push({
+        x: cx + Math.cos(angle) * 5,
+        y: cy + Math.sin(angle) * 5,
+        life: 0.4 + Math.random() * 0.3,
+        maxLife: 0.4 + Math.random() * 0.3,
+        color: '#f0f',
+      });
+    }
+  }
+
+  private spawnGhostEatVFX(gx: number, gy: number): void {
+    for (let i = 0; i < 20; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 30 + Math.random() * 50;
+      this.eatParticles.push({
+        x: gx + Math.cos(angle) * 10,
+        y: gy + Math.sin(angle) * 10,
+        life: 0.5 + Math.random() * 0.5,
+        maxLife: 0.5 + Math.random() * 0.5,
+        color: '#fff',
+      });
+    }
+  }
+
+  private updateTrail(dt: number): void {
+    for (let i = this.trailParticles.length - 1; i >= 0; i--) {
+      this.trailParticles[i].life -= dt;
+      if (this.trailParticles[i].life <= 0) {
+        this.trailParticles.splice(i, 1);
+      }
+    }
+  }
+
+  private updateEatParticles(dt: number): void {
+    for (let i = this.eatParticles.length - 1; i >= 0; i--) {
+      this.eatParticles[i].life -= dt;
+      if (this.eatParticles[i].life <= 0) {
+        this.eatParticles.splice(i, 1);
+      }
+    }
+  }
 
   triggerDeath(): void {
     if (this.state === "DYING") return;
@@ -244,6 +324,10 @@ export class Pacman extends Actor {
   // --- Draw ---
 
   draw(): void {
+    // Draw VFX behind Pacman
+    this.drawTrailVFX();
+    this.drawEatVFX();
+    
     if (this.state === "DYING") {
       this.drawDead();
     } else {
@@ -251,11 +335,53 @@ export class Pacman extends Actor {
     }
   }
 
+  private drawTrailVFX(): void {
+    if (this.state === "DYING") return;
+    
+    const ctx = this.ctx;
+    const color = this.isBuffed ? '#0ff' : '#e6c800';
+    
+    for (const p of this.trailParticles) {
+      const alpha = p.life / p.maxLife;
+      const size = 2 * alpha;
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 4 * alpha;
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  private drawEatVFX(): void {
+    const ctx = this.ctx;
+    
+    for (const p of this.eatParticles) {
+      const alpha = p.life / p.maxLife;
+      const size = 3 * alpha;
+      const dist = (1 - alpha) * 20;
+      ctx.save();
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 6 * alpha;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      // Diamond particles
+      ctx.moveTo(p.x, p.y - size);
+      ctx.lineTo(p.x + size, p.y);
+      ctx.lineTo(p.x, p.y + size);
+      ctx.lineTo(p.x - size, p.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   private getRotation(): number {
-    const dir =
-      this.direction.dx !== 0 || this.direction.dy !== 0
-        ? this.direction
-        : this.lastDirection;
+    const dir = this.direction.dx !== 0 || this.direction.dy !== 0 ? this.direction : this.lastDirection;
     if (dir.dx === -1) return Math.PI;
     if (dir.dx === 1) return 0;
     if (dir.dy === -1) return -Math.PI / 2;
@@ -272,9 +398,7 @@ export class Pacman extends Actor {
 
     let mouthAngle: number;
     if (isMoving) {
-      mouthAngle =
-        Math.abs(Math.sin(Date.now() * this.config.mouthSpeed)) *
-        this.config.maxMouthAngle;
+      mouthAngle = Math.abs(Math.sin(Date.now() * this.config.mouthSpeed)) * this.config.maxMouthAngle;
     } else {
       mouthAngle = this.config.idleMouthAngle;
     }
@@ -282,20 +406,30 @@ export class Pacman extends Actor {
     const startAngle = mouthAngle;
     const endAngle = 2 * Math.PI - mouthAngle;
 
-    const colors = this.isBuffed
-      ? this.config.colors.buffed
-      : this.config.colors.normal;
+    const colors = this.isBuffed ? this.config.colors.buffed : this.config.colors.normal;
 
     this.ctx.save();
     this.ctx.translate(cx, cy);
     this.ctx.rotate(rotation);
 
-    this.ctx.shadowColor = colors.glow;
-    this.ctx.shadowBlur = 4;
+    // Ghost eat flash
+    if (this.ghostEatFlash > 0) {
+      this.ctx.shadowColor = '#fff';
+      this.ctx.shadowBlur = 20 * this.ghostEatFlash;
+      this.ctx.fillStyle = `rgba(255,255,255,${0.2 * this.ghostEatFlash})`;
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, r + 10, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
 
+    // Outer glow
+    this.ctx.shadowColor = colors.glow;
+    this.ctx.shadowBlur = this.ghostEatFlash > 0 ? 12 : 6;
+    
+    // Solid body
     this.ctx.fillStyle = colors.body;
     this.ctx.strokeStyle = colors.stroke;
-    this.ctx.lineWidth = 1.5;
+    this.ctx.lineWidth = 2;
     this.ctx.beginPath();
     this.ctx.arc(0, 0, r - 1, startAngle, endAngle);
     this.ctx.lineTo(0, 0);
@@ -303,12 +437,13 @@ export class Pacman extends Actor {
     this.ctx.fill();
     this.ctx.stroke();
 
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    // Inner highlight
+    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
     this.ctx.lineWidth = 1.5;
     this.ctx.shadowBlur = 0;
     this.ctx.shadowColor = "transparent";
     this.ctx.beginPath();
-    this.ctx.arc(0, 0, r * 0.6, startAngle + 0.3, endAngle - 0.3);
+    this.ctx.arc(0, 0, r * 0.55, startAngle + 0.3, endAngle - 0.3);
     this.ctx.stroke();
 
     this.ctx.restore();
@@ -337,11 +472,7 @@ export class Pacman extends Actor {
 
     const collapseScale = 1 - p;
     if (collapseScale > 0.05) {
-      for (
-        let currentR = r * collapseScale;
-        currentR > r * 0.05;
-        currentR -= r * 0.3
-      ) {
+      for (let currentR = r * collapseScale; currentR > r * 0.05; currentR -= r * 0.3) {
         this.ctx.beginPath();
         this.ctx.arc(0, 0, currentR, start, end, false);
         this.ctx.stroke();

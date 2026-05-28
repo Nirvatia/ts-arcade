@@ -383,7 +383,7 @@ export class Ghost extends Actor {
     return "RIGHT";
   }
 
-  draw(): void {
+ draw(): void {
     const ctx = this.ctx;
     const s = this.tileSize;
     const left = this.x - s / 2;
@@ -397,13 +397,13 @@ export class Ghost extends Actor {
     if (this.state === "FRIGHTENED") {
       if (this.isFlashing) {
         const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        primaryColor = isWhite ? "#FFFFFF" : "#00c8d4";
-        glowColor = isWhite ? "#FFFFFF" : "#0aa";
-        fillOpacity = isWhite ? 0.8 : 0.65;
+        primaryColor = isWhite ? "#ffffff" : "#1155cc";
+        glowColor = isWhite ? "#ffffff" : "#0a3a88";
+        fillOpacity = isWhite ? 0.85 : 0.7;
       } else {
-        primaryColor = "#00c8d4";
-        glowColor = "#0aa";
-        fillOpacity = 0.65;
+        primaryColor = "#1155cc";
+        glowColor = "#0a3a88";
+        fillOpacity = 0.7;
       }
     } else if (this.state === "EATEN") {
       shouldDrawBody = false;
@@ -433,9 +433,9 @@ export class Ghost extends Actor {
       ctx.fillRect(left - 2, top - 2, s + 4, s + 4);
       ctx.restore();
 
-      // Neon outline - reduced glow
+      // Neon outline
       ctx.save();
-      ctx.shadowBlur = s * 0.3;
+      ctx.shadowBlur = s * 0.35;
       ctx.shadowColor = glowColor;
       ctx.strokeStyle = primaryColor;
       ctx.lineWidth = 2;
@@ -449,36 +449,6 @@ export class Ghost extends Actor {
     const dir = this.getDirectionLabel();
     const breathVal = isGamePlaying ? Math.sin(timeScale * 2.2) * 2.2 : 0;
     this.drawEyes(left, top, s, dir, breathVal);
-  }
-
-  private traceMasterGhostShape(
-    left: number,
-    top: number,
-    s: number,
-    timeScale: number,
-  ): void {
-    const ctx = this.ctx;
-    const centerX = left + s / 2;
-    const waveHeight = s * 0.06;
-    const waveCount = 3;
-
-    ctx.beginPath();
-    ctx.arc(centerX, top + s / 2, s / 2, Math.PI, 0, false);
-
-    ctx.lineTo(left + s, top + s - waveHeight);
-    const precisionSteps = 40;
-    const waveOffset = timeScale * 1.8;
-
-    for (let i = 0; i <= precisionSteps; i++) {
-      const pct = i / precisionSteps;
-      const currX = left + s - s * pct;
-      const angle = pct * Math.PI * 2 * waveCount + waveOffset;
-      const currY = top + s - waveHeight + Math.sin(angle) * waveHeight;
-      ctx.lineTo(currX, currY);
-    }
-
-    ctx.lineTo(left, top + s - waveHeight);
-    ctx.closePath();
   }
 
   private drawEyes(
@@ -522,7 +492,7 @@ export class Ghost extends Actor {
       ctx.fill();
 
       // Colored iris
-      const irisColor = this.state === "EATEN" ? "#00c8d4" : this.defaultColor;
+      const irisColor = this.state === "EATEN" ? "#1155cc" : this.defaultColor;
       ctx.fillStyle = irisColor;
       ctx.beginPath();
       ctx.arc(eyeX1 + lookX, finalEyeY + lookY, s * 0.05, 0, Math.PI * 2);
@@ -543,10 +513,10 @@ export class Ghost extends Actor {
       ctx.arc(eyeX2 + lookX * 0.5, finalEyeY - 1.8, s * 0.016, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      // Frightened eyes - reduced glow
-      ctx.fillStyle = "#cc9900";
-      ctx.shadowBlur = s * 0.08;
-      ctx.shadowColor = "#cc9900";
+      // Frightened eyes - brighter Tron blue
+      ctx.fillStyle = "#66aadd";
+      ctx.shadowBlur = s * 0.1;
+      ctx.shadowColor = "#4499cc";
       ctx.beginPath();
       ctx.arc(eyeX1, finalEyeY, s * 0.04, 0, Math.PI * 2);
       ctx.arc(eyeX2, finalEyeY, s * 0.04, 0, Math.PI * 2);
@@ -554,4 +524,36 @@ export class Ghost extends Actor {
       ctx.shadowBlur = 0;
     }
   }
+
+  private traceMasterGhostShape(
+    left: number,
+    top: number,
+    s: number,
+    timeScale: number,
+  ): void {
+    const ctx = this.ctx;
+    const centerX = left + s / 2;
+    const waveHeight = s * 0.06;
+    const waveCount = 3;
+
+    ctx.beginPath();
+    ctx.arc(centerX, top + s / 2, s / 2, Math.PI, 0, false);
+
+    ctx.lineTo(left + s, top + s - waveHeight);
+    const precisionSteps = 40;
+    const waveOffset = timeScale * 1.8;
+
+    for (let i = 0; i <= precisionSteps; i++) {
+      const pct = i / precisionSteps;
+      const currX = left + s - s * pct;
+      const angle = pct * Math.PI * 2 * waveCount + waveOffset;
+      const currY = top + s - waveHeight + Math.sin(angle) * waveHeight;
+      ctx.lineTo(currX, currY);
+    }
+
+    ctx.lineTo(left, top + s - waveHeight);
+    ctx.closePath();
+  }
+
+  
 }

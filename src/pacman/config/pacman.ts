@@ -28,7 +28,7 @@ export const CFG_PACMAN: PacmanConfig = {
   normalSpeedMultiplier: 4.8,
   buffedSpeedMultiplier: 5.4,
   deathAnimationDuration: 1.5,
-  radiusMultiplier: 0.48,
+  radiusMultiplier: 0.55,
   mouthSpeed: 0.015,
   maxMouthAngle: Math.PI / 2.8,
   idleMouthAngle: Math.PI / 4,
