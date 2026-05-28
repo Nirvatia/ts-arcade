@@ -9,53 +9,30 @@ export class Maze implements Drawable {
   private gameState: GameState;
   private canvasLayer: CanvasLayer;
   private tileSize: number;
-  private lineWidth: number;
 
   private _needsRedraw: boolean = true;
   private _isFlashing: boolean = false;
+
+  private static readonly WALL_TILES: Set<string> = new Set([
+    "WH", "WV", "TL", "TR", "BL", "BR"
+  ]);
 
   constructor() {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.maze);
     this.tileSize = CFG_CANVAS.tile.size;
-    this.lineWidth = Math.max(1, Math.floor(this.tileSize * 0.04));
   }
 
-  get canvas(): HTMLCanvasElement {
-    return this.canvasLayer.canvas;
-  }
+  get canvas(): HTMLCanvasElement { return this.canvasLayer.canvas; }
+  get ctx(): CanvasRenderingContext2D { return this.canvasLayer.ctx; }
+  get needsRedraw(): boolean { return this._needsRedraw; }
+  set needsRedraw(value: boolean) { this._needsRedraw = value; }
+  get isFlashing(): boolean { return this._isFlashing; }
+  set isFlashing(value: boolean) { this._isFlashing = value; }
 
-  get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
-  }
-
-  get needsRedraw(): boolean {
-    return this._needsRedraw;
-  }
-
-  set needsRedraw(value: boolean) {
-    this._needsRedraw = value;
-  }
-
-  get isFlashing(): boolean {
-    return this._isFlashing;
-  }
-
-  set isFlashing(value: boolean) {
-    this._isFlashing = value;
-  }
-
-  requestRedraw(): void {
-    this._needsRedraw = true;
-  }
-
-  clearCanvas(): void {
-    this.canvasLayer.clear();
-  }
-
-  init(): void {
-    this._needsRedraw = true;
-  }
+  requestRedraw(): void { this._needsRedraw = true; }
+  clearCanvas(): void { this.canvasLayer.clear(); }
+  init(): void { this._needsRedraw = true; }
 
   reset(): void {
     this.clearCanvas();
@@ -63,43 +40,26 @@ export class Maze implements Drawable {
     this._needsRedraw = true;
   }
 
-  private getColors(): {
-    grid: string;
-    gridBright: string;
-    wall: string;
-    wallGlow: string;
-  } {
-    const mapColor = this.gameState.levelData.mapColor;
-    const hslMatch = mapColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
-
-    if (hslMatch) {
-      const hue = parseInt(hslMatch[1]);
-      const sat = parseInt(hslMatch[2]);
-      return {
-        grid: `hsla(${hue}, ${Math.min(30, sat * 0.4)}%, 6%, 0.4)`,
-        gridBright: `hsla(${hue}, ${Math.min(40, sat * 0.5)}%, 10%, 0.5)`,
-        wall: `hsla(${hue}, ${Math.min(70, sat * 0.8)}%, 35%, 0.8)`,
-        wallGlow: `hsla(${hue}, ${Math.min(80, sat)}%, 45%, 0.2)`,
-      };
-    }
-
-    return {
-      grid: "hsla(200, 20%, 6%, 0.4)",
-      gridBright: "hsla(200, 30%, 10%, 0.5)",
-      wall: "hsla(200, 50%, 35%, 0.8)",
-      wallGlow: "hsla(200, 60%, 45%, 0.2)",
-    };
-  }
+private getColors(): { fill: string; stroke: string; glow: string; accent: string } {
+  const hue = this.gameState.levelData.mapHue ?? 200;
+  return {
+    fill: `hsla(${hue}, 25%, 5%, 0.85)`,
+    stroke: `hsla(${hue}, 45%, 22%, 0.45)`,
+    glow: `hsla(${hue}, 35%, 12%, 0.25)`,
+    accent: `hsla(${hue}, 55%, 30%, 0.35)`,
+  };
+}
 
   draw(): void {
     const map = this.gameState.levelData.map;
     const ctx = this.ctx;
     const ts = this.tileSize;
-    const lw = this.lineWidth;
-    const half = ts / 2;
+    const pad = ts * 0.14;
+    const blockSize = ts - pad * 2;
     const colors = this.getColors();
     const cw = this.canvasLayer.canvas.width;
     const ch = this.canvasLayer.canvas.height;
+    const r = blockSize * 0.12;
 
     ctx.save();
 
@@ -108,188 +68,78 @@ export class Maze implements Drawable {
       ctx.globalAlpha = 0.3 + Math.sin(time) * 0.3;
     }
 
-    // Fill background
     ctx.fillStyle = "#010812";
     ctx.fillRect(0, 0, cw, ch);
 
-    // Fine grid
-    ctx.strokeStyle = colors.grid;
-    ctx.lineWidth = 0.3;
-    for (let x = 0; x < cw; x += ts * 0.5) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, ch);
-      ctx.stroke();
-    }
-    for (let y = 0; y < ch; y += ts * 0.5) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(cw, y);
-      ctx.stroke();
-    }
-
-    // Tile grid
-    ctx.strokeStyle = colors.gridBright;
-    ctx.lineWidth = 0.5;
-    for (let x = 0; x < cw; x += ts) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, ch);
-      ctx.stroke();
-    }
-    for (let y = 0; y < ch; y += ts) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(cw, y);
-      ctx.stroke();
-    }
-
-    // Wall glow
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = colors.wallGlow;
-    ctx.lineWidth = lw + 3;
-    ctx.shadowColor = colors.wallGlow;
-    ctx.shadowBlur = 8;
-
+    // Block glow
     for (let i = 0; i < map.length; i++) {
       for (let j = 0; j < map[i].length; j++) {
-        const tile = map[i][j];
-        if (
-          tile === "ES" ||
-          tile === "FD" ||
-          tile === "PP" ||
-          tile === "PM" ||
-          tile === "GL" ||
-          tile === "BY" ||
-          tile === "PY" ||
-          tile === "IY" ||
-          tile === "CE" ||
-          tile === "0A" ||
-          tile === "0B"
-        )
-          continue;
-
-        const x = j * ts;
-        const y = i * ts;
-
-        switch (tile) {
-          case "WH":
-            ctx.beginPath();
-            ctx.moveTo(x, y + half);
-            ctx.lineTo(x + ts, y + half);
-            ctx.stroke();
-            break;
-          case "WV":
-            ctx.beginPath();
-            ctx.moveTo(x + half, y);
-            ctx.lineTo(x + half, y + ts);
-            ctx.stroke();
-            break;
-          case "TL":
-            ctx.beginPath();
-            ctx.moveTo(x + half, y + ts);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + ts, y + half);
-            ctx.stroke();
-            break;
-          case "TR":
-            ctx.beginPath();
-            ctx.moveTo(x, y + half);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + half, y + ts);
-            ctx.stroke();
-            break;
-          case "BL":
-            ctx.beginPath();
-            ctx.moveTo(x + half, y);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + ts, y + half);
-            ctx.stroke();
-            break;
-          case "BR":
-            ctx.beginPath();
-            ctx.moveTo(x, y + half);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + half, y);
-            ctx.stroke();
-            break;
-        }
+        if (!Maze.WALL_TILES.has(map[i][j])) continue;
+        const x = j * ts + pad;
+        const y = i * ts + pad;
+        ctx.fillStyle = colors.glow;
+        ctx.shadowColor = colors.glow;
+        ctx.shadowBlur = 5;
+        this.roundRect(ctx, x - 1, y - 1, blockSize + 2, blockSize + 2, r + 1);
+        ctx.fill();
       }
     }
 
-    // Wall solid
-    ctx.strokeStyle = colors.wall;
-    ctx.lineWidth = lw;
-    ctx.shadowColor = colors.wall;
-    ctx.shadowBlur = 2;
-
+    // Block fill
+    ctx.shadowBlur = 0;
     for (let i = 0; i < map.length; i++) {
       for (let j = 0; j < map[i].length; j++) {
-        const tile = map[i][j];
-        if (
-          tile === "ES" ||
-          tile === "FD" ||
-          tile === "PP" ||
-          tile === "PM" ||
-          tile === "GL" ||
-          tile === "BY" ||
-          tile === "PY" ||
-          tile === "IY" ||
-          tile === "CE" ||
-          tile === "0A" ||
-          tile === "0B"
-        )
-          continue;
+        if (!Maze.WALL_TILES.has(map[i][j])) continue;
+        const x = j * ts + pad;
+        const y = i * ts + pad;
+        ctx.fillStyle = colors.fill;
+        this.roundRect(ctx, x, y, blockSize, blockSize, r);
+        ctx.fill();
+      }
+    }
 
-        const x = j * ts;
-        const y = i * ts;
+    // Block border
+    ctx.strokeStyle = colors.stroke;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < map.length; i++) {
+      for (let j = 0; j < map[i].length; j++) {
+        if (!Maze.WALL_TILES.has(map[i][j])) continue;
+        const x = j * ts + pad;
+        const y = i * ts + pad;
+        this.roundRect(ctx, x, y, blockSize, blockSize, r);
+        ctx.stroke();
+      }
+    }
 
-        switch (tile) {
-          case "WH":
-            ctx.beginPath();
-            ctx.moveTo(x, y + half);
-            ctx.lineTo(x + ts, y + half);
-            ctx.stroke();
-            break;
-          case "WV":
-            ctx.beginPath();
-            ctx.moveTo(x + half, y);
-            ctx.lineTo(x + half, y + ts);
-            ctx.stroke();
-            break;
-          case "TL":
-            ctx.beginPath();
-            ctx.moveTo(x + half, y + ts);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + ts, y + half);
-            ctx.stroke();
-            break;
-          case "TR":
-            ctx.beginPath();
-            ctx.moveTo(x, y + half);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + half, y + ts);
-            ctx.stroke();
-            break;
-          case "BL":
-            ctx.beginPath();
-            ctx.moveTo(x + half, y);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + ts, y + half);
-            ctx.stroke();
-            break;
-          case "BR":
-            ctx.beginPath();
-            ctx.moveTo(x, y + half);
-            ctx.lineTo(x + half, y + half);
-            ctx.lineTo(x + half, y);
-            ctx.stroke();
-            break;
-        }
+    // Corner accent dots
+    ctx.fillStyle = colors.accent;
+    for (let i = 0; i < map.length; i++) {
+      for (let j = 0; j < map[i].length; j++) {
+        if (!Maze.WALL_TILES.has(map[i][j])) continue;
+        const x = j * ts + pad;
+        const y = i * ts + pad;
+        const d = 2;
+        ctx.fillRect(x + 2, y + 2, d, d);
+        ctx.fillRect(x + blockSize - 2 - d, y + 2, d, d);
+        ctx.fillRect(x + 2, y + blockSize - 2 - d, d, d);
+        ctx.fillRect(x + blockSize - 2 - d, y + blockSize - 2 - d, d, d);
       }
     }
 
     ctx.restore();
+  }
+
+  private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
   }
 }
