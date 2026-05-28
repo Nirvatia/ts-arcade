@@ -200,6 +200,7 @@
         <canvas id={CFG_CANVAS.canvasIds.dots}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.pills}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.pacman}></canvas>
+        <canvas id={CFG_CANVAS.canvasIds.vignette}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.scene}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.ghosts}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.ui}></canvas>
@@ -352,21 +353,30 @@
       image-rendering: auto;
     }
 
-    #map-cvs {
+    #cvs-maze {
       position: relative;
       z-index: 1;
     }
-    #food-cvs {
+    #cvs-dots {
       z-index: 2;
     }
-    #pill-cvs {
+    #cvs-pills {
       z-index: 3;
     }
-    #pacman-cvs {
+    #cvs-vignette {
       z-index: 4;
     }
-    #ghosts-cvs {
+    #cvs-pacman {
       z-index: 5;
+    }
+    #cvs-ghosts {
+      z-index: 6;
+    }
+    #cvs-ui {
+      z-index: 7;
+    }
+    #cvs-scene {
+      z-index: 8;
     }
   }
 
