@@ -2,11 +2,8 @@
 
 ## High Priority (Core Gameplay Fixes)
 - [ ] **Core**
-  - Refactor movement physics across all entities to scale with the `dt` (delta time) passed in the loop rather than a hardcoded pixel-per-frame speed.
-  - Fix Intermission scene framerate
-  - Adjust pacman and ghost speed
-  - Review possible artifacts on intermission scene end
-  - Ensure levels are infinite
+  - Infinite levels
+  - Fix being able to move outside map boundaries after teleport
 
 
 ## Ghost AI & Gameplay Logic
@@ -17,8 +14,6 @@
 
 ## Visuals & UI
   - Implement active keyboard listener navigation for selecting games on the main menu.
-  - Improve pacman animation
-  - Improve ghost animation
 
 # create-svelte
 
