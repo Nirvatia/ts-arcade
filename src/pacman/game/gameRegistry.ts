@@ -6,6 +6,7 @@ import { CFG_GHOSTS } from "../config/ghosts.js";
 import { CFG_PACMAN } from "../config/pacman.js";
 import { eventBus } from "../core/eventBus.js";
 import type { Drawable, Updatable } from "../interfaces.js";
+import { Vignette } from "../vfx/vignette.js";
 import { Dot } from "../world/dot.js";
 import { Maze } from "../world/maze.js";
 import { Pill } from "../world/pill.js";
@@ -17,6 +18,7 @@ import { Pill } from "../world/pill.js";
 export class GameRegistry {
   private static instance: GameRegistry | null = null;
 
+  private _vignette!: Vignette;
   private _pacman!: Pacman;
   private _ghosts: Ghost[] = [];
   private _maze!: Maze;
@@ -44,15 +46,18 @@ export class GameRegistry {
     eventBus.on("command:clear_canvases", () => this.clearAllCanvases());
   }
 
-createEntities(): void {
+  createEntities(): void {
+    this._vignette = new Vignette();
     this._maze = new Maze();
     this._dot = new Dot();
     this._pill = new Pill();
     this._pacman = new Pacman(CFG_PACMAN);
-    this._ghosts = Object.values(CFG_GHOSTS).map(
-      (config) => new Ghost(config),
-    );
-}
+    this._ghosts = Object.values(CFG_GHOSTS).map((config) => new Ghost(config));
+  }
+
+  getVignette(): Vignette {
+    return this._vignette;
+  }
 
   // --- Strict Type Getters ---
   getPacman(): Pacman {
@@ -77,7 +82,14 @@ createEntities(): void {
   }
 
   getAllDrawable(): Drawable[] {
-    return [this._maze, this._dot, this._pill, this._pacman, ...this._ghosts];
+    return [
+      this._maze,
+      this._dot,
+      this._pill,
+      this._vignette,
+      this._pacman,
+      ...this._ghosts,
+    ];
   }
 
   initAll(): void {
@@ -114,6 +126,7 @@ createEntities(): void {
   }
 
   clearAllCanvases(): void {
+    this._vignette.clearCanvas();
     this._maze.clearCanvas();
     this._dot.clearCanvas();
     this._pill.clearCanvas();
