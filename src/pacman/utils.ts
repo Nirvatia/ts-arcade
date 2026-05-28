@@ -322,18 +322,12 @@ function generateLevelConfig(level: number): LevelConfigType {
   const mapIndex = (level - 1) % maps.length;
 
   // Deep dark palette — цвета стен лабиринта
-  const colors = [
-    "hsl(195, 75%, 48%)", // Classic Tron Blue
-    "hsl(330, 65%, 50%)", // Tron Magenta
-    "hsl(45, 80%, 50%)", // Tron Amber/Gold
-    "hsl(160, 55%, 45%)", // Tron Teal
-    "hsl(275, 60%, 52%)", // Tron Violet
-  ];
+  const colors = [195, 330, 45, 160, 275];
   const colorIndex = (level - 1) % colors.length;
 
   return {
     map: maps[mapIndex],
-    mapColor: colors[colorIndex],
+    mapHue: colors[colorIndex],
     // С каждым уровнем время баффа уменьшается, но не падает ниже 2 секунд
     buffDuration: Math.max(2, 10 - (level - 1) * 1.5),
     // Порог мигания пропорционален времени баффа

@@ -20,7 +20,7 @@ export type TileType =
 
 export type LevelConfigType = {
   map: TileType[][];
-  mapColor: string;
+  mapHue: number;
   buffDuration: number;
   buffThreshold: number;
 };
