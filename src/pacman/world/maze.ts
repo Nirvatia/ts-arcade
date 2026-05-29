@@ -13,49 +13,22 @@ export class Maze implements Drawable {
   private _needsRedraw: boolean = true;
   private _isFlashing: boolean = false;
 
-  private static readonly WALL_TILES: Set<string> = new Set([
-    "WH",
-    "WV",
-    "TL",
-    "TR",
-    "BL",
-    "BR",
-  ]);
-
   constructor() {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.maze);
     this.tileSize = CFG_CANVAS.tile.size;
   }
 
-  get canvas(): HTMLCanvasElement {
-    return this.canvasLayer.canvas;
-  }
-  get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
-  }
-  get needsRedraw(): boolean {
-    return this._needsRedraw;
-  }
-  set needsRedraw(value: boolean) {
-    this._needsRedraw = value;
-  }
-  get isFlashing(): boolean {
-    return this._isFlashing;
-  }
-  set isFlashing(value: boolean) {
-    this._isFlashing = value;
-  }
+  get canvas(): HTMLCanvasElement { return this.canvasLayer.canvas; }
+  get ctx(): CanvasRenderingContext2D { return this.canvasLayer.ctx; }
+  get needsRedraw(): boolean { return this._needsRedraw; }
+  set needsRedraw(value: boolean) { this._needsRedraw = value; }
+  get isFlashing(): boolean { return this._isFlashing; }
+  set isFlashing(value: boolean) { this._isFlashing = value; }
 
-  requestRedraw(): void {
-    this._needsRedraw = true;
-  }
-  clearCanvas(): void {
-    this.canvasLayer.clear();
-  }
-  init(): void {
-    this._needsRedraw = true;
-  }
+  requestRedraw(): void { this._needsRedraw = true; }
+  clearCanvas(): void { this.canvasLayer.clear(); }
+  init(): void { this._needsRedraw = true; }
 
   reset(): void {
     this.clearCanvas();
@@ -64,17 +37,15 @@ export class Maze implements Drawable {
   }
 
   private getColors(): {
-    fill: string;
-    stroke: string;
+    bg: string;
+    neonWire: string;
     glow: string;
-    accent: string;
   } {
-    const hue = this.gameState.levelData.mapHue ?? 200;
+    const hue = this.gameState.levelData.mapHue ?? 190; 
     return {
-      fill: `hsla(${hue}, 25%, 5%, 0.85)`,
-      stroke: `hsla(${hue}, 45%, 22%, 0.45)`,
-      glow: `hsla(${hue}, 35%, 12%, 0.25)`,
-      accent: `hsla(${hue}, 55%, 30%, 0.35)`,
+      bg: "#01050d", 
+      neonWire: `hsla(${hue}, 100%, 55%, 0.95)`, 
+      glow: `hsla(${hue}, 100%, 50%, 0.4)`,
     };
   }
 
@@ -82,99 +53,86 @@ export class Maze implements Drawable {
     const map = this.gameState.levelData.map;
     const ctx = this.ctx;
     const ts = this.tileSize;
-    const pad = ts * 0.14;
-    const blockSize = ts - pad * 2;
     const colors = this.getColors();
     const cw = this.canvasLayer.canvas.width;
     const ch = this.canvasLayer.canvas.height;
-    const r = blockSize * 0.12;
 
     ctx.save();
 
     if (this._isFlashing) {
       const time = Date.now() / 150;
-      ctx.globalAlpha = 0.3 + Math.sin(time) * 0.3;
+      ctx.globalAlpha = 0.2 + Math.sin(time) * 0.4;
     }
 
-    ctx.fillStyle = "#010812";
+    // Deep grid space base
+    ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, cw, ch);
 
-    // Block glow
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (!Maze.WALL_TILES.has(map[i][j])) continue;
-        const x = j * ts + pad;
-        const y = i * ts + pad;
-        ctx.fillStyle = colors.glow;
-        ctx.shadowColor = colors.glow;
-        ctx.shadowBlur = 5;
-        this.roundRect(ctx, x - 1, y - 1, blockSize + 2, blockSize + 2, r + 1);
-        ctx.fill();
-      }
-    }
+    // --- GRID GEOMETRY STYLE ---
+    ctx.lineCap = "square";
+    ctx.lineJoin = "miter"; 
+    ctx.lineWidth = 1.5; 
 
-    // Block fill
-    ctx.shadowBlur = 0;
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (!Maze.WALL_TILES.has(map[i][j])) continue;
-        const x = j * ts + pad;
-        const y = i * ts + pad;
-        ctx.fillStyle = colors.fill;
-        this.roundRect(ctx, x, y, blockSize, blockSize, r);
-        ctx.fill();
-      }
-    }
+    // Apply bloom processing
+    ctx.strokeStyle = colors.neonWire;
+    ctx.shadowColor = colors.glow;
+    ctx.shadowBlur = this._isFlashing ? 12 : 5;
 
-    // Block border
-    ctx.strokeStyle = colors.stroke;
-    ctx.lineWidth = 1;
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (!Maze.WALL_TILES.has(map[i][j])) continue;
-        const x = j * ts + pad;
-        const y = i * ts + pad;
-        this.roundRect(ctx, x, y, blockSize, blockSize, r);
-        ctx.stroke();
-      }
-    }
+    const offset = ts * 0.28;
 
-    // Corner accent dots
-    ctx.fillStyle = colors.accent;
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (!Maze.WALL_TILES.has(map[i][j])) continue;
-        const x = j * ts + pad;
-        const y = i * ts + pad;
-        const d = 2;
-        ctx.fillRect(x + 2, y + 2, d, d);
-        ctx.fillRect(x + blockSize - 2 - d, y + 2, d, d);
-        ctx.fillRect(x + 2, y + blockSize - 2 - d, d, d);
-        ctx.fillRect(x + blockSize - 2 - d, y + blockSize - 2 - d, d, d);
-      }
-    }
+    // --- BATCH RENDERING PASSES ---
+    // Accumulating all geometry points to execute single stroke operations 
+    // cleanly fires the drawing pipeline and removes tile intersection dots.
+    ctx.beginPath();
+    this.buildTronPath(map, ctx, ts, offset);
+    ctx.stroke();
+
+    ctx.beginPath();
+    this.buildTronPath(map, ctx, ts, -offset);
+    ctx.stroke();
 
     ctx.restore();
+    this._needsRedraw = false;
   }
 
-  private roundRect(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    r: number,
-  ): void {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y, x + w, y + r, r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x, y + h, x, y + h - r, r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x, y, x + r, y, r);
-    ctx.closePath();
+  // Generates structural map geometry without firing independent intermediate stroke steps
+  private buildTronPath(map: string[][], ctx: CanvasRenderingContext2D, ts: number, offset: number): void {
+    for (let i = 0; i < map.length; i++) {
+      for (let j = 0; j < map[i].length; j++) {
+        const type = map[i][j];
+        const x = j * ts;
+        const y = i * ts;
+        const hSize = ts / 2;
+
+        if (type === "WH") {
+          ctx.moveTo(x, y + hSize + offset);
+          ctx.lineTo(x + ts, y + hSize + offset);
+        } 
+        else if (type === "WV") {
+          ctx.moveTo(x + hSize + offset, y + ts);
+          ctx.lineTo(x + hSize + offset, y);
+        } 
+        else if (type === "TL") {
+          ctx.moveTo(x + hSize + offset, y + ts);
+          ctx.lineTo(x + hSize + offset, y + hSize + offset);
+          ctx.lineTo(x + ts, y + hSize + offset);
+        } 
+        else if (type === "BL") {
+          ctx.moveTo(x + hSize + offset, y);
+          ctx.lineTo(x + hSize + offset, y + hSize - offset);
+          ctx.lineTo(x + ts, y + hSize - offset);
+        } 
+        else if (type === "BR") {
+          ctx.moveTo(x + hSize - offset, y);
+          ctx.lineTo(x + hSize - offset, y + hSize - offset);
+          ctx.lineTo(x, y + hSize - offset);
+        } 
+        else if (type === "TR") {
+          ctx.moveTo(x + hSize - offset, y + ts);
+          ctx.lineTo(x + hSize - offset, y + hSize + offset);
+          ctx.lineTo(x, y + hSize + offset);
+        }
+      }
+    }
   }
 }
