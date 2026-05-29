@@ -207,8 +207,6 @@ export class Ghost extends Actor {
           } else {
             this.getRandomDirection();
 
-            // ИСПРАВЛЕНИЕ: Передаем точное оставшееся расстояние (budgetDistance) вместо
-            // неявного вычисления шага времени через скорость, что могло вызывать перелёты стен.
             if (
               budgetDistance > 0 &&
               (this.direction.dx !== 0 || this.direction.dy !== 0) &&
@@ -250,11 +248,6 @@ export class Ghost extends Actor {
     return this.willHitWallDirect(moveDistance);
   }
 
-  /**
-   * ИСПРАВЛЕНИЕ: Изолированный метод для проверки коллизий по прямому расстоянию.
-   * Устраняет баг, когда изменённый во время EATEN состояния `this.speed` ломал
-   * расчёт радиуса движения look-ahead при выходе из домика.
-   */
   private willHitWallDirect(distance: number): boolean {
     const lookAheadDistance = distance + this.r;
 
@@ -330,7 +323,7 @@ export class Ghost extends Actor {
   beEaten(): void {
     const previousState = this.state;
     this.state = "EATEN";
-    this.speed = this.eatenSpeed; // ИСПРАВЛЕНИЕ: Используем выделенный eatenSpeed вместо defaultSpeed * 2 для чистоты типов
+    this.speed = this.eatenSpeed;
     this.isReturningHome = true;
 
     eventBus.emit("ghost:state_changed", {
@@ -382,8 +375,6 @@ export class Ghost extends Actor {
     }
   }
 
-  // --- Draw ---
-
   private getDirectionLabel(): "LEFT" | "RIGHT" | "UP" | "DOWN" {
     const { dx, dy } = this.direction;
     if (dx === 1) return "RIGHT";
@@ -395,25 +386,20 @@ export class Ghost extends Actor {
 
   draw(): void {
     const ctx = this.ctx;
-    const s = this.tileSize;
-    const left = this.x - s / 2;
-    const top = this.y - s / 2;
+    const r = this.tileSize / 2;
 
     let primaryColor = this.defaultColor;
-    let glowColor = this.defaultColor;
-    let fillOpacity = 0.7;
+    let glowColor = this.color;
     let shouldDrawBody = true;
 
     if (this.state === "FRIGHTENED") {
       if (this.isFlashing) {
         const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
         primaryColor = isWhite ? "#ffffff" : "#1155cc";
-        glowColor = isWhite ? "#ffffff" : "#0a3a88";
-        fillOpacity = isWhite ? 0.85 : 0.7;
+        glowColor = isWhite ? "#ffffff" : "#9933ff";
       } else {
         primaryColor = "#1155cc";
-        glowColor = "#0a3a88";
-        fillOpacity = 0.7;
+        glowColor = "#9933ff";
       }
     } else if (this.state === "EATEN") {
       shouldDrawBody = false;
@@ -422,158 +408,227 @@ export class Ghost extends Actor {
     const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
     const timeScale = isGamePlaying ? Date.now() * 0.003 : 0;
 
+    ctx.save();
+
+    // Возвращаем стандартное наложение для сохранения плотности и милоты тела
+    ctx.globalCompositeOperation = "source-over";
+
     if (shouldDrawBody) {
-      const breath = isGamePlaying ? Math.sin(timeScale * 2.2) * 2.2 : 0;
+      const isMoving =
+        (this.direction.dx !== 0 || this.direction.dy !== 0) && isGamePlaying;
 
-      ctx.save();
-      ctx.translate(this.x, top + s);
-      ctx.scale(1 + breath * 0.006, 1 - breath * 0.006);
-      ctx.translate(-this.x, -(top + s));
+      // Мягкий, едва заметный шлейф (Movement VFX) из сплошных, но сильно прозрачных капелек
+      if (isMoving) {
+        ctx.save();
+        const shiftX = -this.direction.dx * (r * 0.2);
+        const shiftY = -this.direction.dy * (r * 0.2);
 
-      // Body gradient fill
-      ctx.save();
-      this.traceMasterGhostShape(left, top, s, timeScale);
-      ctx.clip();
+        // Далекое эхо хвоста
+        ctx.globalAlpha = 0.1;
+        this.drawSolidGhostBody(
+          ctx,
+          this.x + shiftX * 2,
+          this.y + shiftY * 2,
+          r,
+          primaryColor,
+          glowColor,
+          timeScale - 0.1,
+          true,
+        );
 
-      const bodyGrad = ctx.createLinearGradient(left, top, left, top + s);
-      bodyGrad.addColorStop(0, primaryColor);
-      bodyGrad.addColorStop(0.8, "#000000");
-      ctx.globalAlpha = fillOpacity;
-      ctx.fillStyle = bodyGrad;
-      ctx.fillRect(left - 2, top - 2, s + 4, s + 4);
-      ctx.restore();
+        // Близкое эхо хвоста
+        ctx.globalAlpha = 0.25;
+        this.drawSolidGhostBody(
+          ctx,
+          this.x + shiftX,
+          this.y + shiftY,
+          r,
+          primaryColor,
+          glowColor,
+          timeScale - 0.05,
+          true,
+        );
+        ctx.restore();
+      }
 
-      // Neon outline
-      ctx.save();
-      ctx.shadowBlur = s * 0.35;
-      ctx.shadowColor = glowColor;
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = 2;
-      this.traceMasterGhostShape(left, top, s, timeScale);
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.restore();
+      // Рисуем основное милое тело
+      this.drawSolidGhostBody(
+        ctx,
+        this.x,
+        this.y,
+        r,
+        primaryColor,
+        glowColor,
+        timeScale,
+        false,
+      );
     }
 
+    // Отрисовка глаз поверх плотного тела
     const dir = this.getDirectionLabel();
-    const breathVal = isGamePlaying ? Math.sin(timeScale * 2.2) * 2.2 : 0;
-    this.drawEyes(left, top, s, dir, breathVal);
+    this.drawEyes(this.x, this.y, r, dir, timeScale);
+
+    ctx.restore();
+  }
+
+  /**
+   * Отрисовка ПЛОТНОГО, заполненного тела призрака с аккуратным Tron-эффектом.
+   */
+  private drawSolidGhostBody(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    r: number,
+    primaryColor: string,
+    glowColor: string,
+    timeScale: number,
+    isTrail: boolean, // Флаг: рисуем мы шлейф или основного персонажа
+  ): void {
+    ctx.save();
+
+    // Строим путь оригинального Spook Ghost
+    ctx.beginPath();
+    const pts = 40;
+    const baseR = r * 1.1;
+
+    for (let i = 0; i < pts; i++) {
+      const angle = (i / pts) * Math.PI * 2 - Math.PI / 2;
+      let rr =
+        baseR +
+        Math.sin(angle * 3 + timeScale * 4) * r * 0.1 +
+        Math.cos(angle * 5 - timeScale * 3) * r * 0.06;
+
+      if (angle > 0.3 && angle < Math.PI - 0.3) {
+        rr = baseR + Math.sin(i * 0.7 + timeScale * 3.5) * r * 0.18;
+      }
+
+      const px = cx + Math.cos(angle) * rr;
+      const py = cy + Math.sin(angle) * rr * 0.9;
+
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+
+    if (isTrail) {
+      // Для шлейфа используем простое полупрозрачное заполнение, без контуров
+      ctx.fillStyle = primaryColor;
+      ctx.fill();
+    } else {
+      // Для основного тела делаем красивый вертикальный градиент:
+      // Сверху он сочный и яркий, а снизу мягко уходит в темноту лабиринта (0.15 прозрачности),
+      // благодаря чему он идеально сливается с окружением и твоей виньеткой!
+      const bodyGrad = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
+      bodyGrad.addColorStop(0, primaryColor); // Плотный, матовый цвет сверху
+      bodyGrad.addColorStop(0.75, primaryColor + "bb");
+      bodyGrad.addColorStop(1, primaryColor + "22"); // Почти растворяется в лабиринте у юбки
+
+      ctx.fillStyle = bodyGrad;
+      ctx.fill();
+
+      // Тонкий, аккуратный неоновый контур по краю, чтобы подчеркнуть форму, но не слепить
+      ctx.strokeStyle = primaryColor;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 8; // Умеренный, сфокусированный неон
+      ctx.stroke();
+
+      // Маленькая фишка: деликатный внутренний блик сверху для объема (белая нить)
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.3;
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
   private drawEyes(
-    left: number,
-    top: number,
-    s: number,
-    dir: string,
-    breath: number,
+    cx: number,
+    cy: number,
+    r: number,
+    dir: "LEFT" | "RIGHT" | "UP" | "DOWN",
+    t: number,
   ): void {
     const ctx = this.ctx;
+    ctx.shadowBlur = 0;
 
-    let lookX = 0;
-    let lookY = 0;
-    const pupilOffset = s * 0.06;
+    const eyeY = cy - r * 0.28;
+    const eyeSpacing = r * 0.34;
+    const eyeR = r * 0.2;
+
+    const leftEyeX = cx - eyeSpacing;
+    const rightEyeX = cx + eyeSpacing;
+
+    // ИСПРАВЛЕНИЕ МОРГАНИЯ: Замедлили частоту взмахов ресниц (было t * 3.8)
+    const blinkCycle = Math.sin(t * 1.5) * 0.5 + 0.5;
+    const blinkFactor = blinkCycle > 0.92 ? 1 - (blinkCycle - 0.92) / 0.08 : 1;
+    const eyeScaleY = Math.max(0.06, blinkFactor);
+
+    let moveX = 0;
+    let moveY = 0;
+    const lookOffset = r * 0.05;
 
     switch (dir) {
       case "LEFT":
-        lookX = -pupilOffset;
+        moveX = -lookOffset;
         break;
       case "RIGHT":
-        lookX = pupilOffset;
+        moveX = lookOffset;
         break;
       case "UP":
-        lookY = -pupilOffset;
+        moveY = -lookOffset;
         break;
       case "DOWN":
-        lookY = pupilOffset;
+        moveY = lookOffset;
         break;
     }
 
-    const finalEyeY = top + s * 0.44 + breath * 0.02;
-    const eyeX1 = left + s * 0.3;
-    const eyeX2 = left + s * 0.7;
+    const px = moveX * 2.8;
+    const py = moveY * 2.8;
 
-    if (this.state !== "FRIGHTENED") {
-      // White sclera
-      ctx.fillStyle = "#FFFFFF";
-      ctx.beginPath();
-      ctx.arc(eyeX1, finalEyeY, s * 0.11, 0, Math.PI * 2);
-      ctx.arc(eyeX2, finalEyeY, s * 0.11, 0, Math.PI * 2);
-      ctx.fill();
+    const renderSingleEye = (ex: number, ey: number, er: number) => {
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.scale(1, eyeScaleY);
 
-      // Colored iris
-      const irisColor = this.state === "EATEN" ? "#1155cc" : this.defaultColor;
-      ctx.fillStyle = irisColor;
-      ctx.beginPath();
-      ctx.arc(eyeX1 + lookX, finalEyeY + lookY, s * 0.05, 0, Math.PI * 2);
-      ctx.arc(eyeX2 + lookX, finalEyeY + lookY, s * 0.05, 0, Math.PI * 2);
-      ctx.fill();
+      if (this.state !== "FRIGHTENED") {
+        ctx.fillStyle = "#f8fcff";
+        // Убавили избыточный блур зрачков
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, er, 0, Math.PI * 2);
+        ctx.fill();
 
-      // Black pupil
-      ctx.fillStyle = "#000000";
-      ctx.beginPath();
-      ctx.arc(
-        eyeX1 + lookX * 1.2,
-        finalEyeY + lookY * 1.2,
-        s * 0.022,
-        0,
-        Math.PI * 2,
-      );
-      ctx.arc(
-        eyeX2 + lookX * 1.2,
-        finalEyeY + lookY * 1.2,
-        s * 0.022,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
+        const pupilR = er * 0.48;
+        ctx.fillStyle = this.state === "EATEN" ? "#1155cc" : "#010510";
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(px, py, pupilR, 0, Math.PI * 2);
+        ctx.fill();
 
-      // White glint
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(eyeX1 + lookX * 0.5, finalEyeY - 1.8, s * 0.016, 0, Math.PI * 2);
-      ctx.arc(eyeX2 + lookX * 0.5, finalEyeY - 1.8, s * 0.016, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Frightened eyes - brighter Tron blue
-      ctx.fillStyle = "#66aadd";
-      ctx.shadowBlur = s * 0.1;
-      ctx.shadowColor = "#4499cc";
-      ctx.beginPath();
-      ctx.arc(eyeX1, finalEyeY, s * 0.04, 0, Math.PI * 2);
-      ctx.arc(eyeX2, finalEyeY, s * 0.04, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-  }
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(px + er * 0.28, py - er * 0.32, er * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px - er * 0.18, py + er * 0.08, er * 0.1, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#66aadd";
+        ctx.shadowBlur = er * 0.3;
+        ctx.shadowColor = "#4499cc";
+        ctx.beginPath();
+        ctx.arc(0, 0, er * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-  private traceMasterGhostShape(
-    left: number,
-    top: number,
-    s: number,
-    timeScale: number,
-  ): void {
-    const ctx = this.ctx;
-    const centerX = left + s / 2;
-    const waveHeight = s * 0.06;
-    const waveCount = 3;
+      ctx.restore();
+    };
 
-    ctx.beginPath();
-    ctx.arc(centerX, top + s / 2, s / 2, Math.PI, 0, false);
-
-    ctx.lineTo(left + s, top + s - waveHeight);
-    const precisionSteps = 40;
-    const waveOffset = timeScale * 1.8;
-
-    for (let i = 0; i <= precisionSteps; i++) {
-      const pct = i / precisionSteps;
-      const currX = left + s - s * pct;
-      const angle = pct * Math.PI * 2 * waveCount + waveOffset;
-      const currY = top + s - waveHeight + Math.sin(angle) * waveHeight;
-      ctx.lineTo(currX, currY);
-    }
-
-    ctx.lineTo(left, top + s - waveHeight);
-    ctx.closePath();
+    renderSingleEye(leftEyeX, eyeY, eyeR);
+    renderSingleEye(rightEyeX, eyeY, eyeR);
   }
 }
