@@ -18,12 +18,7 @@ export class Pacman extends Actor {
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
 
   // VFX state
-  private trailParticles: {
-    x: number;
-    y: number;
-    life: number;
-    maxLife: number;
-  }[] = [];
+  private trailHistory: { x: number; y: number; alpha: number }[] = [];
   private eatParticles: {
     x: number;
     y: number;
@@ -63,7 +58,7 @@ export class Pacman extends Actor {
     this.nextDirection = null;
     this.lastDirection = { dx: 1, dy: 0 };
     this.speed = this.normalSpeed;
-    this.trailParticles = [];
+    this.trailHistory = [];
     this.eatParticles = [];
     this.ghostEatFlash = 0;
     this.spawn();
@@ -84,7 +79,6 @@ export class Pacman extends Actor {
   }
 
   update(dt: number): void {
-    // Update VFX
     this.updateTrail(dt);
     this.updateEatParticles(dt);
     if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
@@ -100,7 +94,6 @@ export class Pacman extends Actor {
 
     this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
 
-    // Spawn trail particles while moving
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
       this.spawnTrailParticle();
     }
@@ -200,7 +193,6 @@ export class Pacman extends Actor {
 
   private smoothAlignToAxis(dt: number): void {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-
     const pullFactor = 1 - Math.exp(-this.config.axisAlignSpeed * dt);
 
     if (this.direction.dx !== 0) {
@@ -262,15 +254,16 @@ export class Pacman extends Actor {
   // --- VFX ---
 
   private spawnTrailParticle(): void {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = Math.random() * this.r * 0.6;
-    this.trailParticles.push({
-      x: this.x + Math.cos(angle) * dist,
-      y: this.y + Math.sin(angle) * dist,
-      life: 0.3 + Math.random() * 0.3,
-      maxLife: 0.3 + Math.random() * 0.3,
-    });
-    if (this.trailParticles.length > 15) this.trailParticles.shift();
+    this.trailHistory.push({ x: this.x, y: this.y, alpha: 1.0 });
+    if (this.trailHistory.length > 8) {
+      this.trailHistory.shift();
+    }
+  }
+
+  private updateTrail(dt: number): void {
+    for (let i = 0; i < this.trailHistory.length; i++) {
+      this.trailHistory[i].alpha -= dt * 2.2; 
+    }
   }
 
   private spawnDotEatVFX(tileX: number, tileY: number): void {
@@ -282,7 +275,7 @@ export class Pacman extends Actor {
         y: cy,
         life: 0.2 + Math.random() * 0.2,
         maxLife: 0.2 + Math.random() * 0.2,
-        color: "#0ff",
+        color: "#ffcc00", // Dot particles match his TRON yellow theme
       });
     }
   }
@@ -297,7 +290,7 @@ export class Pacman extends Actor {
         y: cy + Math.sin(angle) * 5,
         life: 0.4 + Math.random() * 0.3,
         maxLife: 0.4 + Math.random() * 0.3,
-        color: "#f0f",
+        color: "#ff3300", // Powered matrix color
       });
     }
   }
@@ -305,7 +298,6 @@ export class Pacman extends Actor {
   private spawnGhostEatVFX(gx: number, gy: number): void {
     for (let i = 0; i < 20; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 30 + Math.random() * 50;
       this.eatParticles.push({
         x: gx + Math.cos(angle) * 10,
         y: gy + Math.sin(angle) * 10,
@@ -313,15 +305,6 @@ export class Pacman extends Actor {
         maxLife: 0.5 + Math.random() * 0.5,
         color: "#fff",
       });
-    }
-  }
-
-  private updateTrail(dt: number): void {
-    for (let i = this.trailParticles.length - 1; i >= 0; i--) {
-      this.trailParticles[i].life -= dt;
-      if (this.trailParticles[i].life <= 0) {
-        this.trailParticles.splice(i, 1);
-      }
     }
   }
 
@@ -346,7 +329,6 @@ export class Pacman extends Actor {
   // --- Draw ---
 
   draw(): void {
-    // Draw VFX behind Pacman
     this.drawTrailVFX();
     this.drawEatVFX();
 
@@ -357,25 +339,43 @@ export class Pacman extends Actor {
     }
   }
 
+  // NEW DESIGN: Geometric Grid Ribbon Trail
   private drawTrailVFX(): void {
-    if (this.state === "DYING") return;
+    if (this.state === "DYING" || this.trailHistory.length < 2) return;
 
     const ctx = this.ctx;
-    const color = this.isBuffed ? "#0ff" : "#e6c800";
+    const color = this.isBuffed ? "#ff3300" : "#ffcc00";
+    const width = this.r * 0.75;
 
-    for (const p of this.trailParticles) {
-      const alpha = p.life / p.maxLife;
-      const size = 2 * alpha;
-      ctx.save();
-      ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 4 * alpha;
-      ctx.globalAlpha = alpha * 0.5;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.lineWidth = 1;
+
+    // Draw the parallel bounds of the vector path
+    for (let i = 0; i < this.trailHistory.length - 1; i++) {
+      const p1 = this.trailHistory[i];
+      const p2 = this.trailHistory[i + 1];
+      const alpha = Math.max(0, p2.alpha);
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.shadowBlur = 8 * alpha;
+
+      // Draw lateral data crossbars linking paths to make a literal wire grid
       ctx.beginPath();
-      ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      ctx.moveTo(p1.x, p1.y - width / 2);
+      ctx.lineTo(p1.x, p1.y + width / 2);
+      ctx.stroke();
+
+      // Outer bounding wireframes
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y - width / 2);
+      ctx.lineTo(p2.x, p2.y - width / 2);
+      ctx.moveTo(p1.x, p1.y + width / 2);
+      ctx.lineTo(p2.x, p2.y + width / 2);
+      ctx.stroke();
     }
+
+    ctx.restore();
   }
 
   private drawEatVFX(): void {
@@ -384,14 +384,12 @@ export class Pacman extends Actor {
     for (const p of this.eatParticles) {
       const alpha = p.life / p.maxLife;
       const size = 3 * alpha;
-      const dist = (1 - alpha) * 20;
       ctx.save();
       ctx.fillStyle = p.color;
       ctx.shadowColor = p.color;
       ctx.shadowBlur = 6 * alpha;
       ctx.globalAlpha = alpha;
       ctx.beginPath();
-      // Diamond particles
       ctx.moveTo(p.x, p.y - size);
       ctx.lineTo(p.x + size, p.y);
       ctx.lineTo(p.x, p.y + size);
@@ -415,6 +413,7 @@ export class Pacman extends Actor {
   }
 
   private drawAlive(): void {
+    const ctx = this.ctx;
     const cx = this.x;
     const cy = this.y;
     const r = this.r;
@@ -422,10 +421,9 @@ export class Pacman extends Actor {
     const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
 
     let mouthAngle: number;
+    const timestamp = Date.now();
     if (isMoving) {
-      mouthAngle =
-        Math.abs(Math.sin(Date.now() * this.config.mouthSpeed)) *
-        this.config.maxMouthAngle;
+      mouthAngle = Math.abs(Math.sin(timestamp * this.config.mouthSpeed)) * this.config.maxMouthAngle;
     } else {
       mouthAngle = this.config.idleMouthAngle;
     }
@@ -433,101 +431,139 @@ export class Pacman extends Actor {
     const startAngle = mouthAngle;
     const endAngle = 2 * Math.PI - mouthAngle;
 
-    const colors = this.isBuffed
-      ? this.config.colors.buffed
-      : this.config.colors.normal;
+    // Core Colors: TRON Yellow vs Overclocked Red
+    const neonColor = this.isBuffed ? "#ff3300" : "#ffcc00";
+    const coreColor = this.isBuffed ? "#ffaa00" : "#ffffff";
 
-    this.ctx.save();
-    this.ctx.translate(cx, cy);
-    this.ctx.rotate(rotation);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotation);
 
-    // Ghost eat flash
+    // --- 1. OVERCLOCK/FLASH GLOW ---
     if (this.ghostEatFlash > 0) {
-      this.ctx.shadowColor = "#fff";
-      this.ctx.shadowBlur = 20 * this.ghostEatFlash;
-      this.ctx.fillStyle = `rgba(255,255,255,${0.2 * this.ghostEatFlash})`;
-      this.ctx.beginPath();
-      this.ctx.arc(0, 0, r + 10, 0, Math.PI * 2);
-      this.ctx.fill();
+      ctx.shadowColor = "#fff";
+      ctx.shadowBlur = 30 * this.ghostEatFlash;
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.15 * this.ghostEatFlash})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 15, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    // Outer glow
-    this.ctx.shadowColor = colors.glow;
-    this.ctx.shadowBlur = this.ghostEatFlash > 0 ? 12 : 6;
+    // --- 2. VECTOR OUTER SHELL ---
+    ctx.shadowColor = neonColor;
+    ctx.shadowBlur = this.isBuffed ? 16 : 10;
+    ctx.strokeStyle = neonColor;
+    ctx.lineWidth = 3;
+    
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, startAngle, endAngle);
+    
+    // Visor cutout
+    const innerCutoff = r * 0.4;
+    ctx.lineTo(Math.cos(2 * Math.PI - mouthAngle) * innerCutoff, Math.sin(2 * Math.PI - mouthAngle) * innerCutoff);
+    ctx.lineTo(Math.cos(mouthAngle) * innerCutoff, Math.sin(mouthAngle) * innerCutoff);
+    ctx.closePath();
+    
+    ctx.fillStyle = this.isBuffed ? "rgba(255, 51, 0, 0.15)" : "rgba(255, 204, 0, 0.08)";
+    ctx.fill();
+    ctx.stroke();
 
-    // Solid body
-    this.ctx.fillStyle = colors.body;
-    this.ctx.strokeStyle = colors.stroke;
-    this.ctx.lineWidth = 2;
-    this.ctx.beginPath();
-    this.ctx.arc(0, 0, r - 1, startAngle, endAngle);
-    this.ctx.lineTo(0, 0);
-    this.ctx.closePath();
-    this.ctx.fill();
-    this.ctx.stroke();
+    // --- 3. REDESIGNED CORE: Spinning Quantum Matrix ---
+    ctx.save();
+    // Core spin speed multiplies significantly when buffed
+    const spinSpeed = timestamp * (this.isBuffed ? 0.012 : 0.004);
+    ctx.rotate(spinSpeed);
+    
+    ctx.shadowBlur = this.isBuffed ? 10 : 5;
+    ctx.strokeStyle = coreColor;
+    ctx.lineWidth = 1.5;
+    
+    const boxSize = r * 0.4;
+    ctx.strokeRect(-boxSize / 2, -boxSize / 2, boxSize, boxSize);
+    
+    // Secondary inner cross line if buffed to make the code core look complex
+    if (this.isBuffed) {
+      ctx.strokeStyle = neonColor;
+      ctx.beginPath();
+      ctx.moveTo(-boxSize / 2, 0);
+      ctx.lineTo(boxSize / 2, 0);
+      ctx.moveTo(0, -boxSize / 2);
+      ctx.lineTo(0, boxSize / 2);
+      ctx.stroke();
+    }
+    ctx.restore();
 
-    // Inner highlight
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
-    this.ctx.lineWidth = 1.5;
-    this.ctx.shadowBlur = 0;
-    this.ctx.shadowColor = "transparent";
-    this.ctx.beginPath();
-    this.ctx.arc(0, 0, r * 0.55, startAngle + 0.3, endAngle - 0.3);
-    this.ctx.stroke();
+    // --- 4. SYSTEM ACCENT BUS ---
+    ctx.strokeStyle = coreColor;
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.68, Math.PI * 0.65, Math.PI * 1.35);
+    ctx.stroke();
 
-    this.ctx.restore();
+    // Circuit trace nodes
+    ctx.fillStyle = neonColor;
+    ctx.fillRect(Math.cos(Math.PI * 0.65) * (r * 0.68) - 1, Math.sin(Math.PI * 0.65) * (r * 0.68) - 1, 2, 2);
+    ctx.fillRect(Math.cos(Math.PI * 1.35) * (r * 0.68) - 1, Math.sin(Math.PI * 1.35) * (r * 0.68) - 1, 2, 2);
+
+    ctx.restore();
   }
 
   private drawDead(): void {
     const p = Math.min(1, this.deathTimer / this.config.deathAnimationDuration);
+    const ctx = this.ctx;
     const cx = this.x;
     const cy = this.y;
     const r = this.r;
-    const rotation = this.getRotation();
 
-    this.ctx.save();
-    this.ctx.translate(cx, cy);
-    this.ctx.rotate(rotation);
+    ctx.save();
+    ctx.translate(cx, cy);
 
-    const startAngle = Math.PI / 4;
-    const mouthAngle = startAngle + (Math.PI - startAngle) * p;
-    const start = mouthAngle;
-    const end = 2 * Math.PI - mouthAngle;
+    const neonColor = this.isBuffed ? "#ff3300" : "#ffcc00";
+    ctx.strokeStyle = neonColor;
+    ctx.shadowColor = neonColor;
+    
+    if (p < 0.8) {
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 8 * (1 - p);
+      
+      for (let i = -1; i <= 1; i += 0.5) {
+        const offset = i * r * (1 - p);
+        
+        ctx.beginPath();
+        ctx.globalAlpha = (1 - p) * 0.7;
+        ctx.moveTo(-r, offset);
+        ctx.lineTo(r, offset);
+        ctx.stroke();
 
-    this.ctx.strokeStyle = "#e6c800";
-    this.ctx.shadowColor = "#e6c800";
-    this.ctx.shadowBlur = 3 * (1 - p);
-    this.ctx.lineWidth = 1.5;
-
-    const collapseScale = 1 - p;
-    if (collapseScale > 0.05) {
-      for (
-        let currentR = r * collapseScale;
-        currentR > r * 0.05;
-        currentR -= r * 0.3
-      ) {
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, currentR, start, end, false);
-        this.ctx.stroke();
-
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, 0);
-        this.ctx.lineTo(Math.cos(start) * currentR, Math.sin(start) * currentR);
-        this.ctx.moveTo(0, 0);
-        this.ctx.lineTo(Math.cos(end) * currentR, Math.sin(end) * currentR);
-        this.ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(offset, -r);
+        ctx.lineTo(offset, r);
+        ctx.stroke();
       }
     }
 
-    if (p > 0.9) {
-      this.ctx.fillStyle = "#ffffff";
-      this.ctx.shadowBlur = 8;
-      this.ctx.shadowColor = "#ffffff";
-      this.ctx.beginPath();
-      this.ctx.arc(0, 0, r * (1 - p) * 8, 0, Math.PI * 2);
-      this.ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = "#ffffff";
+    
+    const particleCount = 12;
+    for (let i = 0; i < particleCount; i++) {
+      const seedX = Math.sin(i * 452.13) * r;
+      const seedY = Math.cos(i * 921.51) * r;
+      
+      const px = seedX;
+      const py = seedY - p * 40; 
+      
+      const alpha = Math.max(0, 1 - p - (i / particleCount) * 0.2);
+      const blockSize = 3 * alpha;
+
+      ctx.globalAlpha = alpha;
+      if (alpha > 0) {
+        ctx.fillRect(px - blockSize / 2, py - blockSize / 2, blockSize, blockSize);
+      }
     }
 
-    this.ctx.restore();
+    ctx.restore();
   }
 }
