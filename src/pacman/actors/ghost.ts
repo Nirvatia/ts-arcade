@@ -24,6 +24,17 @@ export class Ghost extends Actor {
   private isFlashing: boolean = false;
   private flashSpeed: number = 200;
 
+  // Система деликатных матричных частиц
+  private particleTimer: number = 0;
+  private trailParticles: Array<{
+    x: number;
+    y: number;
+    alpha: number;
+    maxAlpha: number;
+    size: number;
+    phase: number;
+  }> = [];
+
   constructor(config: GhostConfig) {
     super(CFG_CANVAS.canvasIds.ghosts);
     this.name = config.name;
@@ -57,6 +68,7 @@ export class Ghost extends Actor {
     this.isReturningHome = false;
     this.isFlashing = false;
     this.state = "CHASE";
+    this.trailParticles = [];
   }
 
   resetForLevel(): void {
@@ -384,6 +396,8 @@ export class Ghost extends Actor {
     return "RIGHT";
   }
 
+  // --- Draw (Cute Jelly Ghost & Ambient Matrix Particles) ---
+
   draw(): void {
     const ctx = this.ctx;
     const r = this.tileSize / 2;
@@ -408,50 +422,69 @@ export class Ghost extends Actor {
     const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
     const timeScale = isGamePlaying ? Date.now() * 0.003 : 0;
 
-    ctx.save();
+    // --- ОБНОВЛЕНИЕ ЧАСТИЦ (Ионизация пространства матрицы) ---
+    if (isGamePlaying && shouldDrawBody) {
+      const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
 
-    // Возвращаем стандартное наложение для сохранения плотности и милоты тела
+      if (isMoving) {
+        this.particleTimer++;
+        // Стабильно раз в 5 кадров активируем «пиксель» вокруг призрака
+        if (this.particleTimer >= 5) {
+          // Выбираем случайный угол вокруг призрака, чуть дальше радиуса его тела
+          const angle = Math.random() * Math.PI * 2;
+          const spawnDist = r * (1.0 + Math.random() * 0.3);
+
+          this.trailParticles.push({
+            x: this.x + Math.cos(angle) * spawnDist,
+            y: this.y + Math.sin(angle) * spawnDist,
+            alpha: 0,        // Начинают с нуля и плавно загораются
+            maxAlpha: 0.7,   // Максимальная яркость неонового пикселя
+            size: Math.random() > 0.5 ? 1.5 : 2.0, // Строгие квадратные/круглые кванты (1.5-2px)
+            phase: 0         // 0 = разгорается, 1 = увядает
+          });
+          this.particleTimer = 0;
+        }
+      }
+    }
+
+    ctx.save();
     ctx.globalCompositeOperation = "source-over";
 
-    if (shouldDrawBody) {
-      const isMoving =
-        (this.direction.dx !== 0 || this.direction.dy !== 0) && isGamePlaying;
+    // --- ОТРИСОВКА МАТРИЧНЫХ КВАНТОВ (Они лежат под телом) ---
+    if (this.trailParticles.length > 0) {
+      ctx.save();
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = glowColor;
 
-      // Мягкий, едва заметный шлейф (Movement VFX) из сплошных, но сильно прозрачных капелек
-      if (isMoving) {
-        ctx.save();
-        const shiftX = -this.direction.dx * (r * 0.2);
-        const shiftY = -this.direction.dy * (r * 0.2);
+      for (let i = this.trailParticles.length - 1; i >= 0; i--) {
+        const p = this.trailParticles[i];
 
-        // Далекое эхо хвоста
-        ctx.globalAlpha = 0.1;
-        this.drawSolidGhostBody(
-          ctx,
-          this.x + shiftX * 2,
-          this.y + shiftY * 2,
-          r,
-          primaryColor,
-          glowColor,
-          timeScale - 0.1,
-          true,
-        );
+        ctx.fillStyle = glowColor;
+        ctx.globalAlpha = p.alpha;
 
-        // Близкое эхо хвоста
-        ctx.globalAlpha = 0.25;
-        this.drawSolidGhostBody(
-          ctx,
-          this.x + shiftX,
-          this.y + shiftY,
-          r,
-          primaryColor,
-          glowColor,
-          timeScale - 0.05,
-          true,
-        );
-        ctx.restore();
+        // Рисуем маленькие аккуратные хай-тек квадратики вместо мягких кругов
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+
+        // Жизненный цикл частицы (Pulse in -> Fade out) без движения
+        if (p.phase === 0) {
+          p.alpha += 0.15; // Быстро зажигается при приближении призрака
+          if (p.alpha >= p.maxAlpha) {
+            p.alpha = p.maxAlpha;
+            p.phase = 1;
+          }
+        } else {
+          p.alpha -= 0.04; // Мягко гаснет, оставаясь на месте в коридоре
+        }
+
+        if (p.alpha <= 0) {
+          this.trailParticles.splice(i, 1);
+        }
       }
+      ctx.restore();
+    }
 
-      // Рисуем основное милое тело
+    // --- ОТРИСОВКА ТЕЛА ---
+    if (shouldDrawBody) {
       this.drawSolidGhostBody(
         ctx,
         this.x,
@@ -464,7 +497,7 @@ export class Ghost extends Actor {
       );
     }
 
-    // Отрисовка глаз поверх плотного тела
+    // Отрисовка глаз поверх
     const dir = this.getDirectionLabel();
     this.drawEyes(this.x, this.y, r, dir, timeScale);
 
@@ -482,11 +515,10 @@ export class Ghost extends Actor {
     primaryColor: string,
     glowColor: string,
     timeScale: number,
-    isTrail: boolean, // Флаг: рисуем мы шлейф или основного персонажа
+    isTrail: boolean,
   ): void {
     ctx.save();
 
-    // Строим путь оригинального Spook Ghost
     ctx.beginPath();
     const pts = 40;
     const baseR = r * 1.1;
@@ -511,29 +543,23 @@ export class Ghost extends Actor {
     ctx.closePath();
 
     if (isTrail) {
-      // Для шлейфа используем простое полупрозрачное заполнение, без контуров
       ctx.fillStyle = primaryColor;
       ctx.fill();
     } else {
-      // Для основного тела делаем красивый вертикальный градиент:
-      // Сверху он сочный и яркий, а снизу мягко уходит в темноту лабиринта (0.15 прозрачности),
-      // благодаря чему он идеально сливается с окружением и твоей виньеткой!
       const bodyGrad = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
-      bodyGrad.addColorStop(0, primaryColor); // Плотный, матовый цвет сверху
+      bodyGrad.addColorStop(0, primaryColor); 
       bodyGrad.addColorStop(0.75, primaryColor + "bb");
-      bodyGrad.addColorStop(1, primaryColor + "22"); // Почти растворяется в лабиринте у юбки
+      bodyGrad.addColorStop(1, primaryColor + "22"); 
 
       ctx.fillStyle = bodyGrad;
       ctx.fill();
 
-      // Тонкий, аккуратный неоновый контур по краю, чтобы подчеркнуть форму, но не слепить
       ctx.strokeStyle = primaryColor;
       ctx.lineWidth = 2;
       ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 8; // Умеренный, сфокусированный неон
+      ctx.shadowBlur = 8; 
       ctx.stroke();
 
-      // Маленькая фишка: деликатный внутренний блик сверху для объема (белая нить)
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 1;
       ctx.shadowBlur = 0;
@@ -561,7 +587,6 @@ export class Ghost extends Actor {
     const leftEyeX = cx - eyeSpacing;
     const rightEyeX = cx + eyeSpacing;
 
-    // ИСПРАВЛЕНИЕ МОРГАНИЯ: Замедлили частоту взмахов ресниц (было t * 3.8)
     const blinkCycle = Math.sin(t * 1.5) * 0.5 + 0.5;
     const blinkFactor = blinkCycle > 0.92 ? 1 - (blinkCycle - 0.92) / 0.08 : 1;
     const eyeScaleY = Math.max(0.06, blinkFactor);
@@ -571,18 +596,10 @@ export class Ghost extends Actor {
     const lookOffset = r * 0.05;
 
     switch (dir) {
-      case "LEFT":
-        moveX = -lookOffset;
-        break;
-      case "RIGHT":
-        moveX = lookOffset;
-        break;
-      case "UP":
-        moveY = -lookOffset;
-        break;
-      case "DOWN":
-        moveY = lookOffset;
-        break;
+      case "LEFT":  moveX = -lookOffset; break;
+      case "RIGHT": moveX = lookOffset;  break;
+      case "UP":    moveY = -lookOffset; break;
+      case "DOWN":  moveY = lookOffset;  break;
     }
 
     const px = moveX * 2.8;
@@ -595,7 +612,6 @@ export class Ghost extends Actor {
 
       if (this.state !== "FRIGHTENED") {
         ctx.fillStyle = "#f8fcff";
-        // Убавили избыточный блур зрачков
         ctx.shadowColor = "#ffffff";
         ctx.shadowBlur = 4;
         ctx.beginPath();
