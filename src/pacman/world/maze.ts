@@ -14,7 +14,12 @@ export class Maze implements Drawable {
   private _isFlashing: boolean = false;
 
   private static readonly WALL_TILES: Set<string> = new Set([
-    "WH", "WV", "TL", "TR", "BL", "BR"
+    "WH",
+    "WV",
+    "TL",
+    "TR",
+    "BL",
+    "BR",
   ]);
 
   constructor() {
@@ -23,16 +28,34 @@ export class Maze implements Drawable {
     this.tileSize = CFG_CANVAS.tile.size;
   }
 
-  get canvas(): HTMLCanvasElement { return this.canvasLayer.canvas; }
-  get ctx(): CanvasRenderingContext2D { return this.canvasLayer.ctx; }
-  get needsRedraw(): boolean { return this._needsRedraw; }
-  set needsRedraw(value: boolean) { this._needsRedraw = value; }
-  get isFlashing(): boolean { return this._isFlashing; }
-  set isFlashing(value: boolean) { this._isFlashing = value; }
+  get canvas(): HTMLCanvasElement {
+    return this.canvasLayer.canvas;
+  }
+  get ctx(): CanvasRenderingContext2D {
+    return this.canvasLayer.ctx;
+  }
+  get needsRedraw(): boolean {
+    return this._needsRedraw;
+  }
+  set needsRedraw(value: boolean) {
+    this._needsRedraw = value;
+  }
+  get isFlashing(): boolean {
+    return this._isFlashing;
+  }
+  set isFlashing(value: boolean) {
+    this._isFlashing = value;
+  }
 
-  requestRedraw(): void { this._needsRedraw = true; }
-  clearCanvas(): void { this.canvasLayer.clear(); }
-  init(): void { this._needsRedraw = true; }
+  requestRedraw(): void {
+    this._needsRedraw = true;
+  }
+  clearCanvas(): void {
+    this.canvasLayer.clear();
+  }
+  init(): void {
+    this._needsRedraw = true;
+  }
 
   reset(): void {
     this.clearCanvas();
@@ -40,15 +63,20 @@ export class Maze implements Drawable {
     this._needsRedraw = true;
   }
 
-private getColors(): { fill: string; stroke: string; glow: string; accent: string } {
-  const hue = this.gameState.levelData.mapHue ?? 200;
-  return {
-    fill: `hsla(${hue}, 25%, 5%, 0.85)`,
-    stroke: `hsla(${hue}, 45%, 22%, 0.45)`,
-    glow: `hsla(${hue}, 35%, 12%, 0.25)`,
-    accent: `hsla(${hue}, 55%, 30%, 0.35)`,
-  };
-}
+  private getColors(): {
+    fill: string;
+    stroke: string;
+    glow: string;
+    accent: string;
+  } {
+    const hue = this.gameState.levelData.mapHue ?? 200;
+    return {
+      fill: `hsla(${hue}, 25%, 5%, 0.85)`,
+      stroke: `hsla(${hue}, 45%, 22%, 0.45)`,
+      glow: `hsla(${hue}, 35%, 12%, 0.25)`,
+      accent: `hsla(${hue}, 55%, 30%, 0.35)`,
+    };
+  }
 
   draw(): void {
     const map = this.gameState.levelData.map;
@@ -129,7 +157,14 @@ private getColors(): { fill: string; stroke: string; glow: string; accent: strin
     ctx.restore();
   }
 
-  private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  private roundRect(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number,
+  ): void {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);

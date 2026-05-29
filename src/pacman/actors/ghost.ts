@@ -116,7 +116,7 @@ export class Ghost extends Actor {
 
   update(dt: number): void {
     if (this.gameState.mode !== "PLAYING") return;
-    
+
     if (this.path.length > 0 || this.currentPathTarget !== null) {
       this.moveAlongPath(dt);
       return;
@@ -206,8 +206,8 @@ export class Ghost extends Actor {
             this.calculateExitPath();
           } else {
             this.getRandomDirection();
-            
-            // ИСПРАВЛЕНИЕ: Передаем точное оставшееся расстояние (budgetDistance) вместо 
+
+            // ИСПРАВЛЕНИЕ: Передаем точное оставшееся расстояние (budgetDistance) вместо
             // неявного вычисления шага времени через скорость, что могло вызывать перелёты стен.
             if (
               budgetDistance > 0 &&
@@ -252,7 +252,7 @@ export class Ghost extends Actor {
 
   /**
    * ИСПРАВЛЕНИЕ: Изолированный метод для проверки коллизий по прямому расстоянию.
-   * Устраняет баг, когда изменённый во время EATEN состояния `this.speed` ломал 
+   * Устраняет баг, когда изменённый во время EATEN состояния `this.speed` ломал
    * расчёт радиуса движения look-ahead при выходе из домика.
    */
   private willHitWallDirect(distance: number): boolean {
@@ -512,8 +512,20 @@ export class Ghost extends Actor {
       // Black pupil
       ctx.fillStyle = "#000000";
       ctx.beginPath();
-      ctx.arc(eyeX1 + lookX * 1.2, finalEyeY + lookY * 1.2, s * 0.022, 0, Math.PI * 2);
-      ctx.arc(eyeX2 + lookX * 1.2, finalEyeY + lookY * 1.2, s * 0.022, 0, Math.PI * 2);
+      ctx.arc(
+        eyeX1 + lookX * 1.2,
+        finalEyeY + lookY * 1.2,
+        s * 0.022,
+        0,
+        Math.PI * 2,
+      );
+      ctx.arc(
+        eyeX2 + lookX * 1.2,
+        finalEyeY + lookY * 1.2,
+        s * 0.022,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
 
       // White glint
