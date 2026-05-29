@@ -23,29 +23,13 @@ export class Pill implements Updatable, Collectible {
     this.initEventListeners();
   }
 
-  get canvas(): HTMLCanvasElement {
-    return this.canvasLayer.canvas;
-  }
+  get canvas(): HTMLCanvasElement { return this.canvasLayer.canvas; }
+  get ctx(): CanvasRenderingContext2D { return this.canvasLayer.ctx; }
+  get needsRedraw(): boolean { return this._needsRedraw; }
+  set needsRedraw(value: boolean) { this._needsRedraw = value; }
 
-  get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
-  }
-
-  get needsRedraw(): boolean {
-    return this._needsRedraw;
-  }
-
-  set needsRedraw(value: boolean) {
-    this._needsRedraw = value;
-  }
-
-  requestRedraw(): void {
-    this._needsRedraw = true;
-  }
-
-  clearCanvas(): void {
-    this.canvasLayer.clear();
-  }
+  requestRedraw(): void { this._needsRedraw = true; }
+  clearCanvas(): void { this.canvasLayer.clear(); }
 
   initEventListeners(): void {
     eventBus.on(
@@ -94,45 +78,58 @@ export class Pill implements Updatable, Collectible {
   update(dt: number): void {
     if (this.gameState.mode !== "PLAYING") return;
     
-    this.animationCounter += 3 * dt;
+    this.animationCounter += 4 * dt;
+    this._needsRedraw = true; 
   }
 
   draw(): void {
     this.clearCanvas();
     const ctx = this.ctx;
+    const ts = this.tileSize;
 
-    const baseRadius = this.tileSize * 0.2;
+    const baseRadius = ts * 0.24; 
+    const pulse = 0.5 + 0.5 * Math.sin(this.animationCounter * 3.5);
 
     this.positions.forEach(({ i, j }) => {
-      const cx = this.tileSize * j + this.tileSize / 2;
-      const cy = this.tileSize * i + this.tileSize / 2;
-
-      const pulse = 0.5 + 0.5 * Math.sin(this.animationCounter * 3);
-      const radius = baseRadius + pulse * 2;
+      const cx = ts * j + ts / 2;
+      const cy = ts * i + ts / 2;
+      const currentRadius = baseRadius + pulse * 2;
 
       ctx.save();
       
-      // Outer glowing ring - clearly visible
-      ctx.shadowColor = "#0aa";
+      ctx.translate(cx, cy);
+      ctx.rotate(this.animationCounter);
+
+      // --- PASS 1: OUTSIDE DIAMOND (Neon Electric Cyan/Blue Glow) ---
+      ctx.shadowColor = "rgba(0, 220, 255, 0.85)";
       ctx.shadowBlur = 10 * pulse;
-      ctx.strokeStyle = "#0dd";
+      ctx.strokeStyle = "rgba(180, 245, 255, 0.95)";
       ctx.lineWidth = 2;
+      
       ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.moveTo(0, -currentRadius);
+      ctx.lineTo(currentRadius, 0);
+      ctx.lineTo(0, currentRadius);
+      ctx.lineTo(-currentRadius, 0);
+      ctx.closePath();
+      ctx.stroke();
+
+      // --- PASS 2: INNER CROSS BEAMS (Crisp White/Cyan Vector Lines) ---
+      ctx.strokeStyle = "rgba(200, 250, 255, 0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-currentRadius * 0.4, 0);
+      ctx.lineTo(currentRadius * 0.4, 0);
+      ctx.moveTo(0, -currentRadius * 0.4);
+      ctx.lineTo(0, currentRadius * 0.4);
       ctx.stroke();
       
-      // Inner diamond - Tron data crystal
-      ctx.shadowBlur = 6;
-      ctx.fillStyle = "#0cc";
-      ctx.globalAlpha = 0.6 + pulse * 0.2;
-      const innerSize = radius * 0.6;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - innerSize);
-      ctx.lineTo(cx + innerSize, cy);
-      ctx.lineTo(cx, cy + innerSize);
-      ctx.lineTo(cx - innerSize, cy);
-      ctx.closePath();
-      ctx.fill();
+      // --- PASS 3: ENGINE CORE (Hot Blinding White Block) ---
+      ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.85 + pulse * 0.15})`;
+      const coreSize = currentRadius * 0.35;
+      ctx.fillRect(-coreSize / 2, -coreSize / 2, coreSize, coreSize);
       
       ctx.restore();
     });

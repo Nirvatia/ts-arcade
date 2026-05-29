@@ -20,25 +20,14 @@ export class Dot implements Drawable, Collectible {
     this.gameState = GameState.getInstance();
     this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
     this.tileSize = CFG_CANVAS.tile.size;
-    this.dotSize = this.tileSize * 0.09;
+    this.dotSize = this.tileSize * 0.11; 
     this.initEventListeners();
   }
 
-  get canvas(): HTMLCanvasElement {
-    return this.canvasLayer.canvas;
-  }
-
-  get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
-  }
-
-  get needsRedraw(): boolean {
-    return this._needsRedraw;
-  }
-
-  set needsRedraw(value: boolean) {
-    this._needsRedraw = value;
-  }
+  get canvas(): HTMLCanvasElement { return this.canvasLayer.canvas; }
+  get ctx(): CanvasRenderingContext2D { return this.canvasLayer.ctx; }
+  get needsRedraw(): boolean { return this._needsRedraw; }
+  set needsRedraw(value: boolean) { this._needsRedraw = value; }
 
   initEventListeners(): void {
     eventBus.on(
@@ -49,9 +38,7 @@ export class Dot implements Drawable, Collectible {
     );
   }
 
-  requestRedraw(): void {
-    this._needsRedraw = true;
-  }
+  requestRedraw(): void { this._needsRedraw = true; }
 
   clearCanvas(x?: number, y?: number, w?: number, h?: number): void {
     this.canvasLayer.clear(x, y, w, h);
@@ -104,23 +91,21 @@ export class Dot implements Drawable, Collectible {
     this.clearCanvas();
     const ctx = this.ctx;
 
+    ctx.save();
+    // Swapped amber out for a clean, sharp white-hot core with subtle cyan bloom
+    ctx.shadowColor = "rgba(0, 200, 255, 0.5)";
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.95)"; 
+
     this.positions.forEach((pos) => {
       const [i, j] = pos.split(",").map(Number);
       const cx = this.tileSize * j + this.tileSize / 2;
       const cy = this.tileSize * i + this.tileSize / 2;
-      const r = this.dotSize;
+      const half = this.dotSize / 2;
 
-      ctx.save();
-      
-      // Visible Tron dot with glow
-      ctx.shadowColor = "#0a8a9a";
-      ctx.shadowBlur = 4;
-      ctx.fillStyle = "#0cc0d4";
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.restore();
+      ctx.fillRect(cx - half, cy - half, this.dotSize, this.dotSize);
     });
+
+    ctx.restore();
   }
 }
