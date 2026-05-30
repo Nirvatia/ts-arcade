@@ -9,7 +9,7 @@ export type TileType =
   | "BR" // Bottom Right Corner
   | "FD" // Food
   | "PP" // Power Pill
-  | TeleportType // 🌟 Используем динамический тип для телепортов
+  | TeleportType // Teleport
   | "ES" // Empty Space
   | "GL" // Ghost Lair
   | "PM" // Pac-Man

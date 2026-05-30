@@ -321,7 +321,6 @@ function generateLevelConfig(level: number): LevelConfigType {
   ];
   const mapIndex = (level - 1) % maps.length;
 
-  // Deep dark palette — цвета стен лабиринта
   const colors = [195, 330, 45, 160, 275];
   const colorIndex = (level - 1) % colors.length;
 
