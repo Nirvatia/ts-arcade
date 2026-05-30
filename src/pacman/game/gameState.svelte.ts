@@ -22,8 +22,6 @@ export class GameState {
   public isProcessingLevelTransition: boolean = false;
 
   private buffClock: Clock = new Clock();
-  private buffDuration: number = 10;
-  private buffThreshold: number = 3;
 
   private constructor() {
     this.levelData = generateLevelConfig(this.currentLevel);
@@ -141,10 +139,10 @@ export class GameState {
       this.buffClock.stop();
       this.isBuffed = true;
       this.buffClock.start(
-        this.buffDuration,
+        this.levelData.buffDuration,
         1000,
         (rem) => {
-          if (rem === this.buffThreshold) {
+          if (rem === this.levelData.buffThreshold) {
             eventBus.emit("power_pill:warning", { remainingSeconds: rem });
           }
         },
@@ -153,7 +151,7 @@ export class GameState {
           eventBus.emit("power_pill:expired");
         },
       );
-      eventBus.emit("power_pill:activated", { duration: this.buffDuration });
+      eventBus.emit("power_pill:activated", { duration: this.levelData.buffDuration });
     });
 
     eventBus.on("bonus_life:earned", () => {
