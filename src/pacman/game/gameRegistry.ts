@@ -42,7 +42,7 @@ export class GameRegistry {
     eventBus.on("command:spawn_entities", () => this.spawnEntities());
     eventBus.on("command:exit_lair_all", () => this.exitLairAll());
     eventBus.on("command:init_all", () => this.initAll());
-    eventBus.on("command:reset_positions", () => this.resetPositionsForDeath());
+    eventBus.on("command:reset_positions", () => this.resetActors());
     eventBus.on("command:clear_canvases", () => this.clearAllCanvases());
   }
 
@@ -117,12 +117,9 @@ export class GameRegistry {
     this._ghosts.forEach((g) => g.calculateExitPath());
   }
 
-  resetPositionsForDeath(): void {
+  resetActors(): void {
     this._pacman.reset();
-    this._ghosts.forEach((g) => {
-      g.spawn();
-      g.reset();
-    });
+    this._ghosts.forEach((g) => g.reset());
   }
 
   clearAllCanvases(): void {

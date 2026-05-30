@@ -99,16 +99,15 @@ export class Director {
   loadLevel(): void {
     eventBus.emit("command:reset_all");
     eventBus.emit("command:setup_environment");
+    eventBus.emit("command:spawn_entities");
   }
 
   startGame(): void {
     this.resetTickingState();
 
     eventBus.emit("level:transition_start", { duration: 5 });
-    eventBus.emit("command:spawn_entities");
     this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
 
-    // This drives the UI "READY!" text
     this.transitionClock.start(
       5,
       1000,

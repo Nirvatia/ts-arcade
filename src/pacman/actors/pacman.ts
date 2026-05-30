@@ -55,7 +55,6 @@ export class Pacman extends Actor {
   }
 
   init(): void {
-    this.spawn();
   }
 
   reset(): void {
@@ -67,7 +66,6 @@ export class Pacman extends Actor {
     this.trailHistory = [];
     this.eatParticles = [];
     this.ghostEatFlash = 0;
-    this.spawn();
   }
 
   spawn(): void {

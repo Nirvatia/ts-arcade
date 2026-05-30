@@ -49,13 +49,13 @@ export class Ghost extends Actor {
     this.eatenSpeed = tileSize * config.eatenSpeedMultiplier;
 
     this.direction = { dx: 0, dy: 0 };
+    this.initEventListeners();
   }
 
   // --- Lifecycle ---
 
   init(): void {
     this.getRandomDirection();
-    this.initEventListeners();
   }
 
   reset(): void {
@@ -69,12 +69,6 @@ export class Ghost extends Actor {
     this.isFlashing = false;
     this.state = "CHASE";
     this.trailParticles = [];
-  }
-
-  resetForLevel(): void {
-    this.reset();
-    this.spawn();
-    this.getRandomDirection();
   }
 
   private initEventListeners(): void {

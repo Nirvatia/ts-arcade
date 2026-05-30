@@ -21,10 +21,10 @@ export abstract class Actor implements Updatable {
   private _needsRedraw: boolean = true;
 
   /** Позиция X в пикселях (центр сущности) */
-  public x: number = 0;
+  public x: number = -9999;
 
   /** Позиция Y в пикселях (центр сущности) */
-  public y: number = 0;
+  public y: number = -9999;
 
   /** Радиус коллизии / отрисовки */
   public r: number;
