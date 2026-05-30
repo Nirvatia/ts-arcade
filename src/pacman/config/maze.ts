@@ -1,6 +1,6 @@
 import { type TileType } from "../types.js";
 
-export const LEVEL_1_MAP: TileType[][] = [
+export const CFG_MAZE_0: TileType[][] = [
   ["TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR",],
   ["WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "PP", "WV", "WV", "PP", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV",],
   ["WV", "FD", "TL", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "TR", "FD", "WV",],
@@ -34,7 +34,7 @@ export const LEVEL_1_MAP: TileType[][] = [
   ["BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR",],
 ];
 
-export const LEVEL_2_MAP: TileType[][] = [
+export const CFG_MAZE_1: TileType[][] = [
   ["TL", "WH", "WH", "WH", "WH", "TR", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "ES", "TL", "WH", "WH", "WH", "WH", "TR"],
   ["WV", "FD", "FD", "FD", "FD", "WV", "ES", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "ES", "WV", "FD", "FD", "FD", "FD", "WV"],
   ["WV", "FD", "TL", "TR", "FD", "WV", "ES", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "ES", "WV", "FD", "TL", "TR", "FD", "WV"],
@@ -68,7 +68,7 @@ export const LEVEL_2_MAP: TileType[][] = [
   ["BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR"],
 ];
 
-export const LEVEL_3_MAP: TileType[][] = [
+export const CFG_MAZE_2: TileType[][] = [
   ["TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR"],
   ["WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV"],
   ["WV", "FD", "TL", "TR", "FD", "TL", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "TR", "FD", "TL", "TR", "FD", "WV"],
@@ -102,7 +102,7 @@ export const LEVEL_3_MAP: TileType[][] = [
   ["BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR"],
 ];
 
-export const LEVEL_4_MAP: TileType[][] = [
+export const CFG_MAZE_3: TileType[][] = [
   ["TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR"],
   ["WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV"],
   ["WV", "FD", "TL", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "TL", "TR", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "TR", "FD", "WV"],
@@ -136,7 +136,7 @@ export const LEVEL_4_MAP: TileType[][] = [
   ["BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR", "BL", "WH", "WH", "WH", "WH", "BR", "BL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "BR"],
 ];
 
-export const LEVEL_5_MAP: TileType[][] = [
+export const CFG_MAZE_4: TileType[][] = [
   ["TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR"],
   ["WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV", "WV", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "FD", "WV"],
   ["WV", "FD", "TL", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "WV", "WV", "FD", "TL", "WH", "WH", "WH", "TR", "FD", "TL", "WH", "WH", "TR", "FD", "WV"],

@@ -1,14 +1,8 @@
 // src/utils.ts
 import type { GraphType, LevelConfigType, TileType } from "./types.js";
-import {
-  LEVEL_1_MAP,
-  LEVEL_2_MAP,
-  LEVEL_3_MAP,
-  LEVEL_4_MAP,
-  LEVEL_5_MAP,
-} from "./config/maps.js";
 import { sfx } from "./sfx/sfx.js";
 import { CFG_SFX } from "./config/sfx.js";
+import { CFG_MAZE_0, CFG_MAZE_1, CFG_MAZE_2, CFG_MAZE_3, CFG_MAZE_4 } from "./config/maze.js";
 
 /**
  * Предзагружает все аудио-ассеты через SFX.
@@ -313,11 +307,11 @@ function findLairInternalTiles(map: TileType[][]): string[] {
 function generateLevelConfig(level: number): LevelConfigType {
   // Зацикливаем 5 доступных карт
   const maps = [
-    LEVEL_1_MAP,
-    LEVEL_2_MAP,
-    LEVEL_3_MAP,
-    LEVEL_4_MAP,
-    LEVEL_5_MAP,
+    CFG_MAZE_0,
+    CFG_MAZE_1,
+    CFG_MAZE_2,
+    CFG_MAZE_3,
+    CFG_MAZE_4,
   ];
   const mapIndex = (level - 1) % maps.length;
 

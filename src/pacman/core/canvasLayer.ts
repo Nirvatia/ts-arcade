@@ -1,8 +1,8 @@
 // src/core/CanvasLayer.ts
 import { setCanvasSize } from "../utils.js";
-import { LEVEL_1_MAP } from "../config/maps.js";
 import { GameState } from "../game/gameState.svelte.js";
 import { CFG_CANVAS } from "../config/canvas.js";
+import { CFG_MAZE_0 } from "../config/maze.js";
 
 /**
  * Управляет HTML Canvas элементом и его 2D контекстом.
@@ -72,7 +72,7 @@ export class CanvasLayer {
    */
   resize(): void {
     const gameState = GameState.getInstance();
-    const currentMap = gameState.levelData?.map || LEVEL_1_MAP;
+    const currentMap = gameState.levelData?.map || CFG_MAZE_0;
 
     setCanvasSize(this._canvas, CFG_CANVAS.tile.size, 0, currentMap);
   }
