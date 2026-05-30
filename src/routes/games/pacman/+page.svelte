@@ -19,14 +19,12 @@
   let canvasHeight = $state(496);
   let intermissionCanvas: HTMLCanvasElement | null = $state(null);
 
-  // Directly link references to the class reactive loops
   const gameState = GameState.getInstance();
   const tally = Tally.getInstance();
   const director = Director.getInstance();
   const gameLoop = GameLoop.getInstance();
   const environment = Environment.getInstance();
 
-  // Pure dynamic derived reading from our engine clock loops
   let countdown = $derived.by(() => {
     const activeClock = director.currentClock;
     return activeClock && activeClock.isRunning ? activeClock.getRemaining() : 0;

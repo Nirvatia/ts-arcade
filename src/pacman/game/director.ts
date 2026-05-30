@@ -89,22 +89,19 @@ export class Director {
   startGame(): void {
     this.resetTickingState();
 
-    eventBus.emit("level:transition_start", { duration: 4 });
+    eventBus.emit("level:transition_start", { duration: 5 });
     eventBus.emit("command:spawn_entities");
-    this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
-
-    const trackDuration = sfx.getTrackDuration("start");
-    const countdownTime = trackDuration > 0 ? Math.ceil(trackDuration) : 4;
+    this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map); // Refactor: as event
 
     this.activeClock.start(
-      countdownTime,
+      5,
       1000,
       () => {},
       () => {
-        eventBus.emit("command:exit_lair_all");
-        eventBus.emit("command:init_all");
-        eventBus.emit("game:started");
         eventBus.emit("level:transition_end");
+        eventBus.emit("game:started");
+        eventBus.emit("command:init_all");
+        eventBus.emit("command:exit_lair_all");
       },
     );
   }
@@ -113,15 +110,12 @@ export class Director {
     this.resetTickingState();
 
     const pacman = this.registry.getPacman();
-    if (!pacman) return; // Defensive guard statement
+    if (!pacman) return; 
 
     eventBus.emit("pacman:death_animation_start", { x: pacman.x, y: pacman.y });
 
-    const deathDuration = sfx.getTrackDuration("death") || 2;
-    const msDuration = deathDuration * 1000 + 200;
-
     this.activeSequence
-      .addWait(msDuration)
+      .addWait(3000)
       .addCallback(() => {
         eventBus.emit("command:execute_life_loss", {
           currentScore: this.tally.score,
@@ -132,18 +126,18 @@ export class Director {
 
   completeDeathSequence(): void {
     this.resetTickingState();
-    eventBus.emit("command:reset_positions");
-    eventBus.emit("level:transition_start", { duration: 3 });
     eventBus.emit("pacman:death_animation_end");
+    eventBus.emit("command:reset_positions");
+    eventBus.emit("level:transition_start", { duration: 5 });
 
     this.activeClock.start(
-      3,
+      5,
       1000,
       () => {},
       () => {
-        eventBus.emit("command:exit_lair_all");
-        eventBus.emit("game:resumed"); 
         eventBus.emit("level:transition_end");
+        eventBus.emit("game:resumed"); 
+        eventBus.emit("command:exit_lair_all");
       },
     );
   }
