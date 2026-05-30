@@ -1,12 +1,12 @@
-// src/game/director.ts
 import { Clock } from "../core/clock.svelte.js";
 import { eventBus } from "../core/eventBus.js";
-import { sfx } from "../sfx/sfx.js";
 import { createPathGraph } from "../utils.js";
 import { GameRegistry } from "./gameRegistry.js";
 import { GameState } from "./gameState.svelte.js";
 import { Sequence } from "../core/sequence.js";
 import { Tally } from "./tally.svelte.js";
+import { SceneRegistry } from "../scenes/sceneRegistry.js";
+import type { IGameScene } from "../interfaces.js";
 
 export class Director {
   private static instance: Director;
@@ -15,6 +15,9 @@ export class Director {
   private tally: Tally;
   private activeClock: Clock = new Clock();
   private activeSequence: Sequence = new Sequence();
+
+  private sceneRegistry: SceneRegistry = new SceneRegistry();
+  private activeIntermissionScene: IGameScene | null = null;
 
   private constructor() {
     this.gameState = GameState.getInstance();
@@ -33,15 +36,25 @@ export class Director {
     eventBus.on("game:start", () => this.startGame());
     eventBus.on("game:restart", () => this.restartGame());
     eventBus.on("game:over", () => this.handleGameOver());
-    
-    eventBus.on("level:complete", (payload) => this.triggerIntermissionSequence(payload));
+
+    eventBus.on("level:complete", (payload) =>
+      this.triggerIntermissionSequence(payload),
+    );
     eventBus.on("pacman:death_triggered", () => this.triggerDeathSequence());
-    eventBus.on("command:death_sequence_continue", () => this.completeDeathSequence());
-    eventBus.on("command:ghost_eaten", (data) => this.triggerGhostEatenSequence(data));
+    eventBus.on("command:death_sequence_continue", () =>
+      this.completeDeathSequence(),
+    );
+    eventBus.on("command:ghost_eaten", (data) =>
+      this.triggerGhostEatenSequence(data),
+    );
   }
 
   get currentClock(): Clock {
     return this.activeClock;
+  }
+
+  public get currentIntermissionScene(): IGameScene | null {
+    return this.activeIntermissionScene;
   }
 
   private resetTickingState(): void {
@@ -58,16 +71,16 @@ export class Director {
       ghostEatenDuration,
       () => {},
       () => {
-        eventBus.emit("game:resumed"); 
+        eventBus.emit("game:resumed");
       },
     );
   }
 
   private handleGameOver(): void {
     this.resetTickingState();
-    eventBus.emit("ui:game_over_show", { 
-      score: this.tally.score, 
-      level: this.gameState.currentLevel 
+    eventBus.emit("ui:game_over_show", {
+      score: this.tally.score,
+      level: this.gameState.currentLevel,
     });
   }
 
@@ -91,7 +104,7 @@ export class Director {
 
     eventBus.emit("level:transition_start", { duration: 5 });
     eventBus.emit("command:spawn_entities");
-    this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map); // Refactor: as event
+    this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
 
     this.activeClock.start(
       5,
@@ -110,7 +123,7 @@ export class Director {
     this.resetTickingState();
 
     const pacman = this.registry.getPacman();
-    if (!pacman) return; 
+    if (!pacman) return;
 
     eventBus.emit("pacman:death_animation_start", { x: pacman.x, y: pacman.y });
 
@@ -136,7 +149,7 @@ export class Director {
       () => {},
       () => {
         eventBus.emit("level:transition_end");
-        eventBus.emit("game:resumed"); 
+        eventBus.emit("game:resumed");
         eventBus.emit("command:exit_lair_all");
       },
     );
@@ -164,6 +177,15 @@ export class Director {
     this.activeSequence
       .addCallback(() => {
         eventBus.emit("command:clear_canvases");
+
+        // Select a random scene layout module on intermission start
+        this.activeIntermissionScene = this.sceneRegistry.getRandomScene();
+
+        // Target an exact duration pool of 5 seconds matching sequence timing budget
+        this.activeIntermissionScene.start(5, () => {
+          this.activeIntermissionScene = null;
+        });
+
         eventBus.emit("level:intermission_start", {
           nextLevel: payload.level + 1,
         });

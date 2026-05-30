@@ -11,7 +11,7 @@ export class GameState {
   private _state = $state({
     mode: "INIT" as GameMode,
     lives: 3,
-    currentLevel: 1
+    currentLevel: 1,
   });
 
   public pathGraph: GraphType | null = null;
@@ -120,7 +120,15 @@ export class GameState {
 
       this.dotsEaten++;
 
-      if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
+      // if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
+      //   this.isProcessingLevelTransition = true;
+      //   eventBus.emit("level:complete", {
+      //     level: this.currentLevel,
+      //     score: 0,
+      //   });
+      // }
+
+      if (this.dotsEaten >= 50) {
         this.isProcessingLevelTransition = true;
         eventBus.emit("level:complete", {
           level: this.currentLevel,
@@ -153,18 +161,21 @@ export class GameState {
       eventBus.emit("bonus_life:acquired", { lives: this.lives });
     });
 
-    eventBus.on("command:execute_life_loss", (data: { currentScore: number }) => {
-      if (this.lives - 1 < 0) {
-        this.mode = "GAME_OVER";
-        eventBus.emit("game:over", {
-          finalScore: data.currentScore,
-          level: this.currentLevel,
-        });
-      } else {
-        this.lives--;
-        eventBus.emit("command:death_sequence_continue");
-      }
-    });
+    eventBus.on(
+      "command:execute_life_loss",
+      (data: { currentScore: number }) => {
+        if (this.lives - 1 < 0) {
+          this.mode = "GAME_OVER";
+          eventBus.emit("game:over", {
+            finalScore: data.currentScore,
+            level: this.currentLevel,
+          });
+        } else {
+          this.lives--;
+          eventBus.emit("command:death_sequence_continue");
+        }
+      },
+    );
 
     eventBus.on("dot:spawned", (data) => {
       this.totalDots = data.count;

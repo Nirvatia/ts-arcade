@@ -1,23 +1,21 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { initAudio } from "../../../pacman/utils.js";
+  import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
   import fontUrl from "$lib/assets/fonts/Jersey-Regular.ttf?url";
   import { Director } from "../../../pacman/game/director.js";
   import { GameState } from "../../../pacman/game/gameState.svelte.js";
   import { sfx } from "../../../pacman/sfx/sfx.js";
   import { Controller } from "../../../pacman/controller/controller.js";
-  import { Intermission } from "../../../pacman/scenes/intermission.js";
   import { Tally } from "../../../pacman/game/tally.svelte.js";
   import { eventBus } from "../../../pacman/core/eventBus.js";
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
-  import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
   import { GameLoop } from "../../../pacman/core/gameLoop.js";
   import { Environment } from "../../../pacman/world/environment.js";
 
   let isLoading = $state(true);
   let canvasWidth = $state(448);
   let canvasHeight = $state(496);
-  let intermissionCanvas: HTMLCanvasElement | null = $state(null);
 
   const gameState = GameState.getInstance();
   const tally = Tally.getInstance();
@@ -25,9 +23,12 @@
   const gameLoop = GameLoop.getInstance();
   const environment = Environment.getInstance();
 
+  // Forcing open dependency parsing to bypass conditional short-circuit traps
   let countdown = $derived.by(() => {
     const activeClock = director.currentClock;
-    return activeClock && activeClock.isRunning ? activeClock.getRemaining() : 0;
+    if (!activeClock) return 0;
+    const remaining = activeClock.getRemaining();
+    return activeClock.isRunning ? remaining : 0;
   });
 
   onMount(async () => {
@@ -45,7 +46,9 @@
 
     eventBus.emit("game:load");
 
-    const mapCanvas = document.getElementById(CFG_CANVAS.canvasIds.maze) as HTMLCanvasElement;
+    const mapCanvas = document.getElementById(
+      CFG_CANVAS.canvasIds.maze,
+    ) as HTMLCanvasElement;
     if (mapCanvas) {
       canvasWidth = mapCanvas.width;
       canvasHeight = mapCanvas.height;
@@ -53,27 +56,6 @@
 
     const controller = new Controller();
     controller.init();
-  });
-
-  $effect(() => {
-    if (gameState.mode === "INTERMISSION" && intermissionCanvas) {
-      const ctx = intermissionCanvas.getContext("2d");
-      if (!ctx) return;
-
-      const intermissionInstance = new Intermission();
-      intermissionInstance.start(5, () => {});
-
-      let animationId: number;
-      const animate = () => {
-        if (gameState.mode !== "INTERMISSION") return;
-        intermissionInstance.update(16);
-        intermissionInstance.draw();
-        animationId = requestAnimationFrame(animate);
-      };
-      animationId = requestAnimationFrame(animate);
-
-      return () => cancelAnimationFrame(animationId);
-    }
   });
 
   async function handleStart() {
@@ -113,7 +95,11 @@
         <canvas id={CFG_CANVAS.canvasIds.ui}></canvas>
 
         {#if gameState.mode === "INIT" || gameState.mode === "GAME_OVER"}
-          <div class="screen-overlay {gameState.mode === 'INIT' ? 'attract-mode' : 'death-mode'}">
+          <div
+            class="screen-overlay {gameState.mode === 'INIT'
+              ? 'attract-mode'
+              : 'death-mode'}"
+          >
             {#if gameState.mode === "GAME_OVER"}
               <div class="death-header">
                 <span class="skull">☠</span>
@@ -124,13 +110,19 @@
                 <span class="score-label">FINAL SCORE</span>
                 <span class="score-number">{tally.score.toLocaleString()}</span>
               </div>
-              <button class="cabinet-button" onclick={handleRestart}>▶ CONTINUE</button>
+              <button class="cabinet-button" onclick={handleRestart}
+                >▶ CONTINUE</button
+              >
               <div class="credit-text">INSERT COIN TO CONTINUE</div>
             {:else}
               <div class="attract-content">
                 <div class="title-arc">
-                  <span class="char">P</span><span class="char">A</span><span class="char">C</span>
-                  <span class="char">-</span><span class="char">M</span><span class="char">A</span><span class="char">N</span>
+                  <span class="char">P</span><span class="char">A</span><span
+                    class="char">C</span
+                  >
+                  <span class="char">-</span><span class="char">M</span><span
+                    class="char">A</span
+                  ><span class="char">N</span>
                 </div>
                 <div class="character-row">
                   <div class="ghost-dot red"></div>
@@ -138,7 +130,9 @@
                   <div class="ghost-dot cyan"></div>
                   <div class="ghost-dot orange"></div>
                 </div>
-                <button class="cabinet-button start-btn" onclick={handleStart}>● START GAME</button>
+                <button class="cabinet-button start-btn" onclick={handleStart}
+                  >● START GAME</button
+                >
                 <div class="credit-text blink">CREDIT 1</div>
               </div>
             {/if}
@@ -155,13 +149,7 @@
             </div>
           {/if}
           {#if gameState.mode === "INTERMISSION"}
-            <div class="game-overlay intermission-wrapper">
-              <canvas
-                bind:this={intermissionCanvas}
-                width={canvasWidth}
-                height={canvasHeight}
-              ></canvas>
-            </div>
+            <div class="game-overlay intermission-wrapper"></div>
           {/if}
         {/if}
       </div>
