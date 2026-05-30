@@ -310,14 +310,6 @@
     letter-spacing: 6px;
   }
 
-  .intermission-wrapper {
-    pointer-events: auto;
-
-    canvas {
-      position: relative;
-    }
-  }
-
   // --- Screen Overlays (Init / Game Over) ---
   .screen-overlay {
     position: absolute;
