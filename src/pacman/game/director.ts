@@ -1,12 +1,12 @@
 // src/game/director.ts
-import { Clock } from "../core/clock.js";
+import { Clock } from "../core/clock.svelte.js";
 import { eventBus } from "../core/eventBus.js";
 import { sfx } from "../sfx/sfx.js";
 import { createPathGraph } from "../utils.js";
 import { GameRegistry } from "./gameRegistry.js";
-import { GameState } from "./gameState.js";
-import { Sequence } from "./sequence.js";
-import { Tally } from "./tally.js";
+import { GameState } from "./gameState.svelte.js";
+import { Sequence } from "../core/sequence.js";
+import { Tally } from "./tally.svelte.js";
 
 export class Director {
   private static instance: Director;
@@ -34,7 +34,6 @@ export class Director {
     eventBus.on("game:restart", () => this.restartGame());
     eventBus.on("game:over", () => this.handleGameOver());
     
-    // Explicit Payload Binding Fix matching EventPayloads layout definition
     eventBus.on("level:complete", (payload) => this.triggerIntermissionSequence(payload));
     eventBus.on("pacman:death_triggered", () => this.triggerDeathSequence());
     eventBus.on("command:death_sequence_continue", () => this.completeDeathSequence());
@@ -54,7 +53,6 @@ export class Director {
     this.resetTickingState();
 
     const ghostEatenDuration = 1000;
-    // Uses structural onComplete callback signature to emit the resumed state safely
     this.activeClock.start(
       ghostEatenDuration / 1000,
       ghostEatenDuration,
@@ -67,7 +65,6 @@ export class Director {
 
   private handleGameOver(): void {
     this.resetTickingState();
-    // Dispatch structural UI notification with historical data parameters
     eventBus.emit("ui:game_over_show", { 
       score: this.tally.score, 
       level: this.gameState.currentLevel 
@@ -151,13 +148,11 @@ export class Director {
     );
   }
 
-  // Refactored to catch and handle payload arguments safely
   triggerIntermissionSequence(payload: { level: number; score: number }): void {
     this.resetTickingState();
     const maze = this.registry.getMaze();
     if (!maze) return;
 
-    // 1. Loop-build the structured architectural sequence steps cleanly
     for (let i = 0; i < 4; i++) {
       this.activeSequence
         .addCallback(() => {
@@ -172,7 +167,6 @@ export class Director {
         .addWait(400);
     }
 
-    // 2. Queue sequence finalization steps using explicit payload mapping properties
     this.activeSequence
       .addCallback(() => {
         eventBus.emit("command:clear_canvases");
@@ -182,7 +176,6 @@ export class Director {
       })
       .addWait(5000)
       .start(() => {
-        // Leverages native Sequence terminal execution strategy
         this.loadLevel();
         this.startGame();
       });

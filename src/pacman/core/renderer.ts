@@ -1,6 +1,6 @@
 // src/game/Renderer.ts
 import { GameRegistry } from "../game/gameRegistry.js";
-import { GameState } from "../game/gameState.js";
+import { GameState } from "../game/gameState.svelte.js";
 
 /**
  * Отрисовщик всех игровых объектов.

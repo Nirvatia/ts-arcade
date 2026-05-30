@@ -1,6 +1,6 @@
 import { eventBus } from "../core/eventBus.js";
 import { GameRegistry } from "../game/gameRegistry.js";
-import { GameState } from "../game/gameState.js";
+import { GameState } from "../game/gameState.svelte.js";
 import { sfx } from "../sfx/sfx.js";
 
 type Direction = { dx: number; dy: number };

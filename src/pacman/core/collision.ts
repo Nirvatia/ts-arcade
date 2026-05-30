@@ -1,6 +1,6 @@
 // src/world/Collision.ts
 import { CFG_CANVAS } from "../config/canvas.js";
-import { GameState } from "../game/gameState.js";
+import { GameState } from "../game/gameState.svelte.js";
 import type { TileType, TeleportType } from "../types.js";
 
 interface Coords {

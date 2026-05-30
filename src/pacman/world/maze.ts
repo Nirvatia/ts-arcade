@@ -2,7 +2,7 @@
 
 import { CFG_CANVAS } from "../config/canvas.js";
 import { CanvasLayer } from "../core/canvasLayer.js";
-import { GameState } from "../game/gameState.js";
+import { GameState } from "../game/gameState.svelte.js";
 import type { Drawable } from "../interfaces.js";
 
 export class Maze implements Drawable {

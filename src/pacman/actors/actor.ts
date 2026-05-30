@@ -2,7 +2,7 @@
 import { CFG_CANVAS } from "../config/canvas.js";
 import { CanvasLayer } from "../core/canvasLayer.js";
 import { Collision } from "../core/collision.js";
-import { GameState } from "../game/gameState.js";
+import { GameState } from "../game/gameState.svelte.js";
 import type { Updatable } from "../interfaces.js";
 
 /**

@@ -1,7 +1,7 @@
 // src/core/CanvasLayer.ts
 import { setCanvasSize } from "../utils.js";
 import { LEVEL_1_MAP } from "../config/maps.js";
-import { GameState } from "../game/gameState.js";
+import { GameState } from "../game/gameState.svelte.js";
 import { CFG_CANVAS } from "../config/canvas.js";
 
 /**
