@@ -2,9 +2,7 @@
 
 ## High Priority (Core Gameplay Fixes)
 - [ ] **Core**
-  - Infinite levels
-  - Fix being able to move outside map boundaries after teleport
-
+  - Fix buff config values to be applied on each new level
 
 ## Ghost AI & Gameplay Logic
 - [ ] **Authentic Ghost Personalities**
