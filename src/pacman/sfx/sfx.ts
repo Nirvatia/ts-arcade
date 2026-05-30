@@ -41,7 +41,6 @@ export class SFX {
       window.AudioContext || (window as any).webkitAudioContext
     )();
 
-    // Сразу проверяем состояние, если заблокировано - resume()
     if (this.context.state === "suspended") {
       this.context.resume();
     }
@@ -58,12 +57,10 @@ export class SFX {
     this.initEventListeners();
   }
 
-  /** Получить muted состояние */
   get isMuted(): boolean {
     return this._isMuted;
   }
 
-  /** Включить/выключить звук */
   toggleMute(): void {
     if (!this.isInitialized) return;
 
@@ -80,33 +77,26 @@ export class SFX {
     }
   }
 
-  /**
-   * Загружаем только ArrayBuffer, не трогая AudioContext!
-   */
   async loadSound(name: string, url: string): Promise<void> {
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
     this.audioDataCache.set(name, arrayBuffer);
 
-    // Если контекст уже есть (например, загружаем новый уровень), декодируем сразу
     if (this.isInitialized) {
       await this.decodeFromCache(name);
     }
   }
 
-  /** Вспомогательный метод для декодирования */
   private async decodeFromCache(name: string): Promise<void> {
     const data = this.audioDataCache.get(name);
     if (data && !this.buffers.has(name)) {
-      // slice() нужен, так как decodeAudioData "съедает" буфер
       const buffer = await this.context.decodeAudioData(data.slice(0));
       this.buffers.set(name, buffer);
     }
   }
 
-  /** Метод для массового декодирования при старте */
   async decodeAll(): Promise<void> {
-    this.init(); // Создаем контекст (здесь это легально, т.к. вызов из контроллера)
+    this.init();
     const promises = Array.from(this.audioDataCache.keys()).map((name) =>
       this.decodeFromCache(name),
     );
@@ -115,21 +105,19 @@ export class SFX {
 
   async unlockAudio(): Promise<void> {
     if (!this.isInitialized) {
-      await this.decodeAll(); // Инициализация и декодирование
+      await this.decodeAll();
     }
     if (this.context && this.context.state === "suspended") {
       await this.context.resume();
     }
   }
 
-  /** Получить длительность трека в секундах */
   getTrackDuration(name: string): number {
     if (!this.isInitialized) return 0;
     const buffer = this.buffers.get(name);
     return buffer ? buffer.duration : 0;
   }
 
-  /** Воспроизвести звуковой эффект */
   playSFX(name: string): void {
     if (!this.isInitialized) return;
     const buffer = this.buffers.get(name);
@@ -151,7 +139,6 @@ export class SFX {
     source.start(0);
   }
 
-  /** Воспроизвести фоновую музыку */
   playMusic(name: string, loop: boolean = true): void {
     if (this.currentMusicName === name) return;
     this.stopMusic();
@@ -169,7 +156,6 @@ export class SFX {
     this.currentMusicName = name;
   }
 
-  /** Остановить музыку */
   stopMusic(): void {
     if (this.activeMusicSource) {
       try {
@@ -183,7 +169,6 @@ export class SFX {
     }
   }
 
-  /** Установить общую громкость */
   setVolume(val: number): void {
     if (!this.isInitialized) return;
     const clampedVal = Math.max(0, Math.min(1, val));
@@ -197,44 +182,53 @@ export class SFX {
     const registry = GameRegistry.getInstance();
     const gameState = GameState.getInstance();
 
-    let currentMusic: string | null = null;
-
     const switchMusic = (newTrack: string, loop: boolean) => {
-      if (currentMusic === newTrack) return;
-      this.stopMusic();
+      if (this.currentMusicName === newTrack) return;
       this.playMusic(newTrack, loop);
-      currentMusic = newTrack;
     };
 
     eventBus.on("game:over", () => {
       this.stopMusic();
-      currentMusic = null;
+    });
+
+    // FIX 1: Silence music instantly when level complete flashing starts
+    eventBus.on("level:complete", () => {
+      this.stopMusic();
     });
 
     eventBus.on("level:transition_start", () => {
-      this.stopMusic();
-      currentMusic = null;
       switchMusic("start", false);
     });
 
     eventBus.on("game:started", () => {
+      // FIX 2: Explicit state protection against runtime frame updates
+      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") {
+        return;
+      }
       switchMusic("siren_0", true);
     });
 
     eventBus.on("game:resumed", () => {
+      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") {
+        return;
+      }
       switchMusic("siren_0", true);
     });
 
     eventBus.on("power_pill:activated", () => {
+      // Don't play chase audio if we are during intermission sequence transitions
+      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") return;
+      
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) {
-        currentMusic = "fright";
+        this.currentMusicName = "fright";
         return;
       }
       switchMusic("fright", true);
     });
 
     eventBus.on("power_pill:expired", () => {
+      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") return;
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) return;
       switchMusic("siren_0", true);
@@ -242,12 +236,12 @@ export class SFX {
 
     eventBus.on("ghost:eaten", () => {
       this.stopMusic();
-      currentMusic = null;
       this.playSFX("eat_ghost");
       switchMusic("eyes", true);
     });
 
     eventBus.on("ghost:returned_home", () => {
+      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") return;
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) return;
       if (gameState.isBuffed) {
@@ -259,7 +253,6 @@ export class SFX {
 
     eventBus.on("pacman:death_animation_start", () => {
       this.stopMusic();
-      currentMusic = null;
       this.playSFX("death");
     });
 
