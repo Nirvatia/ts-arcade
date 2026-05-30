@@ -118,15 +118,7 @@ export class GameState {
 
       this.dotsEaten++;
 
-      // if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
-      //   this.isProcessingLevelTransition = true;
-      //   eventBus.emit("level:complete", {
-      //     level: this.currentLevel,
-      //     score: 0,
-      //   });
-      // }
-
-      if (this.dotsEaten >= 50) {
+      if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
         this.isProcessingLevelTransition = true;
         eventBus.emit("level:complete", {
           level: this.currentLevel,
