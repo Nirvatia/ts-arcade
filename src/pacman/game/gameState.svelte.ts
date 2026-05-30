@@ -1,5 +1,4 @@
-// src/game/gameState.ts
-import { Clock } from "../core/clock.js";
+import { Clock } from "../core/clock.svelte.js";
 import { eventBus } from "../core/eventBus.js";
 import type { GameMode } from "../gameModes.js";
 import type { GraphType, LevelConfigType } from "../types.js";
@@ -8,16 +7,20 @@ import { generateLevelConfig } from "../utils.js";
 export class GameState {
   private static instance: GameState;
 
+  // Svelte 5 Fine-Grained Reactive Proxy Object
+  private _state = $state({
+    mode: "INIT" as GameMode,
+    lives: 3,
+    currentLevel: 1
+  });
+
   public pathGraph: GraphType | null = null;
-  public mode: GameMode = "INIT";
-  public currentLevel: number = 1;
   public levelData: LevelConfigType;
   public totalDots: number = 0;
   public dotsEaten: number = 0;
   public isBuffed: boolean = false;
   public isProcessingLevelTransition: boolean = false;
 
-  private _lives: number = 3;
   private buffClock: Clock = new Clock();
   private buffDuration: number = 10;
   private buffThreshold: number = 3;
@@ -34,30 +37,45 @@ export class GameState {
     return GameState.instance;
   }
 
-  // --- Getters & Setters ---
+  // --- Getters & Setters hooked directly to the proxy ---
+
+  public get mode(): GameMode {
+    return this._state.mode;
+  }
+
+  public set mode(val: GameMode) {
+    this._state.mode = val;
+  }
 
   public get lives(): number {
-    return this._lives;
+    return this._state.lives;
   }
 
   public set lives(value: number) {
-    const previousLives = this._lives;
-    this._lives = value;
+    const previousLives = this._state.lives;
+    this._state.lives = value;
 
-    if (previousLives !== this._lives) {
-      eventBus.emit("lives:changed", { lives: this._lives });
-      eventBus.emit("ui:lives_display_update", { lives: this._lives });
+    if (previousLives !== this._state.lives) {
+      eventBus.emit("lives:changed", { lives: this._state.lives });
+      eventBus.emit("ui:lives_display_update", { lives: this._state.lives });
     }
   }
 
+  public get currentLevel(): number {
+    return this._state.currentLevel;
+  }
+
+  public set currentLevel(value: number) {
+    this._state.currentLevel = value;
+  }
+
   private reset(): void {
-    this.currentLevel = 1;
+    this._state.currentLevel = 1;
     this.dotsEaten = 0;
     this.lives = 3;
   }
 
   private initEventListeners(): void {
-    // Game Lifecycle Management via events
     eventBus.on("game:start", () => {
       this.mode = "LEVEL_TRANSITION";
     });
@@ -97,7 +115,6 @@ export class GameState {
       this.mode = "PLAYING";
     });
 
-    // Core Rules Progress
     eventBus.on("dot:eaten", () => {
       if (this.isProcessingLevelTransition) return;
 
@@ -136,22 +153,18 @@ export class GameState {
       eventBus.emit("bonus_life:acquired", { lives: this.lives });
     });
 
-    // Decoupled Lifecycle Execution Hook
-    eventBus.on(
-      "command:execute_life_loss",
-      (data: { currentScore: number }) => {
-        if (this._lives - 1 < 0) {
-          this.mode = "GAME_OVER";
-          eventBus.emit("game:over", {
-            finalScore: data.currentScore,
-            level: this.currentLevel,
-          });
-        } else {
-          this.lives--;
-          eventBus.emit("command:death_sequence_continue");
-        }
-      },
-    );
+    eventBus.on("command:execute_life_loss", (data: { currentScore: number }) => {
+      if (this.lives - 1 < 0) {
+        this.mode = "GAME_OVER";
+        eventBus.emit("game:over", {
+          finalScore: data.currentScore,
+          level: this.currentLevel,
+        });
+      } else {
+        this.lives--;
+        eventBus.emit("command:death_sequence_continue");
+      }
+    });
 
     eventBus.on("dot:spawned", (data) => {
       this.totalDots = data.count;

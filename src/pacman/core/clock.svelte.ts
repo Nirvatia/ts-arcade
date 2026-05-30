@@ -1,20 +1,21 @@
-// src/game/Clock.ts
+// src/game/Clock.svelte.ts
 
 type TickCallback = (remaining: number) => void;
 type CompleteCallback = () => void;
 
 /**
  * Универсальный таймер обратного отсчёта.
- * Поддерживает колбэки на каждый тик и на завершение.
- * Может быть остановлен и сброшен в любой момент.
+ * Использует руны Svelte 5 для автоматического обновления пользовательского интерфейса.
  */
 export class Clock {
-  private duration: number = 0;
-  private elapsed: number = 0;
+  // Svelte 5 State Runes force UI updates on every mutation frame
+  private duration = $state(0);
+  private elapsed = $state(0);
+  private _isRunning = $state(false);
+  
   private intervalId: number | null = null;
   private onTick: TickCallback | null = null;
   private onComplete: CompleteCallback | null = null;
-  private _isRunning: boolean = false;
 
   constructor() {}
 
@@ -25,10 +26,6 @@ export class Clock {
 
   /**
    * Запустить таймер обратного отсчёта.
-   * @param duration - общая длительность в секундах
-   * @param interval - интервал тика в миллисекундах
-   * @param onTick - вызывается на каждом тике с оставшимся временем
-   * @param onComplete - вызывается при завершении отсчёта
    */
   start(
     duration: number,

@@ -3,36 +3,34 @@
   import { initAudio } from "../../../pacman/utils.js";
   import fontUrl from "$lib/assets/fonts/Jersey-Regular.ttf?url";
   import { Director } from "../../../pacman/game/director.js";
-  import { GameState } from "../../../pacman/game/gameState.js";
+  import { GameState } from "../../../pacman/game/gameState.svelte.js";
   import { sfx } from "../../../pacman/sfx/sfx.js";
   import { Controller } from "../../../pacman/controller/controller.js";
   import { Intermission } from "../../../pacman/scenes/intermission.js";
-  import { Tally } from "../../../pacman/game/tally.js";
+  import { Tally } from "../../../pacman/game/tally.svelte.js";
   import { eventBus } from "../../../pacman/core/eventBus.js";
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
   import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
-  import { Environment } from "../../../pacman/world/environment.js";
   import { GameLoop } from "../../../pacman/core/gameLoop.js";
+  import { Environment } from "../../../pacman/world/environment.js";
 
   let isLoading = $state(true);
-  let score = $state(0);
-  let lives = $state(3);
-  let gameMode = $state("INIT");
-  let countdown = $state(0);
-
   let canvasWidth = $state(448);
   let canvasHeight = $state(496);
-
   let intermissionCanvas: HTMLCanvasElement | null = $state(null);
-  let intermissionInstance: Intermission | null = null;
 
-  let gameState: GameState;
-  let gameLoop: GameLoop;
-  let director: Director;
-  let environment: Environment;
-  let tally: Tally;
+  // Directly link references to the class reactive loops
+  const gameState = GameState.getInstance();
+  const tally = Tally.getInstance();
+  const director = Director.getInstance();
+  const gameLoop = GameLoop.getInstance();
+  const environment = Environment.getInstance();
 
-  let uiUpdateInterval: number | null = null;
+  // Pure dynamic derived reading from our engine clock loops
+  let countdown = $derived.by(() => {
+    const activeClock = director.currentClock;
+    return activeClock && activeClock.isRunning ? activeClock.getRemaining() : 0;
+  });
 
   onMount(async () => {
     const gameFont = new FontFace("Jersey-Regular", `url(${fontUrl})`);
@@ -47,18 +45,9 @@
     isLoading = false;
     await tick();
 
-    gameState = GameState.getInstance();
-    gameLoop = GameLoop.getInstance();
-    director = Director.getInstance();
-    environment = Environment.getInstance();
-    tally = Tally.getInstance();
-
-    // FIXED: Use new event name
     eventBus.emit("game:load");
 
-    const mapCanvas = document.getElementById(
-      CFG_CANVAS.canvasIds.maze,
-    ) as HTMLCanvasElement;
+    const mapCanvas = document.getElementById(CFG_CANVAS.canvasIds.maze) as HTMLCanvasElement;
     if (mapCanvas) {
       canvasWidth = mapCanvas.width;
       canvasHeight = mapCanvas.height;
@@ -66,100 +55,21 @@
 
     const controller = new Controller();
     controller.init();
-
-    // FIXED: Listen to new events to update UI reactively instead of polling
-    eventBus.on("score:updated", (data) => {
-      score = data.score;
-    });
-
-    eventBus.on("lives:changed", (data) => {
-      lives = data.lives;
-    });
-
-    eventBus.on("bonus_life:acquired", (data) => {
-      lives = data.lives;
-    });
-
-    eventBus.on("game:over", (data) => {
-      score = data.finalScore;
-      gameMode = "GAME_OVER";
-      countdown = 0;
-    });
-
-    eventBus.on("game:started", () => {
-      gameMode = "PLAYING";
-    });
-
-    eventBus.on("game:resumed", () => {
-      gameMode = "PLAYING";
-    });
-
-    eventBus.on("pacman:death_triggered", () => {
-      gameMode = "PACMAN_DEAD";
-    });
-
-    eventBus.on("level:transition_start", () => {
-      gameMode = "LEVEL_TRANSITION";
-    });
-
-    eventBus.on("level:transition_end", () => {
-      gameMode = "PLAYING";
-    });
-
-    eventBus.on("level:complete", () => {
-      gameMode = "LEVEL_COMPLETE";
-    });
-
-    eventBus.on("level:intermission_start", () => {
-      gameMode = "INTERMISSION";
-    });
-
-    // Keep polling for countdown (since it's time-sensitive UI)
-    // But we can also update other stats reactively now
-    uiUpdateInterval = window.setInterval(() => {
-      // Update score/lives from Tally as fallback (in case we missed an event)
-      if (tally) {
-        score = tally.score;
-        lives = gameState.lives;
-      }
-
-      // Update game mode from GameState as source of truth
-      if (gameState) {
-        gameMode = gameState.mode;
-      }
-
-      if (gameMode === "GAME_OVER") {
-        countdown = 0;
-        return;
-      }
-
-      if (director) {
-        const activeClock = director.currentClock;
-        countdown =
-          activeClock && activeClock.isRunning ? activeClock.getRemaining() : 0;
-      }
-    }, 1000 / 30);
   });
 
   $effect(() => {
-    return () => {
-      if (uiUpdateInterval !== null) clearInterval(uiUpdateInterval);
-    };
-  });
-
-  $effect(() => {
-    if (gameMode === "INTERMISSION" && intermissionCanvas) {
+    if (gameState.mode === "INTERMISSION" && intermissionCanvas) {
       const ctx = intermissionCanvas.getContext("2d");
       if (!ctx) return;
 
-      intermissionInstance = new Intermission();
+      const intermissionInstance = new Intermission();
       intermissionInstance.start(5, () => {});
 
       let animationId: number;
       const animate = () => {
         if (gameState.mode !== "INTERMISSION") return;
-        intermissionInstance?.update(16);
-        intermissionInstance?.draw();
+        intermissionInstance.update(16);
+        intermissionInstance.draw();
         animationId = requestAnimationFrame(animate);
       };
       animationId = requestAnimationFrame(animate);
@@ -168,7 +78,6 @@
     }
   });
 
-  // FIXED: Use new event names
   async function handleStart() {
     await sfx.unlockAudio();
     eventBus.emit("game:start");
@@ -205,13 +114,9 @@
         <canvas id={CFG_CANVAS.canvasIds.ghosts}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.ui}></canvas>
 
-        {#if gameMode === "INIT" || gameMode === "GAME_OVER"}
-          <div
-            class="screen-overlay {gameMode === 'INIT'
-              ? 'attract-mode'
-              : 'death-mode'}"
-          >
-            {#if gameMode === "GAME_OVER"}
+        {#if gameState.mode === "INIT" || gameState.mode === "GAME_OVER"}
+          <div class="screen-overlay {gameState.mode === 'INIT' ? 'attract-mode' : 'death-mode'}">
+            {#if gameState.mode === "GAME_OVER"}
               <div class="death-header">
                 <span class="skull">☠</span>
                 <h1 class="game-over-title">GAME OVER</h1>
@@ -219,21 +124,15 @@
               </div>
               <div class="final-score-box">
                 <span class="score-label">FINAL SCORE</span>
-                <span class="score-number">{score.toLocaleString()}</span>
+                <span class="score-number">{tally.score.toLocaleString()}</span>
               </div>
-              <button class="cabinet-button" onclick={handleRestart}
-                >▶ CONTINUE</button
-              >
+              <button class="cabinet-button" onclick={handleRestart}>▶ CONTINUE</button>
               <div class="credit-text">INSERT COIN TO CONTINUE</div>
             {:else}
               <div class="attract-content">
                 <div class="title-arc">
-                  <span class="char">P</span><span class="char">A</span><span
-                    class="char">C</span
-                  >
-                  <span class="char">-</span><span class="char">M</span><span
-                    class="char">A</span
-                  ><span class="char">N</span>
+                  <span class="char">P</span><span class="char">A</span><span class="char">C</span>
+                  <span class="char">-</span><span class="char">M</span><span class="char">A</span><span class="char">N</span>
                 </div>
                 <div class="character-row">
                   <div class="ghost-dot red"></div>
@@ -241,25 +140,23 @@
                   <div class="ghost-dot cyan"></div>
                   <div class="ghost-dot orange"></div>
                 </div>
-                <button class="cabinet-button start-btn" onclick={handleStart}
-                  >● START GAME</button
-                >
+                <button class="cabinet-button start-btn" onclick={handleStart}>● START GAME</button>
                 <div class="credit-text blink">CREDIT 1</div>
               </div>
             {/if}
           </div>
         {:else}
-          {#if gameMode === "LEVEL_TRANSITION"}
+          {#if gameState.mode === "LEVEL_TRANSITION"}
             <div class="game-overlay ready-text">
-              {countdown > 1 ? countdown : "READY!"}
+              {countdown > 1 ? Math.ceil(countdown) : "READY!"}
             </div>
           {/if}
-          {#if gameMode === "PAUSED"}
+          {#if gameState.mode === "PAUSED"}
             <div class="game-overlay paused-overlay">
               <span class="paused-text">PAUSED</span>
             </div>
           {/if}
-          {#if gameMode === "INTERMISSION"}
+          {#if gameState.mode === "INTERMISSION"}
             <div class="game-overlay intermission-wrapper">
               <canvas
                 bind:this={intermissionCanvas}
@@ -277,12 +174,12 @@
     <div class="game-hud">
       <div class="hud-item">
         <span class="hud-label">SCORE</span>
-        <span class="hud-value">{score.toLocaleString()}</span>
+        <span class="hud-value">{tally.score.toLocaleString()}</span>
       </div>
       <div class="hud-item">
         <span class="hud-label">LIVES</span>
         <div class="lives-display">
-          <span class="hud-value">×{lives}</span>
+          <span class="hud-value">×{gameState.lives}</span>
         </div>
       </div>
     </div>

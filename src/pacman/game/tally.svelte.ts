@@ -1,15 +1,14 @@
-// src/game/Tally.ts
 import { CFG_SCORE } from "../config/score.js";
 import { eventBus } from "../core/eventBus.js";
 
-/**
- * Manages score tracking, bonus lives, and multipliers.
- * Isolates scoring logic cleanly from GameState.
- */
 export class Tally {
   private static instance: Tally;
 
-  private _score: number = 0;
+  // Single reactive source block for the scoring values
+  private _state = $state({
+    score: 0
+  });
+
   private _ghostMultiplier: number = 0;
   private readonly BONUS_LIFE_THRESHOLD = 10000;
   private _hasReceivedBonusLife: boolean = false;
@@ -28,12 +27,12 @@ export class Tally {
   // --- Getters & Setters ---
 
   public get score(): number {
-    return this._score;
+    return this._state.score;
   }
 
   public set score(value: number) {
-    this._score = value;
-    eventBus.emit("ui:score_display_update", { score: this._score });
+    this._state.score = value;
+    eventBus.emit("ui:score_display_update", { score: this._state.score });
     this.checkBonusLife();
   }
 
@@ -111,7 +110,7 @@ export class Tally {
   private checkBonusLife(): boolean {
     if (
       !this._hasReceivedBonusLife &&
-      this._score >= this.BONUS_LIFE_THRESHOLD
+      this._state.score >= this.BONUS_LIFE_THRESHOLD
     ) {
       this._hasReceivedBonusLife = true;
       eventBus.emit("bonus_life:earned");
@@ -121,10 +120,10 @@ export class Tally {
   }
 
   public reset(): void {
-    this._score = 0;
+    this._state.score = 0;
     this._ghostMultiplier = 0;
     this._hasReceivedBonusLife = false;
-    eventBus.emit("ui:score_display_update", { score: this._score });
+    eventBus.emit("ui:score_display_update", { score: this._state.score });
   }
 
   public resetForLevel(): void {
