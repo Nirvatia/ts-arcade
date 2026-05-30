@@ -13,7 +13,9 @@ export class Director {
   private gameState: GameState;
   private registry: GameRegistry;
   private tally: Tally;
-  private activeClock: Clock = new Clock();
+
+  // Isolated timers to prevent Svelte UI state confusion
+  private transitionClock: Clock = new Clock();
   private activeSequence: Sequence = new Sequence();
 
   private sceneRegistry: SceneRegistry = new SceneRegistry();
@@ -49,8 +51,9 @@ export class Director {
     );
   }
 
+  // Hook the Svelte UI countdown property strictly to the level intro timer
   get currentClock(): Clock {
-    return this.activeClock;
+    return this.transitionClock;
   }
 
   public get currentIntermissionScene(): IGameScene | null {
@@ -58,17 +61,16 @@ export class Director {
   }
 
   private resetTickingState(): void {
-    this.activeClock.stop();
+    this.transitionClock.stop();
     this.activeSequence.clear();
   }
 
   triggerGhostEatenSequence(data: { ghostName: string }): void {
     this.resetTickingState();
-
-    const ghostEatenDuration = 1000;
-    this.activeClock.start(
-      ghostEatenDuration / 1000,
-      ghostEatenDuration,
+    // Reusing transition clock for short freeze frames is safe
+    this.transitionClock.start(
+      1,
+      1000,
       () => {},
       () => {
         eventBus.emit("game:resumed");
@@ -106,7 +108,8 @@ export class Director {
     eventBus.emit("command:spawn_entities");
     this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
 
-    this.activeClock.start(
+    // This drives the UI "READY!" text
+    this.transitionClock.start(
       5,
       1000,
       () => {},
@@ -121,7 +124,6 @@ export class Director {
 
   triggerDeathSequence(): void {
     this.resetTickingState();
-
     const pacman = this.registry.getPacman();
     if (!pacman) return;
 
@@ -143,7 +145,7 @@ export class Director {
     eventBus.emit("command:reset_positions");
     eventBus.emit("level:transition_start", { duration: 5 });
 
-    this.activeClock.start(
+    this.transitionClock.start(
       5,
       1000,
       () => {},
@@ -155,11 +157,14 @@ export class Director {
     );
   }
 
+  // Inside src/game/director.ts
+
   triggerIntermissionSequence(payload: { level: number; score: number }): void {
     this.resetTickingState();
     const maze = this.registry.getMaze();
     if (!maze) return;
 
+    // Phase 1: Flash the maze 4 times
     for (let i = 0; i < 4; i++) {
       this.activeSequence
         .addCallback(() => {
@@ -174,25 +179,39 @@ export class Director {
         .addWait(400);
     }
 
+    // Phase 2: Run the Intermission Screen
     this.activeSequence
       .addCallback(() => {
         eventBus.emit("command:clear_canvases");
-
-        // Select a random scene layout module on intermission start
-        this.activeIntermissionScene = this.sceneRegistry.getRandomScene();
-
-        // Target an exact duration pool of 5 seconds matching sequence timing budget
-        this.activeIntermissionScene.start(5, () => {
-          this.activeIntermissionScene = null;
-        });
-
         eventBus.emit("level:intermission_start", {
           nextLevel: payload.level + 1,
         });
+
+        this.activeIntermissionScene = this.sceneRegistry.getRandomScene();
+        this.activeIntermissionScene.start(5, () => {});
       })
-      .addWait(5000)
-      .start(() => {
+      .addWait(5000) // Keep the engine loop locked in INTERMISSION mode for 5s
+
+      // Phase 3: Explicit Exit, Cleanup, and Mode Pivot
+      .addCallback(() => {
+        if (
+          this.activeIntermissionScene &&
+          "clear" in this.activeIntermissionScene
+        ) {
+          (this.activeIntermissionScene as any).clear();
+        }
+        this.activeIntermissionScene = null;
+        eventBus.emit("command:clear_canvases");
+
+        // FIX: Force change the engine state back to level transition view state
+        this.gameState.mode = "LEVEL_TRANSITION";
+
+        // Load the fresh map assets into memory buffers
         this.loadLevel();
+      })
+
+      // Phase 4: Spin up next level countdown tracking smoothly
+      .start(() => {
         this.startGame();
       });
   }
