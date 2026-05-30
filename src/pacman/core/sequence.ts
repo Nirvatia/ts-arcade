@@ -1,5 +1,3 @@
-// src/game/Sequence.ts
-
 type SequenceStep =
   | { type: "wait"; duration: number }
   | { type: "callback"; action: () => void };
@@ -27,7 +25,7 @@ export class Sequence {
   }
 
   start(onComplete?: SequenceCompleteCallback): void {
-    this.stop(); // Safe, clean restart
+    this.stop(); 
     this.currentIndex = 0;
     this._isRunning = true;
     this.runNext(onComplete);
@@ -48,7 +46,6 @@ export class Sequence {
   }
 
   private runNext(onComplete?: SequenceCompleteCallback): void {
-    // CRITICAL FIX: Guard clause checked immediately at every tick or recursive execution entry
     if (!this._isRunning) return;
 
     if (this.currentIndex >= this.steps.length) {
@@ -63,8 +60,6 @@ export class Sequence {
     if (step.type === "callback") {
       step.action();
       
-      // CRITICAL FIX: Verify that the callback action did not invoke a clear() or stop() 
-      // which sets _isRunning to false midway through execution before spinning up recursion.
       if (!this._isRunning) return;
       
       this.runNext(onComplete);
