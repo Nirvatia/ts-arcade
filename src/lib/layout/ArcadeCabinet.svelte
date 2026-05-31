@@ -10,161 +10,253 @@
   }
 
   let { gameName, screenWidth, screenHeight, game, hud }: Props = $props();
-  let marqueeText = $derived(gameName.toUpperCase() + " ARCADE");
+  let marqueeText = $derived(gameName.toUpperCase());
 
   let totalHeight = $derived(screenHeight + 52);
 </script>
 
-<div class="tron-grid">
-  <!-- Background grid layer -->
-  <div class="grid-layer"></div>
+<div class="vector-terminal">
+  <div class="static-grid-overlay"></div>
 
-  <!-- Floating cabinet -->
-  <div class="cabinet">
-    <div class="cabinet-glow"></div>
+  <div class="chassis-container">
+    
+    <div class="system-marquee">
+      <div class="status-tag">SYS // LINK_01</div>
+      <h1 class="marquee-text">{marqueeText}</h1>
+    </div>
 
-    <!-- Title -->
-    <div class="title">{marqueeText}</div>
+    <div class="crt-frame">
+      <div class="raster-scanlines"></div>
+      <div class="phosphor-glare"></div>
 
-    <!-- Screen -->
-    <div class="screen-frame">
-      <div class="screen">
-        <div class="scanlines"></div>
+      <div class="game-viewport" style="width: {screenWidth}px; height: {totalHeight}px;">
+        <div class="game-content">{@render game()}</div>
+        {#if hud}
+          <div class="hud-content">{@render hud()}</div>
+        {/if}
+      </div>
+    </div>
 
-        <div class="game-slot" style="width: {screenWidth}px; height: {totalHeight}px;">
-          <div class="game-area">{@render game()}</div>
-          {#if hud}<div class="hud-area">{@render hud()}</div>{/if}
+    <div class="interface-panel">
+      <div class="control-lane">
+        <div class="vector-node-dot"></div>
+        <span class="panel-tag">P1</span>
+      </div>
+
+      <div class="control-lane">
+        <div class="cross-axis"></div>
+        <span class="panel-tag">MOVE</span>
+      </div>
+
+      <div class="control-lane">
+        <div class="action-gate-group">
+          <div class="gate-switch"></div>
+          <div class="gate-switch"></div>
         </div>
+        <span class="panel-tag">ACTION</span>
       </div>
     </div>
 
-    <!-- Controls -->
-    <div class="controls">
-      <div class="control">
-        <div class="ring small"></div>
-        <span class="label">P1</span>
-      </div>
-      <div class="control">
-        <div class="ring large"></div>
-        <span class="label">MOVE</span>
-      </div>
-      <div class="control">
-        <div class="ring small"></div>
-        <div class="ring small"></div>
-        <span class="label">FIRE</span>
-      </div>
-    </div>
   </div>
 </div>
 
 <style lang="scss">
-  .tron-grid {
+  // --- Pure Monochromatic Cyan System Archetype ---
+  $void-black: #000205;
+  $matrix-dark: #01070e;
+  $neon-cyan: #00f0ff;
+
+  :global(body) {
+    margin: 0;
+    background: $void-black;
+    overflow: hidden;
+  }
+
+  .vector-terminal {
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
     width: 100vw;
-    background: #010812;
-    font-family: "Jersey-Regular", monospace;
-    box-sizing: border-box;
+    background: radial-gradient(circle at center, #020914 0%, $void-black 100%);
+    font-family: "Jersey-Regular", "Courier New", monospace;
     position: relative;
     overflow: hidden;
+    box-sizing: border-box;
   }
 
-  .grid-layer {
+  // --- Background Grid Matrix ---
+  .static-grid-overlay {
     position: absolute;
     inset: 0;
-    background-image:
-      linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
-    background-size: 60px 60px;
+    background-image: 
+      linear-gradient(rgba($neon-cyan, 0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba($neon-cyan, 0.015) 1px, transparent 1px);
+    background-size: 50px 50px;
     background-position: center center;
-    mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+    mask-image: radial-gradient(circle at center, black 10%, transparent 80%);
     pointer-events: none;
+    z-index: 0;
   }
 
-  .cabinet {
+  // --- Single Unified Outer Frame ---
+  .chassis-container {
     position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    padding: 24px 20px 16px 20px;
-    background: rgba(1, 10, 20, 0.9);
-    border: 1px solid rgba(0, 255, 255, 0.15);
+    background: $matrix-dark;
+    border: 1px solid rgba($neon-cyan, 0.3);
+    padding: 20px;
+    box-sizing: border-box;
+    box-shadow: 0 0 30px rgba($neon-cyan, 0.05);
   }
 
-  .cabinet-glow {
-    position: absolute;
-    inset: -1px;
-    border: 1px solid rgba(0, 255, 255, 0.06);
-    box-shadow: 0 0 60px rgba(0, 255, 255, 0.04);
-    pointer-events: none;
+  // --- Frameless Header Marquee ---
+  .system-marquee {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+    padding-left: 4px;
+
+    .status-tag {
+      font-size: 0.55rem;
+      color: rgba($neon-cyan, 0.4);
+      letting-spacing: 2px;
+      letter-spacing: 2px;
+    }
+
+    .marquee-text {
+      font-size: 1.6rem;
+      color: #ffffff;
+      margin: 0;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      font-weight: bold;
+      text-shadow: 0 0 8px rgba($neon-cyan, 0.5);
+    }
   }
 
-  .title {
-    font-size: 1.2rem;
-    color: rgba(0, 255, 255, 0.5);
-    letter-spacing: 6px;
-    text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
-  }
-
-  .screen-frame {
-    padding: 6px;
-    border: 1px solid rgba(0, 255, 255, 0.2);
-  }
-
-  .screen {
+  // --- Screen Viewport Frame ---
+  .crt-frame {
     position: relative;
-    background: #010812;
-    border: 1px solid rgba(0, 255, 255, 0.1);
     overflow: hidden;
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba($neon-cyan, 0.15); // The only screen barrier remaining
+    margin-bottom: 20px;
   }
 
-  .scanlines {
+  // --- Flat Scanlines Filter ---
+  .raster-scanlines {
     position: absolute;
     inset: 0;
-    z-index: 10;
+    z-index: 5;
     pointer-events: none;
-    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.25) 0px,
+      rgba(0, 0, 0, 0.25) 1px,
+      transparent 2px,
+      transparent 2px
+    );
   }
 
-  .game-slot {
+  .phosphor-glare {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    background: radial-gradient(circle at center, rgba($neon-cyan, 0.02) 0%, transparent 85%);
+  }
+
+  .game-viewport {
     position: relative;
     display: flex;
     flex-direction: column;
     z-index: 1;
-    :global(*){ box-sizing: border-box; }
+    background: #000000;
+    
+    :global(*) { box-sizing: border-box; }
   }
 
-  .game-area { position: relative; overflow: hidden; }
-  .hud-area { width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; padding: 4px 8px; }
-
-  .controls {
-    display: flex;
-    align-items: flex-end;
-    gap: 24px;
+  .game-content {
+    position: relative;
+    overflow: hidden;
   }
 
-  .control {
+  .hud-content {
+    width: 100%;
+    flex: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    background: #000104;
+    border-top: 1px solid rgba($neon-cyan, 0.1);
+    color: rgba($neon-cyan, 0.8);
+  }
+
+  // --- Minimalist Control Strip ---
+  .interface-panel {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px;
+    box-sizing: border-box;
+  }
+
+  .control-lane {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .panel-tag {
+      font-size: 0.5rem;
+      color: rgba($neon-cyan, 0.4);
+      letter-spacing: 1.5px;
+      font-weight: bold;
+    }
+  }
+
+  // Clean 2D Wire Indicators
+  .vector-node-dot {
+    width: 8px;
+    height: 8px;
+    background: $neon-cyan;
+    box-shadow: 0 0 6px $neon-cyan;
+  }
+
+  .cross-axis {
+    width: 12px;
+    height: 12px;
+    position: relative;
+
+    &::before, &::after {
+      content: '';
+      position: absolute;
+      background: rgba($neon-cyan, 0.6);
+    }
+    &::before {
+      top: 5px;
+      left: 0;
+      width: 12px;
+      height: 2px;
+    }
+    &::after {
+      left: 5px;
+      top: 0;
+      width: 2px;
+      height: 12px;
+    }
+  }
+
+  .action-gate-group {
+    display: flex;
     gap: 4px;
-  }
 
-  .ring {
-    border: 1px solid rgba(0, 255, 255, 0.2);
-    border-radius: 50%;
-    box-shadow: 0 0 8px rgba(0, 255, 255, 0.06);
-    &.small { width: 20px; height: 20px; }
-    &.large { width: 36px; height: 36px; }
-  }
-
-  .label {
-    font-size: 0.4rem;
-    color: rgba(0, 255, 255, 0.3);
-    letter-spacing: 3px;
+    .gate-switch {
+      width: 8px;
+      height: 8px;
+      border: 1px solid rgba($neon-cyan, 0.6);
+    }
   }
 </style>
