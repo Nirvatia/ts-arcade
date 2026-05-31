@@ -118,7 +118,7 @@
                   <div class="vector-node"></div>
                 </div>
                 <button class="cabinet-button start-btn" onclick={handleStart}>
-                  [ INITIALIZE_GRID ]
+                  [ START ]
                 </button>
                 <div class="credit-text blink">CREDIT // 01</div>
               </div>
@@ -146,7 +146,7 @@
   {#snippet hud()}
     <div class="game-hud">
       <div class="hud-item">
-        <span class="hud-label">DATA_CORE:</span>
+        <span class="hud-label">SCORE:</span>
         <span class="hud-value">{tally.score.toLocaleString()}</span>
       </div>
       <div class="hud-item">
