@@ -15,7 +15,7 @@ interface EatParticle {
   life: number;
   maxLife: number;
   color: string;
-  type: "SHARD" | "RING" | "LINE";
+  type: "SHARD" | "RING" | "LINE" | "GLITCH" | "GATEWAY" | "SCANLINE"; // Added GLITCH variant
   size: number;
 }
 
@@ -101,8 +101,25 @@ export class Pacman extends Actor {
       this.spawnTrailParticle();
     }
 
+    // --- TRACK WRAP PRE-TELEPORT COORDINATES ---
+    const prevX = this.x;
+    const prevY = this.y;
+
     this.updateMovement(dt);
-    this.teleport();
+    this.teleport(); // Assuming your wrapping logic executes right here
+
+    // 🔥 FIXED: If position jumped instantly past 2 tile dimensions, we wrapped!
+    if (
+      Math.abs(this.x - prevX) > this.tileSize * 2 ||
+      Math.abs(this.y - prevY) > this.tileSize * 2
+    ) {
+      // 1. Clear the trailing pipeline to snap rendering lines cleanly
+      this.trailHistory = [];
+
+      // 2. Spawn a beautiful digital entry/exit effect at both coordinates
+      this.spawnTeleportVFX(prevX, prevY); // Entry blast portal
+      this.spawnTeleportVFX(this.x, this.y); // Exit blast portal
+    }
 
     const collidedGhost = this.getCollidedGhost();
     if (collidedGhost) {
@@ -271,6 +288,67 @@ export class Pacman extends Actor {
     }
   }
 
+  // Add "GATEWAY" and "SCANLINE" to your EatParticle type definition at the top of the file:
+  // type: "SHARD" | "RING" | "LINE" | "GLITCH" | "GATEWAY" | "SCANLINE";
+
+  private spawnTeleportVFX(x: number, y: number): void {
+    const isLeftPortal = x < this.tileSize * 3;
+    // Determine fire vector direction based on which portal he entered (blast inward toward the map)
+    const blastDirection = isLeftPortal ? 1 : -1;
+
+    // 1. Trigger System Overload Flash & Core Vibration
+    this.ghostEatFlash = 0.8; // Reuses your flash filter to create a screen-wide blinding shockwave distortion
+
+    // 2. High-Velocity Cyber Ring Gateways (Sequential expanding portals)
+    for (let i = 0; i < 3; i++) {
+      this.eatParticles.push({
+        x,
+        y,
+        vx: blastDirection,
+        vy: 0,
+        life: 0.15 + i * 0.08, // Staggered lifespans make them burst in an expanding sequence
+        maxLife: 0.4,
+        color: i === 1 ? "#00ffff" : "#ffffff",
+        type: "GATEWAY",
+        size: this.r * 0.5,
+      });
+    }
+
+    // 3. Matrix Horizontal Scanlines (Blasting across the tunnel opening)
+    for (let i = 0; i < 6; i++) {
+      this.eatParticles.push({
+        x: x + (Math.random() * 10 - 5),
+        y: y + (Math.random() * this.r * 2 - this.r),
+        vx: blastDirection * (350 + Math.random() * 200), // Extreme hyper-velocity speeds
+        vy: 0, // Perfectly locked horizontal laser strafes
+        life: 0.2 + Math.random() * 0.2,
+        maxLife: 0.4,
+        color: "#00ffff",
+        type: "SCANLINE",
+        size: 15 + Math.random() * 25, // Long, thin laser streams
+      });
+    }
+
+    // 4. Fragmented Unstable Code Ejections
+    for (let i = 0; i < 15; i++) {
+      const angle =
+        (Math.random() - 0.5) * (Math.PI * 0.6) + (isLeftPortal ? 0 : Math.PI);
+      const speed = 180 + Math.random() * 220;
+
+      this.eatParticles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.25 + Math.random() * 0.25,
+        maxLife: 0.5,
+        color: Math.random() > 0.4 ? "#ffcc00" : "#ffffff",
+        type: "GLITCH",
+        size: 3 + Math.random() * 4,
+      });
+    }
+  }
+
   private spawnDotEatVFX(tileX: number, tileY: number): void {
     const cx = tileX * this.tileSize + this.tileSize / 2;
     const cy = tileY * this.tileSize + this.tileSize / 2;
@@ -316,7 +394,6 @@ export class Pacman extends Actor {
   private spawnGhostEatVFX(gx: number, gy: number): void {
     const particleCount = 28;
 
-    // Outer quantum shockwave ring boundary
     this.eatParticles.push({
       x: gx,
       y: gy,
@@ -329,7 +406,6 @@ export class Pacman extends Actor {
       size: 4,
     });
 
-    // Vector fragmentation data shards and code lines
     for (let i = 0; i < particleCount; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 120 + Math.random() * 140;
@@ -362,11 +438,9 @@ export class Pacman extends Actor {
       if (p.type !== "RING") {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        // Matrix computational atmosphere drag friction
         p.vx *= 0.93;
         p.vy *= 0.93;
       } else {
-        // Linear structural square expansion factor
         p.size += 260 * dt;
       }
     }
@@ -384,17 +458,14 @@ export class Pacman extends Actor {
   // --- Rendering Pipeline ---
 
   draw(): void {
-    // Layer 1: Vector trails draw first (bottom layer)
     this.drawTrailVFX();
 
-    // Layer 2: Core entities render in center structure
     if (this.state === "DYING") {
       this.drawDead();
     } else {
       this.drawAlive();
     }
 
-    // Layer 3: High-intensity blast particles drawn over top body (top layer)
     this.drawEatVFX();
   }
 
@@ -461,6 +532,41 @@ export class Pacman extends Actor {
         ctx.rotate(p.life * 3.5);
         ctx.strokeRect(-p.size / 2, -p.size / 2, p.size, p.size);
         ctx.restore();
+      } else if (p.type === "GLITCH") {
+        // Render logic for our horizontal velocity data slivers
+        ctx.fillRect(p.x - p.size, p.y - 0.5, p.size * 2, 1);
+      } else if (p.type === "GATEWAY") {
+        // A thick, rotating, neon geometric portal frame
+        const progress = p.life / p.maxLife;
+        const radius = p.size + (1 - progress) * (this.r * 3);
+
+        // Recover the blast direction sign from our vx container storage!
+        const directionSign = p.vx;
+
+        ctx.lineWidth = 3 * progress;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.life * 8 * directionSign); // Clean, high-speed spin direction
+
+        // Outer hexagon/diamond gateway portal
+        ctx.beginPath();
+        for (let side = 0; side < 4; side++) {
+          const angle = (side * Math.PI) / 2;
+          ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      } else if (p.type === "SCANLINE") {
+        // Long, tailing horizontal energy beams that simulate data streams
+        const progress = p.life / p.maxLife;
+        ctx.lineWidth = 2 * progress;
+
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        // Draws a tail dragging backward against its velocity vector
+        ctx.lineTo(p.x - p.vx * 0.08, p.y);
+        ctx.stroke();
       }
 
       ctx.restore();
@@ -599,7 +705,6 @@ export class Pacman extends Actor {
 
     const neonColor = this.isBuffed ? "#ff3300" : "#ffcc00";
 
-    // Stage 1: Structural Grid Distortion Wave
     if (p < 0.4) {
       const glitcheffect = Math.sin(p * 120) * 3 * (p / 0.4);
       ctx.strokeStyle = neonColor;
@@ -611,16 +716,13 @@ export class Pacman extends Actor {
       ctx.arc(glitcheffect, 0, r - 2, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Deforming core box matrix lines
       ctx.strokeRect(
         (-r * 0.4) / 2,
         (-r * 0.4) / 2 - glitcheffect,
         r * 0.4,
         r * 0.4,
       );
-    }
-    // Stage 2: Complete Code Fragment De-Rez Collapse
-    else {
+    } else {
       const collapseProgress = (p - 0.4) / 0.6;
       ctx.fillStyle = neonColor;
       ctx.shadowColor = neonColor;
@@ -629,7 +731,6 @@ export class Pacman extends Actor {
       for (let i = 0; i < particleRows; i++) {
         const angle = (i / particleRows) * Math.PI * 2;
 
-        // Displace coordinate structures down screen like data leaks
         const driftRadius = r * (1 + collapseProgress * 1.8);
         const px = Math.cos(angle) * driftRadius + Math.sin(i + p * 10) * 4;
         const py =
@@ -644,7 +745,6 @@ export class Pacman extends Actor {
         ctx.shadowBlur = 6 * alpha;
 
         if (i % 3 === 0) {
-          // Horizontal binary line segments
           ctx.strokeStyle = "#ffffff";
           ctx.lineWidth = 1;
           ctx.beginPath();
@@ -652,7 +752,6 @@ export class Pacman extends Actor {
           ctx.lineTo(px + blockDimensions * 2, py);
           ctx.stroke();
         } else {
-          // Standard system data shards
           ctx.fillRect(
             px - blockDimensions / 2,
             py - blockDimensions / 2,
