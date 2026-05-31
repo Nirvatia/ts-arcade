@@ -2,8 +2,7 @@
 
 ## High Priority (Core Gameplay Fixes)
 - [ ] **Core**
-  - Fix buff config values to be applied on each new level
-  - Fix pacman glow and teleport artifacts
+  - Fix: bug when pacman dies and level restarts without reset.
 
 ## Ghost AI & Gameplay Logic
 - [ ] **Authentic Ghost Personalities**
