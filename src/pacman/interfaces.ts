@@ -1,9 +1,12 @@
 export interface Drawable {
+  readonly canvasId: string;
   ctx: CanvasRenderingContext2D;
   needsRedraw: boolean;
   draw(): void;
   requestRedraw(): void;
   clearCanvas(): void;
+  init(): void;
+  reset(): void;
 }
 
 export interface Updatable extends Drawable {

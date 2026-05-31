@@ -1,37 +1,18 @@
-// src/world/Pill.ts
-
 import { CFG_CANVAS } from "../config/canvas.js";
-import { CanvasLayer } from "../core/canvasLayer.js";
 import { eventBus } from "../core/eventBus.js";
-import { GameState } from "../game/gameState.svelte.js";
 import type { Collectible, Updatable } from "../interfaces.js";
+import { WorldObject } from "./worldObject.js";
 
-export class Pill implements Updatable, Collectible {
-  private gameState: GameState;
-  private canvasLayer: CanvasLayer;
-  private tileSize: number;
-
-  private _needsRedraw: boolean = true;
+export class Pill extends WorldObject implements Updatable, Collectible {
   private animationCounter: number = 0;
-
-  public positions: { i: number; j: number }[] = [];
+ public positions: Set<string> = new Set<string>();
 
   constructor() {
-    this.gameState = GameState.getInstance();
-    this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pills);
-    this.tileSize = CFG_CANVAS.tile.size;
+    super(CFG_CANVAS.canvasIds.pills);
     this.initEventListeners();
   }
 
-  get canvas(): HTMLCanvasElement { return this.canvasLayer.canvas; }
-  get ctx(): CanvasRenderingContext2D { return this.canvasLayer.ctx; }
-  get needsRedraw(): boolean { return this._needsRedraw; }
-  set needsRedraw(value: boolean) { this._needsRedraw = value; }
-
-  requestRedraw(): void { this._needsRedraw = true; }
-  clearCanvas(): void { this.canvasLayer.clear(); }
-
-  initEventListeners(): void {
+  private initEventListeners(): void {
     eventBus.on(
       "power_pill:collect",
       (data: { position: { i: number; j: number } }) => {
@@ -40,46 +21,42 @@ export class Pill implements Updatable, Collectible {
     );
   }
 
-  spawn(): void {
-    this.positions = [];
-    const map = this.gameState.levelData.map;
+spawn(): void {
+  // 1. Sets use .clear() natively
+  this.positions.clear(); 
+  
+  const map = this.gameState.levelData.map;
 
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (map[i][j] === "PP") {
-          this.positions.push({ i, j });
-        }
+  for (let i = 0; i < map.length; i++) {
+    for (let j = 0; j < map[i].length; j++) {
+      if (map[i][j] === "PP") {
+        this.positions.add(`${i},${j}`);
       }
     }
   }
+}
 
-  collect(i: number, j: number): void {
-    const index = this.positions.findIndex(
-      (pos: { i: number; j: number }) => pos.i === i && pos.j === j,
-    );
+collect(i: number, j: number): void {
+  const key = `${i},${j}`;
 
-    if (index !== -1) {
-      this.positions.splice(index, 1);
-      this.requestRedraw();
-      eventBus.emit("power_pill:eaten", { position: { i, j } });
-    }
+  // 2. Instant O(1) matching and execution
+  if (this.positions.delete(key)) {
+    this.requestRedraw();
+    eventBus.emit("power_pill:eaten", { position: { i, j } });
   }
+}
 
-  init(): void {}
-
-  reset(): void {
-    this.clearCanvas();
-    this.canvasLayer.resize();
-    this.positions = [];
-    this.animationCounter = 0;
-    this._needsRedraw = true;
-  }
+override reset(): void {
+  super.reset();
+  this.positions.clear(); // Fixed
+  this.animationCounter = 0;
+}
 
   update(dt: number): void {
     if (this.gameState.mode !== "PLAYING") return;
     
     this.animationCounter += 4 * dt;
-    this._needsRedraw = true; 
+    this.needsRedraw = true; 
   }
 
   draw(): void {
@@ -90,13 +67,13 @@ export class Pill implements Updatable, Collectible {
     const baseRadius = ts * 0.24; 
     const pulse = 0.5 + 0.5 * Math.sin(this.animationCounter * 3.5);
 
-    this.positions.forEach(({ i, j }) => {
+    this.positions.forEach((posKey) => {
+      const [i, j] = posKey.split(",").map(Number);
       const cx = ts * j + ts / 2;
       const cy = ts * i + ts / 2;
       const currentRadius = baseRadius + pulse * 2;
 
       ctx.save();
-      
       ctx.translate(cx, cy);
       ctx.rotate(this.animationCounter);
 

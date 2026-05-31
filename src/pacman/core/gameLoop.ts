@@ -2,8 +2,8 @@ import { GameRegistry } from "../game/gameRegistry.js";
 import { GameState } from "../game/gameState.svelte.js";
 import { eventBus } from "./eventBus.js";
 import { Renderer } from "./renderer.js";
-import { GameLoopTracker } from "./gameLoopTracker.js";
 import { Director } from "../game/director.js";
+import { GameLoopTracker } from "../debug/gameLoopTracker.js";
 
 /**
  * Главный игровой цикл.
@@ -12,6 +12,7 @@ import { Director } from "../game/director.js";
  */
 export class GameLoop {
   private static instance: GameLoop;
+  private director: Director;
   private gameState: GameState;
   private renderer: Renderer;
   private registry: GameRegistry;
@@ -23,6 +24,7 @@ export class GameLoop {
   private timer: number | null = null;
 
   constructor(fps: number = 60) {
+    this.director = Director.getInstance();
     this.gameState = GameState.getInstance();
     this.renderer = Renderer.getInstance();
     this.registry = GameRegistry.getInstance();
@@ -72,14 +74,13 @@ export class GameLoop {
       const workStart = this.tracker.startFrame();
 
       const mode = this.gameState.mode;
-      const fixedDt = 1 / this.fps; // Exactly 0.01666... seconds
+      const fixedDt = 1 / this.fps;
 
       // --- LOGIC PROCESSOR ---
       if (mode === "PLAYING" || mode === "PACMAN_DEAD") {
         this.registry.getAllUpdatable().forEach((e) => e.update(fixedDt));
       } else if (mode === "INTERMISSION") {
-        // Ticks the abstracted scene instance using our stable engine delta step
-        const activeScene = Director.getInstance().currentIntermissionScene;
+        const activeScene = this.director.currentIntermissionScene;
         if (activeScene) {
           activeScene.update(fixedDt);
         }
@@ -90,7 +91,7 @@ export class GameLoop {
 
       if (shouldRender) {
         if (mode === "INTERMISSION") {
-          const activeScene = Director.getInstance().currentIntermissionScene;
+          const activeScene = this.director.currentIntermissionScene;
           if (activeScene) {
             activeScene.draw();
           }
@@ -99,7 +100,7 @@ export class GameLoop {
         }
       }
 
-      this.tracker.endFrame(workStart, now);
+      this.tracker.endFrame(workStart);
     }
   }
 }

@@ -54,8 +54,7 @@ export class Pacman extends Actor {
     return this.gameState.isBuffed;
   }
 
-  init(): void {
-  }
+  init(): void {}
 
   reset(): void {
     this.state = "ALIVE";
@@ -119,6 +118,8 @@ export class Pacman extends Actor {
         this.triggerDeath();
       }
     }
+
+    this.needsRedraw = true;
   }
 
   private updateMovement(dt: number): void {
@@ -246,11 +247,11 @@ export class Pacman extends Actor {
 
   private tryEatPill(tileX: number, tileY: number): void {
     const pill = this.registry.getPills();
-    const pillIndex = pill.positions.findIndex(
-      (pos: { i: number; j: number }) => pos.i === tileY && pos.j === tileX,
-    );
-    if (pillIndex !== -1) {
+    const key = `${tileY},${tileX}`;
+
+    if (pill.positions.has(key)) {
       this.spawnPillEatVFX(tileX, tileY);
+
       eventBus.emit("power_pill:collect", { position: { i: tileY, j: tileX } });
     }
   }
@@ -273,10 +274,10 @@ export class Pacman extends Actor {
   private spawnDotEatVFX(tileX: number, tileY: number): void {
     const cx = tileX * this.tileSize + this.tileSize / 2;
     const cy = tileY * this.tileSize + this.tileSize / 2;
-    
+
     for (let i = 0; i < 6; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 60 + Math.random() * 50; 
+      const speed = 60 + Math.random() * 50;
       this.eatParticles.push({
         x: cx,
         y: cy,
@@ -286,7 +287,7 @@ export class Pacman extends Actor {
         maxLife: 0.3,
         color: "#ffcc00",
         type: "SHARD",
-        size: 2 + Math.random() * 2
+        size: 2 + Math.random() * 2,
       });
     }
   }
@@ -307,7 +308,7 @@ export class Pacman extends Actor {
         maxLife: 0.5,
         color: "#ff3300",
         type: "SHARD",
-        size: 3
+        size: 3,
       });
     }
   }
@@ -325,7 +326,7 @@ export class Pacman extends Actor {
       maxLife: 0.45,
       color: "#ffffff",
       type: "RING",
-      size: 4
+      size: 4,
     });
 
     // Vector fragmentation data shards and code lines
@@ -343,7 +344,7 @@ export class Pacman extends Actor {
         maxLife: 0.7,
         color: Math.random() > 0.35 ? "#ffffff" : "#00ffff",
         type: isLine ? "LINE" : "SHARD",
-        size: isLine ? 4 + Math.random() * 6 : 2.5 + Math.random() * 2.5
+        size: isLine ? 4 + Math.random() * 6 : 2.5 + Math.random() * 2.5,
       });
     }
   }
@@ -489,7 +490,9 @@ export class Pacman extends Actor {
     let mouthAngle: number;
     const timestamp = Date.now();
     if (isMoving) {
-      mouthAngle = Math.abs(Math.sin(timestamp * this.config.mouthSpeed)) * this.config.maxMouthAngle;
+      mouthAngle =
+        Math.abs(Math.sin(timestamp * this.config.mouthSpeed)) *
+        this.config.maxMouthAngle;
     } else {
       mouthAngle = this.config.idleMouthAngle;
     }
@@ -517,30 +520,38 @@ export class Pacman extends Actor {
     ctx.shadowBlur = this.isBuffed ? 16 : 10;
     ctx.strokeStyle = neonColor;
     ctx.lineWidth = 3;
-    
+
     ctx.beginPath();
     ctx.arc(0, 0, r - 2, startAngle, endAngle);
-    
+
     const innerCutoff = r * 0.4;
-    ctx.lineTo(Math.cos(2 * Math.PI - mouthAngle) * innerCutoff, Math.sin(2 * Math.PI - mouthAngle) * innerCutoff);
-    ctx.lineTo(Math.cos(mouthAngle) * innerCutoff, Math.sin(mouthAngle) * innerCutoff);
+    ctx.lineTo(
+      Math.cos(2 * Math.PI - mouthAngle) * innerCutoff,
+      Math.sin(2 * Math.PI - mouthAngle) * innerCutoff,
+    );
+    ctx.lineTo(
+      Math.cos(mouthAngle) * innerCutoff,
+      Math.sin(mouthAngle) * innerCutoff,
+    );
     ctx.closePath();
-    
-    ctx.fillStyle = this.isBuffed ? "rgba(255, 51, 0, 0.15)" : "rgba(255, 204, 0, 0.08)";
+
+    ctx.fillStyle = this.isBuffed
+      ? "rgba(255, 51, 0, 0.15)"
+      : "rgba(255, 204, 0, 0.08)";
     ctx.fill();
     ctx.stroke();
 
     ctx.save();
     const spinSpeed = timestamp * (this.isBuffed ? 0.012 : 0.004);
     ctx.rotate(spinSpeed);
-    
+
     ctx.shadowBlur = this.isBuffed ? 10 : 5;
     ctx.strokeStyle = coreColor;
     ctx.lineWidth = 1.5;
-    
+
     const boxSize = r * 0.4;
     ctx.strokeRect(-boxSize / 2, -boxSize / 2, boxSize, boxSize);
-    
+
     if (this.isBuffed) {
       ctx.strokeStyle = neonColor;
       ctx.beginPath();
@@ -560,8 +571,18 @@ export class Pacman extends Actor {
     ctx.stroke();
 
     ctx.fillStyle = neonColor;
-    ctx.fillRect(Math.cos(Math.PI * 0.65) * (r * 0.68) - 1, Math.sin(Math.PI * 0.65) * (r * 0.68) - 1, 2, 2);
-    ctx.fillRect(Math.cos(Math.PI * 1.35) * (r * 0.68) - 1, Math.sin(Math.PI * 1.35) * (r * 0.68) - 1, 2, 2);
+    ctx.fillRect(
+      Math.cos(Math.PI * 0.65) * (r * 0.68) - 1,
+      Math.sin(Math.PI * 0.65) * (r * 0.68) - 1,
+      2,
+      2,
+    );
+    ctx.fillRect(
+      Math.cos(Math.PI * 1.35) * (r * 0.68) - 1,
+      Math.sin(Math.PI * 1.35) * (r * 0.68) - 1,
+      2,
+      2,
+    );
 
     ctx.restore();
   }
@@ -577,7 +598,7 @@ export class Pacman extends Actor {
     ctx.translate(cx, cy);
 
     const neonColor = this.isBuffed ? "#ff3300" : "#ffcc00";
-    
+
     // Stage 1: Structural Grid Distortion Wave
     if (p < 0.4) {
       const glitcheffect = Math.sin(p * 120) * 3 * (p / 0.4);
@@ -591,22 +612,29 @@ export class Pacman extends Actor {
       ctx.stroke();
 
       // Deforming core box matrix lines
-      ctx.strokeRect((-r * 0.4) / 2, (-r * 0.4) / 2 - glitcheffect, r * 0.4, r * 0.4);
-    } 
+      ctx.strokeRect(
+        (-r * 0.4) / 2,
+        (-r * 0.4) / 2 - glitcheffect,
+        r * 0.4,
+        r * 0.4,
+      );
+    }
     // Stage 2: Complete Code Fragment De-Rez Collapse
     else {
       const collapseProgress = (p - 0.4) / 0.6;
       ctx.fillStyle = neonColor;
       ctx.shadowColor = neonColor;
-      
+
       const particleRows = 14;
       for (let i = 0; i < particleRows; i++) {
         const angle = (i / particleRows) * Math.PI * 2;
-        
+
         // Displace coordinate structures down screen like data leaks
         const driftRadius = r * (1 + collapseProgress * 1.8);
-        const px = Math.cos(angle) * driftRadius + (Math.sin(i + p * 10) * 4);
-        const py = Math.sin(angle) * driftRadius + (collapseProgress * collapseProgress * 45);
+        const px = Math.cos(angle) * driftRadius + Math.sin(i + p * 10) * 4;
+        const py =
+          Math.sin(angle) * driftRadius +
+          collapseProgress * collapseProgress * 45;
 
         const alpha = Math.max(0, 1 - collapseProgress);
         const blockDimensions = Math.max(1, 3.5 * alpha);
@@ -614,7 +642,7 @@ export class Pacman extends Actor {
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.shadowBlur = 6 * alpha;
-        
+
         if (i % 3 === 0) {
           // Horizontal binary line segments
           ctx.strokeStyle = "#ffffff";
@@ -625,7 +653,12 @@ export class Pacman extends Actor {
           ctx.stroke();
         } else {
           // Standard system data shards
-          ctx.fillRect(px - blockDimensions / 2, py - blockDimensions / 2, blockDimensions, blockDimensions);
+          ctx.fillRect(
+            px - blockDimensions / 2,
+            py - blockDimensions / 2,
+            blockDimensions,
+            blockDimensions,
+          );
         }
         ctx.restore();
       }

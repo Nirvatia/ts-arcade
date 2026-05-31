@@ -35,8 +35,8 @@ export class Ghost extends Actor {
     drift: number;
   }> = [];
 
-  constructor(config: GhostConfig) {
-    super(CFG_CANVAS.canvasIds.ghosts);
+  constructor(config: GhostConfig, sharedCtx?: CanvasRenderingContext2D) {
+    super(CFG_CANVAS.canvasIds.ghosts, sharedCtx);
     this.name = config.name;
     this.defaultColor = config.defaultColor;
     this.color = config.color;
@@ -113,7 +113,7 @@ export class Ghost extends Actor {
           ghostName: this.name,
           points: 0,
           ghostIndex: 0,
-         });
+        });
       }
     });
   }
@@ -125,6 +125,7 @@ export class Ghost extends Actor {
 
     if (this.path.length > 0 || this.currentPathTarget !== null) {
       this.moveAlongPath(dt);
+      this.needsRedraw = true;
       return;
     }
 
@@ -145,6 +146,8 @@ export class Ghost extends Actor {
       this.x = newX;
       this.y = newY;
     }
+
+    this.needsRedraw = true;
   }
 
   private getNextPosition(dt: number): { newX: number; newY: number } {
@@ -383,10 +386,10 @@ export class Ghost extends Actor {
 
   private getOrientationAngle(): number {
     const { dx, dy } = this.direction;
-    if (dx === 1)  return Math.PI / 2;   // Right
-    if (dx === -1) return -Math.PI / 2;  // Left
-    if (dy === -1) return 0;             // Up
-    if (dy === 1)  return Math.PI;       // Down
+    if (dx === 1) return Math.PI / 2; // Right
+    if (dx === -1) return -Math.PI / 2; // Left
+    if (dy === -1) return 0; // Up
+    if (dy === 1) return Math.PI; // Down
     return 0;
   }
 
@@ -425,7 +428,7 @@ export class Ghost extends Actor {
           alpha: 0.85,
           width: Math.random() > 0.5 ? r * 0.8 : r * 0.4, // Streamlined slice cuts
           height: 1.5,
-          drift: (Math.random() - 0.5) * 3
+          drift: (Math.random() - 0.5) * 3,
         });
         this.particleTimer = 0;
       }
@@ -441,7 +444,12 @@ export class Ghost extends Actor {
         const p = this.trailParticles[i];
         ctx.fillStyle = vectorColor;
         ctx.globalAlpha = p.alpha;
-        ctx.fillRect(p.x - p.width / 2 + p.drift, p.y - p.height / 2, p.width, p.height);
+        ctx.fillRect(
+          p.x - p.width / 2 + p.drift,
+          p.y - p.height / 2,
+          p.width,
+          p.height,
+        );
 
         p.alpha -= 0.14; // Volatile rapid frame decay
         if (p.alpha <= 0) {
@@ -477,7 +485,7 @@ export class Ghost extends Actor {
     ctx: CanvasRenderingContext2D,
     r: number,
     themeColor: string,
-    isFrightened: boolean
+    isFrightened: boolean,
   ): void {
     ctx.save();
 
@@ -550,7 +558,7 @@ export class Ghost extends Actor {
   private drawFleeingCore(
     ctx: CanvasRenderingContext2D,
     r: number,
-    themeColor: string
+    themeColor: string,
   ): void {
     ctx.save();
 

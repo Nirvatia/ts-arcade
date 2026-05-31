@@ -2,8 +2,10 @@
 
 import { Ghost } from "../actors/ghost.js";
 import { Pacman } from "../actors/pacman.js";
+import { CFG_CANVAS } from "../config/canvas.js";
 import { CFG_GHOSTS } from "../config/ghosts.js";
 import { CFG_PACMAN } from "../config/pacman.js";
+import { CanvasComposite } from "../core/canvasComposite.js";
 import { eventBus } from "../core/eventBus.js";
 import type { Drawable, Updatable } from "../interfaces.js";
 import { Vignette } from "../vfx/vignette.js";
@@ -11,16 +13,13 @@ import { Dot } from "../world/dot.js";
 import { Maze } from "../world/maze.js";
 import { Pill } from "../world/pill.js";
 
-/**
- * Central registry for actor entities.
- * Delegates world layer responsibilities out to the Environment system.
- */
 export class GameRegistry {
   private static instance: GameRegistry | null = null;
 
   private _vignette!: Vignette;
   private _pacman!: Pacman;
   private _ghosts: Ghost[] = [];
+  private _ghostLayer!: CanvasComposite;
   private _maze!: Maze;
   private _dot!: Dot;
   private _pill!: Pill;
@@ -52,14 +51,23 @@ export class GameRegistry {
     this._dot = new Dot();
     this._pill = new Pill();
     this._pacman = new Pacman(CFG_PACMAN);
-    this._ghosts = Object.values(CFG_GHOSTS).map((config) => new Ghost(config));
-  }
 
-  getVignette(): Vignette {
-    return this._vignette;
+    // 1. Создаем один композитный слой для холста призраков
+    this._ghostLayer = new CanvasComposite(CFG_CANVAS.canvasIds.ghosts);
+
+    // 2. Создаем призраков, передавая им общий контекст этого слоя
+    this._ghosts = Object.values(CFG_GHOSTS).map(
+      (config) => new Ghost(config, this._ghostLayer.ctx),
+    );
+
+    // 3. Регистрируем призраков внутри композитного контейнера
+    this._ghosts.forEach((ghost) => this._ghostLayer.add(ghost));
   }
 
   // --- Strict Type Getters ---
+  getVignette(): Vignette {
+    return this._vignette;
+  }
   getPacman(): Pacman {
     return this._pacman;
   }
@@ -76,9 +84,10 @@ export class GameRegistry {
     return this._pill;
   }
 
-  /** Combined arrays for direct GameLoop cycle access */
+  /** * Combined arrays for direct GameLoop cycle access.
+   */
   getAllUpdatable(): Updatable[] {
-    return [this._pacman, ...this._ghosts, this._pill];
+    return [this._vignette, this._pacman, ...this._ghosts, this._pill];
   }
 
   getAllDrawable(): Drawable[] {
@@ -88,24 +97,18 @@ export class GameRegistry {
       this._pill,
       this._vignette,
       this._pacman,
-      ...this._ghosts,
+      this._ghostLayer,
     ];
   }
 
+  // --- Polymorphic Group Iterations ---
+
   initAll(): void {
-    this._maze.init();
-    this._dot.init();
-    this._pill.init();
-    this._pacman.init();
-    this._ghosts.forEach((g) => g.init());
+    this.getAllDrawable().forEach((entity) => entity.init?.());
   }
 
   resetAll(): void {
-    this._maze.reset();
-    this._dot.reset();
-    this._pill.reset();
-    this._pacman.reset();
-    this._ghosts.forEach((g) => g.reset());
+    this.getAllDrawable().forEach((entity) => entity.reset());
   }
 
   spawnEntities(): void {
@@ -123,11 +126,6 @@ export class GameRegistry {
   }
 
   clearAllCanvases(): void {
-    this._vignette.clearCanvas();
-    this._maze.clearCanvas();
-    this._dot.clearCanvas();
-    this._pill.clearCanvas();
-    this._pacman.clearCanvas();
-    this._ghosts.forEach((ghost) => ghost.clearCanvas());
+    this.getAllDrawable().forEach((entity) => entity.clearCanvas());
   }
 }

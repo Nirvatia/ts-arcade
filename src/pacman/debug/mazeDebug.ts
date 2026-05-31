@@ -1,4 +1,4 @@
-import type { TileType } from "./types.js";
+import type { TileType } from "../types.js";
 
 export function drawLevel4Debug(map: TileType[][]): () => void {
   // 1. Create a full-screen top-layer canvas

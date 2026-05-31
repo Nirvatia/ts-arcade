@@ -13,6 +13,8 @@ import type { Updatable } from "../interfaces.js";
 export abstract class Actor implements Updatable {
   protected gameState: GameState;
   protected canvasLayer: CanvasLayer;
+  private sharedCtx: CanvasRenderingContext2D | null = null;
+  public readonly canvasId: string;
 
   /** Размер одной плитки в пикселях */
   protected tileSize: number;
@@ -41,22 +43,31 @@ export abstract class Actor implements Updatable {
   /**
    * @param layerId - id canvas элемента для этого актора
    */
-  constructor(layerId: string) {
+  constructor(canvasId: string, sharedCtx?: CanvasRenderingContext2D) {
+    this.canvasId = canvasId;
     this.gameState = GameState.getInstance();
-    this.canvasLayer = new CanvasLayer(layerId);
+    this.canvasLayer = new CanvasLayer(canvasId);
     this.tileSize = CFG_CANVAS.tile.size;
     this.r = this.tileSize / 2;
     this.speed = this.tileSize / 8;
+
+    if (sharedCtx) {
+      // Исполняем если объект делит холст с другими (например, Призраки)
+      this.sharedCtx = sharedCtx;
+    } else {
+      // Исполняем для одиночных холстов (например, Пакман)
+      this.canvasLayer = new CanvasLayer(canvasId);
+    }
   }
 
   /** HTML Canvas элемент */
-  get canvas(): HTMLCanvasElement {
-    return this.canvasLayer.canvas;
+get canvas(): HTMLCanvasElement {
+    return this.canvasLayer ? this.canvasLayer.canvas : this.sharedCtx!.canvas;
   }
 
   /** 2D контекст рендеринга для отрисовки */
   get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
+    return this.canvasLayer ? this.canvasLayer.ctx : this.sharedCtx!;
   }
 
   /** Нужна ли перерисовка (для статических объектов) */
@@ -76,13 +87,13 @@ export abstract class Actor implements Updatable {
 
   /** Очистить весь холст этого актора */
   clearCanvas(): void {
-    this.canvasLayer.clear();
+    this.canvasLayer?.clear();
   }
 
   /** Подготовка к новому уровню: очистка и ресайз холста */
   resetForLevel(): void {
     this.clearCanvas();
-    this.canvasLayer.resize();
+    this.canvasLayer?.resize();
     this._needsRedraw = true;
   }
 

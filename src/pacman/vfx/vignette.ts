@@ -1,38 +1,40 @@
 // src/effects/Vignette.ts
 
 import { CFG_CANVAS } from "../config/canvas.js";
-import { CanvasLayer } from "../core/canvasLayer.js";
 import { GameRegistry } from "../game/gameRegistry.js";
-import type { Drawable } from "../interfaces.js";
+import type { Updatable } from "../interfaces.js";
+import { WorldObject } from "../world/worldObject.js";
 
-export class Vignette implements Drawable {
-  private canvasLayer: CanvasLayer;
+export class Vignette extends WorldObject implements Updatable {
   private registry: GameRegistry;
 
-  public needsRedraw: boolean = true;
-
   constructor() {
-    this.canvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.vignette);
+    // 1. Pass the vignette canvas ID straight to the WorldObject base class
+    super(CFG_CANVAS.canvasIds.vignette);
     this.registry = GameRegistry.getInstance();
   }
 
-  get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
-  }
-
-  requestRedraw(): void {
+  /**
+   * Updates the VFX logic on every frame tick.
+   * Since the vignette follows Pacman dynamically, it forces a redraw request.
+   */
+  update(dt: number): void {
+    // We don't restrict this by game mode here because even during intermission 
+    // or game over, you might want the static vignette to remain visible.
     this.needsRedraw = true;
   }
 
-  clearCanvas(): void {
-    this.canvasLayer.clear();
-  }
-
+  /**
+   * Paints the radial gradient spotlight centered directly on Pacman's current coordinates.
+   */
   draw(): void {
     const pacman = this.registry.getPacman();
     const ctx = this.ctx;
-    const w = ctx.canvas.width;
-    const h = ctx.canvas.height;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
+    // Clear the layer completely before drawing the new frame spotlight
+    this.clearCanvas();
 
     const gradient = ctx.createRadialGradient(
       pacman.x, pacman.y, 60,
