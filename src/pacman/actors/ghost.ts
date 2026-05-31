@@ -24,15 +24,15 @@ export class Ghost extends Actor {
   private isFlashing: boolean = false;
   private flashSpeed: number = 200;
 
-  // Система деликатных матричных частиц
+  // Scythe.sys Predatory Glitch Particle Trail
   private particleTimer: number = 0;
   private trailParticles: Array<{
     x: number;
     y: number;
     alpha: number;
-    maxAlpha: number;
-    size: number;
-    phase: number;
+    width: number;
+    height: number;
+    drift: number;
   }> = [];
 
   constructor(config: GhostConfig) {
@@ -113,7 +113,7 @@ export class Ghost extends Actor {
           ghostName: this.name,
           points: 0,
           ghostIndex: 0,
-        });
+         });
       }
     });
   }
@@ -381,95 +381,69 @@ export class Ghost extends Actor {
     }
   }
 
-  private getDirectionLabel(): "LEFT" | "RIGHT" | "UP" | "DOWN" {
+  private getOrientationAngle(): number {
     const { dx, dy } = this.direction;
-    if (dx === 1) return "RIGHT";
-    if (dx === -1) return "LEFT";
-    if (dy === -1) return "UP";
-    if (dy === 1) return "DOWN";
-    return "RIGHT";
+    if (dx === 1)  return Math.PI / 2;   // Right
+    if (dx === -1) return -Math.PI / 2;  // Left
+    if (dy === -1) return 0;             // Up
+    if (dy === 1)  return Math.PI;       // Down
+    return 0;
   }
 
-  // --- Draw (Cute Jelly Ghost & Ambient Matrix Particles) ---
+  // --- Draw (Scythe.sys Predator Protocol - Sleek Narrow Variant) ---
 
   draw(): void {
     const ctx = this.ctx;
     const r = this.tileSize / 2;
 
-    let primaryColor = this.defaultColor;
-    let glowColor = this.color;
-    let shouldDrawBody = true;
+    let vectorColor = this.color || this.defaultColor;
+    let isFrightened = false;
+    let isEaten = false;
 
     if (this.state === "FRIGHTENED") {
+      isFrightened = true;
       if (this.isFlashing) {
         const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        primaryColor = isWhite ? "#ffffff" : "#1155cc";
-        glowColor = isWhite ? "#ffffff" : "#9933ff";
+        vectorColor = isWhite ? "#ffffff" : "#1144bb";
       } else {
-        primaryColor = "#1155cc";
-        glowColor = "#9933ff";
+        vectorColor = "#1144bb";
       }
     } else if (this.state === "EATEN") {
-      shouldDrawBody = false;
+      isEaten = true;
+      vectorColor = "rgba(0, 240, 255, 0.9)";
     }
 
     const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
-    const timeScale = isGamePlaying ? Date.now() * 0.003 : 0;
 
-    // --- ОБНОВЛЕНИЕ ЧАСТИЦ (Ионизация пространства матрицы) ---
-    if (isGamePlaying && shouldDrawBody) {
-      const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
-
-      if (isMoving) {
-        this.particleTimer++;
-        // Стабильно раз в 5 кадров активируем «пиксель» вокруг призрака
-        if (this.particleTimer >= 5) {
-          // Выбираем случайный угол вокруг призрака, чуть дальше радиуса его тела
-          const angle = Math.random() * Math.PI * 2;
-          const spawnDist = r * (1.0 + Math.random() * 0.3);
-
-          this.trailParticles.push({
-            x: this.x + Math.cos(angle) * spawnDist,
-            y: this.y + Math.sin(angle) * spawnDist,
-            alpha: 0,        // Начинают с нуля и плавно загораются
-            maxAlpha: 0.7,   // Максимальная яркость неонового пикселя
-            size: Math.random() > 0.5 ? 1.5 : 2.0, // Строгие квадратные/круглые кванты (1.5-2px)
-            phase: 0         // 0 = разгорается, 1 = увядает
-          });
-          this.particleTimer = 0;
-        }
+    // --- SLEEK SCANLINE DRIFT GLITCH TRAIL ---
+    if (isGamePlaying && (this.direction.dx !== 0 || this.direction.dy !== 0)) {
+      this.particleTimer++;
+      if (this.particleTimer >= 3) {
+        this.trailParticles.push({
+          x: this.x + (Math.random() - 0.5) * (r * 0.7), // Concentrated layout width
+          y: this.y + (Math.random() - 0.5) * r,
+          alpha: 0.85,
+          width: Math.random() > 0.5 ? r * 0.8 : r * 0.4, // Streamlined slice cuts
+          height: 1.5,
+          drift: (Math.random() - 0.5) * 3
+        });
+        this.particleTimer = 0;
       }
     }
 
     ctx.save();
     ctx.globalCompositeOperation = "source-over";
 
-    // --- ОТРИСОВКА МАТРИЧНЫХ КВАНТОВ (Они лежат под телом) ---
+    // --- RENDER TRAIL SLICES ---
     if (this.trailParticles.length > 0) {
       ctx.save();
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = glowColor;
-
       for (let i = this.trailParticles.length - 1; i >= 0; i--) {
         const p = this.trailParticles[i];
-
-        ctx.fillStyle = glowColor;
+        ctx.fillStyle = vectorColor;
         ctx.globalAlpha = p.alpha;
+        ctx.fillRect(p.x - p.width / 2 + p.drift, p.y - p.height / 2, p.width, p.height);
 
-        // Рисуем маленькие аккуратные хай-тек квадратики вместо мягких кругов
-        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-
-        // Жизненный цикл частицы (Pulse in -> Fade out) без движения
-        if (p.phase === 0) {
-          p.alpha += 0.15; // Быстро зажигается при приближении призрака
-          if (p.alpha >= p.maxAlpha) {
-            p.alpha = p.maxAlpha;
-            p.phase = 1;
-          }
-        } else {
-          p.alpha -= 0.04; // Мягко гаснет, оставаясь на месте в коридоре
-        }
-
+        p.alpha -= 0.14; // Volatile rapid frame decay
         if (p.alpha <= 0) {
           this.trailParticles.splice(i, 1);
         }
@@ -477,168 +451,133 @@ export class Ghost extends Actor {
       ctx.restore();
     }
 
-    // --- ОТРИСОВКА ТЕЛА ---
-    if (shouldDrawBody) {
-      this.drawSolidGhostBody(
-        ctx,
-        this.x,
-        this.y,
-        r,
-        primaryColor,
-        glowColor,
-        timeScale,
-        false,
-      );
+    // --- COORDINATE MATRIX TRANSFORM ---
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    const rotationAngle = this.getOrientationAngle();
+    ctx.rotate(rotationAngle);
+
+    // --- DESPATCH RENDER ENGINE CORES ---
+    if (!isEaten) {
+      this.drawVectorCore(ctx, r, vectorColor, isFrightened);
+    } else {
+      this.drawFleeingCore(ctx, r, vectorColor);
     }
 
-    // Отрисовка глаз поверх
-    const dir = this.getDirectionLabel();
-    this.drawEyes(this.x, this.y, r, dir, timeScale);
+    ctx.restore();
+    ctx.restore();
+  }
+
+  /**
+   * Balanced standard scale (r * 2.2).
+   * Aggressively narrow coordinate geometry footprint (width pinched on X axis).
+   */
+  private drawVectorCore(
+    ctx: CanvasRenderingContext2D,
+    r: number,
+    themeColor: string,
+    isFrightened: boolean
+  ): void {
+    ctx.save();
+
+    const scaleFactor = (r * 2.2) / 100;
+    ctx.scale(scaleFactor, scaleFactor);
+    ctx.translate(-50, -50);
+
+    ctx.shadowBlur = isFrightened ? 6 : 15;
+    ctx.shadowColor = themeColor;
+    ctx.strokeStyle = themeColor;
+    ctx.lineJoin = "miter";
+    ctx.miterLimit = 4;
+
+    // 1. Solid High-Contrast Opaque Backdrop Fill (Pinched X positions: 88->72, 12->28)
+    ctx.beginPath();
+    ctx.moveTo(50, 8);
+    ctx.lineTo(72, 78);
+    ctx.lineTo(50, 62);
+    ctx.lineTo(28, 78);
+    ctx.closePath();
+    ctx.fillStyle = "#000000";
+    ctx.fill();
+
+    // 2. Overdriven Outer Frame Stroke Line
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    // 3. Narrow Spiked Stabilizers (Pinched to closely trace the sharper body silhouette)
+    ctx.beginPath();
+    ctx.lineWidth = 2.0;
+    // Left barb spike configuration
+    ctx.moveTo(37, 69);
+    ctx.lineTo(16, 75);
+    ctx.lineTo(31, 62);
+    // Right barb spike configuration
+    ctx.moveTo(63, 69);
+    ctx.lineTo(84, 75);
+    ctx.lineTo(69, 62);
+    ctx.stroke();
+
+    // 4. Sleek Accent Internal Wire Tracking Shell
+    ctx.save();
+    ctx.beginPath();
+    ctx.lineWidth = 1.0;
+    ctx.globalAlpha = 0.55;
+    ctx.moveTo(50, 24);
+    ctx.lineTo(66, 67);
+    ctx.lineTo(50, 56);
+    ctx.lineTo(34, 67);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    // 5. Central Data Split Indicator Wires
+    ctx.save();
+    ctx.beginPath();
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 2]);
+    ctx.moveTo(50, 8);
+    ctx.lineTo(50, 56);
+    ctx.stroke();
+    ctx.restore();
 
     ctx.restore();
   }
 
   /**
-   * Отрисовка ПЛОТНОГО, заполненного тела призрака с аккуратным Tron-эффектом.
+   * Compact, narrow hyper-sharp fleeing kinetic splinter core.
    */
-  private drawSolidGhostBody(
+  private drawFleeingCore(
     ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
     r: number,
-    primaryColor: string,
-    glowColor: string,
-    timeScale: number,
-    isTrail: boolean,
+    themeColor: string
   ): void {
     ctx.save();
 
+    const scaleFactor = (r * 1.8) / 100;
+    ctx.scale(scaleFactor, scaleFactor);
+    ctx.translate(-50, -50);
+
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = themeColor;
+    ctx.strokeStyle = themeColor;
+    ctx.lineJoin = "miter";
+
+    // Opaque background layer mask
     ctx.beginPath();
-    const pts = 40;
-    const baseR = r * 1.1;
-
-    for (let i = 0; i < pts; i++) {
-      const angle = (i / pts) * Math.PI * 2 - Math.PI / 2;
-      let rr =
-        baseR +
-        Math.sin(angle * 3 + timeScale * 4) * r * 0.1 +
-        Math.cos(angle * 5 - timeScale * 3) * r * 0.06;
-
-      if (angle > 0.3 && angle < Math.PI - 0.3) {
-        rr = baseR + Math.sin(i * 0.7 + timeScale * 3.5) * r * 0.18;
-      }
-
-      const px = cx + Math.cos(angle) * rr;
-      const py = cy + Math.sin(angle) * rr * 0.9;
-
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
+    ctx.moveTo(50, 12);
+    ctx.lineTo(68, 75);
+    ctx.lineTo(50, 60);
+    ctx.lineTo(32, 75);
     ctx.closePath();
+    ctx.fillStyle = "#000000";
+    ctx.fill();
 
-    if (isTrail) {
-      ctx.fillStyle = primaryColor;
-      ctx.fill();
-    } else {
-      const bodyGrad = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
-      bodyGrad.addColorStop(0, primaryColor); 
-      bodyGrad.addColorStop(0.75, primaryColor + "bb");
-      bodyGrad.addColorStop(1, primaryColor + "22"); 
-
-      ctx.fillStyle = bodyGrad;
-      ctx.fill();
-
-      ctx.strokeStyle = primaryColor;
-      ctx.lineWidth = 2;
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 8; 
-      ctx.stroke();
-
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1;
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 0.3;
-      ctx.stroke();
-    }
+    // Fluctuating unstable core frame pulse line
+    const rapidBlink = Math.floor(Date.now() / 45) % 2 === 0;
+    ctx.lineWidth = rapidBlink ? 3.5 : 1.5;
+    ctx.stroke();
 
     ctx.restore();
-  }
-
-  private drawEyes(
-    cx: number,
-    cy: number,
-    r: number,
-    dir: "LEFT" | "RIGHT" | "UP" | "DOWN",
-    t: number,
-  ): void {
-    const ctx = this.ctx;
-    ctx.shadowBlur = 0;
-
-    const eyeY = cy - r * 0.28;
-    const eyeSpacing = r * 0.34;
-    const eyeR = r * 0.2;
-
-    const leftEyeX = cx - eyeSpacing;
-    const rightEyeX = cx + eyeSpacing;
-
-    const blinkCycle = Math.sin(t * 1.5) * 0.5 + 0.5;
-    const blinkFactor = blinkCycle > 0.92 ? 1 - (blinkCycle - 0.92) / 0.08 : 1;
-    const eyeScaleY = Math.max(0.06, blinkFactor);
-
-    let moveX = 0;
-    let moveY = 0;
-    const lookOffset = r * 0.05;
-
-    switch (dir) {
-      case "LEFT":  moveX = -lookOffset; break;
-      case "RIGHT": moveX = lookOffset;  break;
-      case "UP":    moveY = -lookOffset; break;
-      case "DOWN":  moveY = lookOffset;  break;
-    }
-
-    const px = moveX * 2.8;
-    const py = moveY * 2.8;
-
-    const renderSingleEye = (ex: number, ey: number, er: number) => {
-      ctx.save();
-      ctx.translate(ex, ey);
-      ctx.scale(1, eyeScaleY);
-
-      if (this.state !== "FRIGHTENED") {
-        ctx.fillStyle = "#f8fcff";
-        ctx.shadowColor = "#ffffff";
-        ctx.shadowBlur = 4;
-        ctx.beginPath();
-        ctx.arc(0, 0, er, 0, Math.PI * 2);
-        ctx.fill();
-
-        const pupilR = er * 0.48;
-        ctx.fillStyle = this.state === "EATEN" ? "#1155cc" : "#010510";
-        ctx.shadowBlur = 0;
-        ctx.beginPath();
-        ctx.arc(px, py, pupilR, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.arc(px + er * 0.28, py - er * 0.32, er * 0.22, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(px - er * 0.18, py + er * 0.08, er * 0.1, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.fillStyle = "#66aadd";
-        ctx.shadowBlur = er * 0.3;
-        ctx.shadowColor = "#4499cc";
-        ctx.beginPath();
-        ctx.arc(0, 0, er * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.restore();
-    };
-
-    renderSingleEye(leftEyeX, eyeY, eyeR);
-    renderSingleEye(rightEyeX, eyeY, eyeR);
   }
 }
