@@ -36,35 +36,15 @@ export class GameRegistry {
   }
 
   private initEventListeners(): void {
-    eventBus.on("command:create_entities", () => this.createEntities());
+    eventBus.on("command:create_all", () => this.createAll());
     eventBus.on("command:reset_all", () => this.resetAll());
-    eventBus.on("command:spawn_entities", () => this.spawnEntities());
+    eventBus.on("command:spawn_actors", () => this.spawnActors());
     eventBus.on("command:exit_lair_all", () => this.exitLairAll());
     eventBus.on("command:init_all", () => this.initAll());
-    eventBus.on("command:reset_positions", () => this.resetActors());
+    eventBus.on("command:reset_actors", () => this.resetActors());
     eventBus.on("command:clear_canvases", () => this.clearAllCanvases());
   }
 
-  createEntities(): void {
-    this._vignette = new Vignette();
-    this._maze = new Maze();
-    this._dot = new Dot();
-    this._pill = new Pill();
-    this._pacman = new Pacman(CFG_PACMAN);
-
-    // 1. Создаем один композитный слой для холста призраков
-    this._ghostLayer = new CanvasComposite(CFG_CANVAS.canvasIds.ghosts);
-
-    // 2. Создаем призраков, передавая им общий контекст этого слоя
-    this._ghosts = Object.values(CFG_GHOSTS).map(
-      (config) => new Ghost(config, this._ghostLayer.ctx),
-    );
-
-    // 3. Регистрируем призраков внутри композитного контейнера
-    this._ghosts.forEach((ghost) => this._ghostLayer.add(ghost));
-  }
-
-  // --- Strict Type Getters ---
   getVignette(): Vignette {
     return this._vignette;
   }
@@ -84,8 +64,6 @@ export class GameRegistry {
     return this._pill;
   }
 
-  /** * Combined arrays for direct GameLoop cycle access.
-   */
   getAllUpdatable(): Updatable[] {
     return [this._vignette, this._pacman, ...this._ghosts, this._pill];
   }
@@ -101,7 +79,21 @@ export class GameRegistry {
     ];
   }
 
-  // --- Polymorphic Group Iterations ---
+  createAll(): void {
+    this._vignette = new Vignette();
+    this._maze = new Maze();
+    this._dot = new Dot();
+    this._pill = new Pill();
+    this._pacman = new Pacman(CFG_PACMAN);
+
+    this._ghostLayer = new CanvasComposite(CFG_CANVAS.canvasIds.ghosts);
+
+    this._ghosts = Object.values(CFG_GHOSTS).map(
+      (config) => new Ghost(config, this._ghostLayer.ctx),
+    );
+
+    this._ghosts.forEach((ghost) => this._ghostLayer.add(ghost));
+  }
 
   initAll(): void {
     this.getAllDrawable().forEach((entity) => entity.init?.());
@@ -111,7 +103,7 @@ export class GameRegistry {
     this.getAllDrawable().forEach((entity) => entity.reset());
   }
 
-  spawnEntities(): void {
+  spawnActors(): void {
     this._pacman.spawn();
     this._ghosts.forEach((g) => g.spawn());
   }

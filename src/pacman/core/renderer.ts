@@ -31,6 +31,6 @@ export class Renderer {
       }
     });
 
-    this.tracker.processMetrics();
+    //this.tracker.processMetrics();
   }
 }

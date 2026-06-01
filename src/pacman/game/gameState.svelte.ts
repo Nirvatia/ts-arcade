@@ -7,7 +7,6 @@ import { generateLevelConfig } from "../utils.js";
 export class GameState {
   private static instance: GameState;
 
-  // Svelte 5 Fine-Grained Reactive Proxy Object
   private _state = $state({
     mode: "INIT" as GameMode,
     lives: 3,
@@ -74,7 +73,7 @@ export class GameState {
   }
 
   private initEventListeners(): void {
-    eventBus.on("game:start", () => {
+    eventBus.on("level:transition_start", () => {
       this.mode = "LEVEL_TRANSITION";
     });
 
@@ -84,7 +83,6 @@ export class GameState {
 
     eventBus.on("game:restart", () => {
       this.reset();
-      this.mode = "LEVEL_TRANSITION";
       this.levelData = generateLevelConfig(this.currentLevel);
       eventBus.emit("ui:level_display_update", { level: this.currentLevel });
     });
@@ -143,7 +141,9 @@ export class GameState {
           eventBus.emit("power_pill:expired");
         },
       );
-      eventBus.emit("power_pill:activated", { duration: this.levelData.buffDuration });
+      eventBus.emit("power_pill:activated", {
+        duration: this.levelData.buffDuration,
+      });
     });
 
     eventBus.on("bonus_life:earned", () => {
@@ -162,7 +162,6 @@ export class GameState {
           });
         } else {
           this.lives--;
-          eventBus.emit("command:death_sequence_continue");
         }
       },
     );

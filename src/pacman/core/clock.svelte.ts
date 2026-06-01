@@ -1,5 +1,3 @@
-// src/game/Clock.svelte.ts
-
 type TickCallback = (remaining: number) => void;
 type CompleteCallback = () => void;
 
@@ -8,19 +6,25 @@ type CompleteCallback = () => void;
  * Использует руны Svelte 5 для автоматического обновления пользовательского интерфейса.
  */
 export class Clock {
-  // Svelte 5 State Runes force UI updates on every mutation frame
-  private duration = $state(0);
-  private elapsed = $state(0);
+  private _duration = $state(0);
+  private _elapsed = $state(0);
   private _isRunning = $state(false);
-  
+
   private intervalId: number | null = null;
   private onTick: TickCallback | null = null;
   private onComplete: CompleteCallback | null = null;
 
   constructor() {}
 
-  /** Запущен ли таймер */
-  get isRunning(): boolean {
+  public get duration(): number {
+    return this._duration;
+  }
+
+  public get elapsed(): number {
+    return this._elapsed;
+  }
+
+  public get isRunning(): boolean {
     return this._isRunning;
   }
 
@@ -35,17 +39,17 @@ export class Clock {
   ): void {
     this.stop();
 
-    this.duration = duration;
-    this.elapsed = 0;
+    this._duration = duration;
+    this._elapsed = 0;
     this.onTick = onTick;
     this.onComplete = onComplete || null;
     this._isRunning = true;
 
-    // Немедленный первый тик
     this.onTick?.(this.duration - this.elapsed);
 
     this.intervalId = window.setInterval(() => {
-      this.elapsed++;
+      this._elapsed++;
+
       if (this.elapsed < this.duration) {
         this.onTick?.(this.duration - this.elapsed);
       } else {
@@ -66,7 +70,7 @@ export class Clock {
   /** Сбросить таймер */
   reset(): void {
     this.stop();
-    this.elapsed = 0;
+    this._elapsed = 0;
   }
 
   /** Оставшееся время */

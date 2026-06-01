@@ -3,7 +3,7 @@
   import { initAudio } from "../../../pacman/utils.js";
   import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
   import fontUrl from "$lib/assets/fonts/Jersey-Regular.ttf?url";
-  import { Director } from "../../../pacman/game/director.js";
+  import { Director } from "../../../pacman/game/director.svelte.js";
   import { GameState } from "../../../pacman/game/gameState.svelte.js";
   import { sfx } from "../../../pacman/sfx/sfx.js";
   import { Controller } from "../../../pacman/controller/controller.js";
@@ -23,12 +23,13 @@
   const gameLoop = GameLoop.getInstance();
   const environment = Environment.getInstance();
 
-  // Forcing open dependency parsing to bypass conditional short-circuit traps
   let countdown = $derived.by(() => {
     const activeClock = director.currentClock;
-    if (!activeClock) return 0;
+    if (!activeClock || !activeClock.isRunning) return 0;
+
     const remaining = activeClock.getRemaining();
-    return activeClock.isRunning ? remaining : 0;
+
+    return remaining;
   });
 
   onMount(async () => {
@@ -184,8 +185,12 @@
   }
 
   @keyframes vectorSpin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 
   .loading-text {
@@ -299,8 +304,13 @@
   }
 
   @keyframes vectorPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
   }
 
   // --- Attract Mode Layouts ---
@@ -342,7 +352,9 @@
     font-size: 1.3rem;
     letter-spacing: 3px;
     cursor: pointer;
-    transition: background 0.15s ease, text-shadow 0.15s ease;
+    transition:
+      background 0.15s ease,
+      text-shadow 0.15s ease;
     box-shadow: 0 0 15px rgba($neon-cyan, 0.05);
 
     &:hover {
@@ -362,8 +374,14 @@
   }
 
   @keyframes buttonGlowSync {
-    0%, 100% { box-shadow: 0 0 10px rgba($neon-cyan, 0.1); }
-    50% { box-shadow: 0 0 20px rgba($neon-cyan, 0.3); border-color: #ffffff; }
+    0%,
+    100% {
+      box-shadow: 0 0 10px rgba($neon-cyan, 0.1);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba($neon-cyan, 0.3);
+      border-color: #ffffff;
+    }
   }
 
   // --- Minimalist Integrated HUD Layout ---

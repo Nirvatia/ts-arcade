@@ -2,7 +2,7 @@ import { GameRegistry } from "../game/gameRegistry.js";
 import { GameState } from "../game/gameState.svelte.js";
 import { eventBus } from "./eventBus.js";
 import { Renderer } from "./renderer.js";
-import { Director } from "../game/director.js";
+import { Director } from "../game/director.svelte.js";
 import { GameLoopTracker } from "../debug/gameLoopTracker.js";
 
 /**
@@ -100,7 +100,7 @@ export class GameLoop {
         }
       }
 
-      this.tracker.endFrame(workStart);
+      //this.tracker.endFrame(workStart);
     }
   }
 }

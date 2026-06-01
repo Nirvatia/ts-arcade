@@ -7,6 +7,7 @@ import { Sequence } from "../core/sequence.js";
 import { Tally } from "./tally.svelte.js";
 import { SceneRegistry } from "../scenes/sceneRegistry.js";
 import type { IGameScene } from "../interfaces.js";
+import { trackClockLifespan } from "../debug/garbageCollector.js";
 
 export class Director {
   private static instance: Director;
@@ -14,8 +15,7 @@ export class Director {
   private registry: GameRegistry;
   private tally: Tally;
 
-  // Isolated timers to prevent Svelte UI state confusion
-  private transitionClock: Clock = new Clock();
+  private transitionClock = $state<Clock | null>(null);
   private activeSequence: Sequence = new Sequence();
 
   private sceneRegistry: SceneRegistry = new SceneRegistry();
@@ -33,26 +33,7 @@ export class Director {
     return Director.instance;
   }
 
-  private initEventListeners(): void {
-    eventBus.on("game:load", () => this.loadGame());
-    eventBus.on("game:start", () => this.startGame());
-    eventBus.on("game:restart", () => this.restartGame());
-    eventBus.on("game:over", () => this.handleGameOver());
-
-    eventBus.on("level:complete", (payload) =>
-      this.triggerIntermissionSequence(payload),
-    );
-    eventBus.on("pacman:death_triggered", () => this.triggerDeathSequence());
-    eventBus.on("command:death_sequence_continue", () =>
-      this.completeDeathSequence(),
-    );
-    eventBus.on("command:ghost_eaten", (data) =>
-      this.triggerGhostEatenSequence(data),
-    );
-  }
-
-  // Hook the Svelte UI countdown property strictly to the level intro timer
-  get currentClock(): Clock {
+  public get currentClock(): Clock | null {
     return this.transitionClock;
   }
 
@@ -61,21 +42,25 @@ export class Director {
   }
 
   private resetTickingState(): void {
-    this.transitionClock.stop();
+    if (this.transitionClock) {
+      this.transitionClock.stop();
+    }
     this.activeSequence.clear();
   }
 
-  triggerGhostEatenSequence(data: { ghostName: string }): void {
-    this.resetTickingState();
-    // Reusing transition clock for short freeze frames is safe
-    this.transitionClock.start(
-      1,
-      1000,
-      () => {},
-      () => {
-        eventBus.emit("game:resumed");
-      },
+  private spawnFreshClock(): Clock {
+    if (this.transitionClock) {
+      this.transitionClock.stop();
+    }
+
+    this.transitionClock = new Clock();
+
+    trackClockLifespan(
+      this.transitionClock,
+      `Clock_Level_${this.gameState.currentLevel}`,
     );
+
+    return this.transitionClock;
   }
 
   private handleGameOver(): void {
@@ -86,20 +71,41 @@ export class Director {
     });
   }
 
+  private initEventListeners(): void {
+    eventBus.on("game:load", () => this.loadGame());
+    eventBus.on("game:start", () => this.startGame());
+    eventBus.on("game:restart", () => this.restartGame());
+    eventBus.on("game:over", () => this.handleGameOver());
+
+    eventBus.on("level:complete", (payload) =>
+      this.triggerIntermissionSequence(payload),
+    );
+
+    eventBus.on("pacman:death_triggered", () => this.handlePacmanDeath());
+
+    eventBus.on("pacman:death_animation_end", () =>
+      this.startRespawnCountdown(),
+    );
+
+    eventBus.on("command:ghost_eaten", (data) =>
+      this.triggerGhostEatenSequence(data),
+    );
+  }
+
   restartGame(): void {
     this.loadLevel();
     this.startGame();
   }
 
   loadGame(): void {
-    eventBus.emit("command:create_entities");
+    eventBus.emit("command:create_all");
     this.loadLevel();
   }
 
   loadLevel(): void {
     eventBus.emit("command:reset_all");
     eventBus.emit("command:setup_environment");
-    eventBus.emit("command:spawn_entities");
+    eventBus.emit("command:spawn_actors");
   }
 
   startGame(): void {
@@ -108,7 +114,8 @@ export class Director {
     eventBus.emit("level:transition_start", { duration: 5 });
     this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
 
-    this.transitionClock.start(
+    const clock = this.spawnFreshClock();
+    clock.start(
       5,
       1000,
       () => {},
@@ -121,30 +128,37 @@ export class Director {
     );
   }
 
-  triggerDeathSequence(): void {
+  triggerGhostEatenSequence(data: { ghostName: string }): void {
     this.resetTickingState();
-    const pacman = this.registry.getPacman();
-    if (!pacman) return;
 
-    eventBus.emit("pacman:death_animation_start", { x: pacman.x, y: pacman.y });
-
-    this.activeSequence
-      .addWait(3000)
-      .addCallback(() => {
-        eventBus.emit("command:execute_life_loss", {
-          currentScore: this.tally.score,
-        });
-      })
-      .start();
+    const clock = this.spawnFreshClock();
+    clock.start(
+      1,
+      1000,
+      () => {},
+      () => {
+        eventBus.emit("game:resumed");
+      },
+    );
   }
 
-  completeDeathSequence(): void {
+  handlePacmanDeath(): void {
     this.resetTickingState();
-    eventBus.emit("pacman:death_animation_end");
-    eventBus.emit("command:reset_positions");
+
+    eventBus.emit("command:execute_life_loss", {
+      currentScore: this.tally.score,
+    });
+  }
+
+  startRespawnCountdown(): void {
+    this.resetTickingState();
+
+    eventBus.emit("command:reset_actors");
+    eventBus.emit("command:spawn_actors");
     eventBus.emit("level:transition_start", { duration: 5 });
 
-    this.transitionClock.start(
+    const clock = this.spawnFreshClock();
+    clock.start(
       5,
       1000,
       () => {},
@@ -155,8 +169,6 @@ export class Director {
       },
     );
   }
-
-  // Inside src/game/director.ts
 
   triggerIntermissionSequence(payload: { level: number; score: number }): void {
     this.resetTickingState();
@@ -187,9 +199,9 @@ export class Director {
         });
 
         this.activeIntermissionScene = this.sceneRegistry.getRandomScene();
-        this.activeIntermissionScene.start(5, () => {});
+        this.activeIntermissionScene.start(10, () => {});
       })
-      .addWait(5000) // Keep the engine loop locked in INTERMISSION mode for 5s
+      .addWait(10000)
 
       // Phase 3: Explicit Exit, Cleanup, and Mode Pivot
       .addCallback(() => {
@@ -202,10 +214,7 @@ export class Director {
         this.activeIntermissionScene = null;
         eventBus.emit("command:clear_canvases");
 
-        // FIX: Force change the engine state back to level transition view state
         this.gameState.mode = "LEVEL_TRANSITION";
-
-        // Load the fresh map assets into memory buffers
         this.loadLevel();
       })
 
