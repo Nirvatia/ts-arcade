@@ -2,8 +2,8 @@
 
 ## High Priority (Core Gameplay Fixes)
 - [ ] **Core**
-  - Fix: bug when pacman dies and level restarts without reset.
-  - Fix: bug when new level begins and entities don't spawn until countdown is complete.
+  - Fix: director -> intermission scene type checks.
+  - Fix: environment -> path graph creation should happen in gamestate on level load.
 
 ## Ghost AI & Gameplay Logic
 - [ ] **Authentic Ghost Personalities**
