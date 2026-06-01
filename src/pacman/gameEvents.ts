@@ -22,10 +22,10 @@ export interface EventPayloads {
   // ================================================
   // GAME SYSTEM COMMANDS
   // ================================================
-  "command:create_entities": void;
+  "command:create_all": void;
   "command:reset_all": void;
-  "command:spawn_entities": void;
-  "command:reset_positions": void;
+  "command:spawn_actors": void;
+  "command:reset_actors": void;
   "command:exit_lair_all": void;
   "command:init_all": void;
   "command:clear_canvases": void;
@@ -53,7 +53,7 @@ export interface EventPayloads {
   // ENTITY: PACMAN
   // ================================================
   "pacman:death_triggered": void;
-  "pacman:death_animation_start": { x: number; y: number };
+  "pacman:death_animation_start": void;
   "pacman:death_animation_end": void;
   "pacman:direction_changed": {
     direction: { dx: number; dy: number };
