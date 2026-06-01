@@ -4,7 +4,6 @@ import { eventBus } from "../core/eventBus.js";
 export class Tally {
   private static instance: Tally;
 
-  // Single reactive source block for the scoring values
   private _state = $state({
     score: 0
   });
