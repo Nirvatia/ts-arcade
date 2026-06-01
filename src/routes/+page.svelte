@@ -1,7 +1,7 @@
 <script lang="ts">
   const routes = [
     { id: "01", path: "/games/pacman", name: "Pac-Man", available: true },
-    { id: "02", path: "#", name: "Space Invaders", available: false },
+    { id: "02", path: "#", name: "Snake", available: false },
     { id: "03", path: "#", name: "Tetris", available: false },
   ];
 </script>
