@@ -65,6 +65,7 @@ export class Pacman extends Actor {
     this.trailHistory = [];
     this.eatParticles = [];
     this.ghostEatFlash = 0;
+    this.needsRedraw = true;
   }
 
   spawn(): void {
@@ -82,17 +83,19 @@ export class Pacman extends Actor {
   }
 
   update(dt: number): void {
-    this.updateTrail(dt);
-    this.updateEatParticles(dt);
-    if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
-
     if (this.state === "DYING") {
       this.deathTimer += dt;
       if (this.deathTimer >= this.config.deathAnimationDuration) {
         eventBus.emit("pacman:death_animation_end");
       }
+      this.needsRedraw = true;
       return;
     }
+
+    this.updateTrail(dt);
+    this.updateEatParticles(dt);
+    if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
+
     if (this.gameState.mode !== "PLAYING") return;
 
     this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
@@ -101,24 +104,20 @@ export class Pacman extends Actor {
       this.spawnTrailParticle();
     }
 
-    // --- TRACK WRAP PRE-TELEPORT COORDINATES ---
     const prevX = this.x;
     const prevY = this.y;
 
     this.updateMovement(dt);
-    this.teleport(); // Assuming your wrapping logic executes right here
+    this.teleport();
 
-    // 🔥 FIXED: If position jumped instantly past 2 tile dimensions, we wrapped!
     if (
       Math.abs(this.x - prevX) > this.tileSize * 2 ||
       Math.abs(this.y - prevY) > this.tileSize * 2
     ) {
-      // 1. Clear the trailing pipeline to snap rendering lines cleanly
       this.trailHistory = [];
 
-      // 2. Spawn a beautiful digital entry/exit effect at both coordinates
-      this.spawnTeleportVFX(prevX, prevY); // Entry blast portal
-      this.spawnTeleportVFX(this.x, this.y); // Exit blast portal
+      this.spawnTeleportVFX(prevX, prevY); 
+      this.spawnTeleportVFX(this.x, this.y); 
     }
 
     const collidedGhost = this.getCollidedGhost();
@@ -288,25 +287,19 @@ export class Pacman extends Actor {
     }
   }
 
-  // Add "GATEWAY" and "SCANLINE" to your EatParticle type definition at the top of the file:
-  // type: "SHARD" | "RING" | "LINE" | "GLITCH" | "GATEWAY" | "SCANLINE";
-
   private spawnTeleportVFX(x: number, y: number): void {
     const isLeftPortal = x < this.tileSize * 3;
-    // Determine fire vector direction based on which portal he entered (blast inward toward the map)
     const blastDirection = isLeftPortal ? 1 : -1;
 
-    // 1. Trigger System Overload Flash & Core Vibration
-    this.ghostEatFlash = 0.8; // Reuses your flash filter to create a screen-wide blinding shockwave distortion
+    this.ghostEatFlash = 0.8;
 
-    // 2. High-Velocity Cyber Ring Gateways (Sequential expanding portals)
     for (let i = 0; i < 3; i++) {
       this.eatParticles.push({
         x,
         y,
         vx: blastDirection,
         vy: 0,
-        life: 0.15 + i * 0.08, // Staggered lifespans make them burst in an expanding sequence
+        life: 0.15 + i * 0.08,
         maxLife: 0.4,
         color: i === 1 ? "#00ffff" : "#ffffff",
         type: "GATEWAY",
@@ -314,22 +307,20 @@ export class Pacman extends Actor {
       });
     }
 
-    // 3. Matrix Horizontal Scanlines (Blasting across the tunnel opening)
     for (let i = 0; i < 6; i++) {
       this.eatParticles.push({
         x: x + (Math.random() * 10 - 5),
         y: y + (Math.random() * this.r * 2 - this.r),
-        vx: blastDirection * (350 + Math.random() * 200), // Extreme hyper-velocity speeds
-        vy: 0, // Perfectly locked horizontal laser strafes
+        vx: blastDirection * (350 + Math.random() * 200),
+        vy: 0,
         life: 0.2 + Math.random() * 0.2,
         maxLife: 0.4,
         color: "#00ffff",
         type: "SCANLINE",
-        size: 15 + Math.random() * 25, // Long, thin laser streams
+        size: 15 + Math.random() * 25,
       });
     }
 
-    // 4. Fragmented Unstable Code Ejections
     for (let i = 0; i < 15; i++) {
       const angle =
         (Math.random() - 0.5) * (Math.PI * 0.6) + (isLeftPortal ? 0 : Math.PI);
@@ -446,13 +437,13 @@ export class Pacman extends Actor {
     }
   }
 
-  triggerDeath(): void {
+  private triggerDeath(): void {
     if (this.state === "DYING") return;
     this.state = "DYING";
     this.deathTimer = 0;
     this.speed = 0;
     eventBus.emit("pacman:death_triggered");
-    eventBus.emit("pacman:death_animation_start", { x: this.x, y: this.y });
+    eventBus.emit("pacman:death_animation_start");
   }
 
   // --- Rendering Pipeline ---

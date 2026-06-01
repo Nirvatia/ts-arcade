@@ -69,6 +69,7 @@ export class Ghost extends Actor {
     this.isFlashing = false;
     this.state = "CHASE";
     this.trailParticles = [];
+    this.needsRedraw = true;
   }
 
   private initEventListeners(): void {
