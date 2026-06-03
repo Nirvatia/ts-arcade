@@ -8,10 +8,11 @@ import { SceneRegistry } from "../scenes/sceneRegistry.js";
 import { trackClockLifespan } from "../debug/garbageCollector.js";
 
 // Constants
-const TRANSITION_DURATION = 5; // seconds
-const INTERMISSION_DURATION = 10; // seconds
+const TRANSITION_DURATION = 5;
+const INTERMISSION_DURATION = 10;
 const FLASH_COUNT = 4;
 const FLASH_INTERVAL_MS = 400;
+const GHOST_EAT_PAUSE_DURATION = 1;
 
 export class Director {
   private static instance: Director;
@@ -75,6 +76,7 @@ export class Director {
     eventBus.on("pacman:death_animation_end", () =>
       this.startRespawnCountdown(),
     );
+    eventBus.on("command:ghost_eaten", () => this.triggerGhostEatenSequence());
   }
 
   restartGame(): void {
@@ -111,12 +113,29 @@ export class Director {
         eventBus.emit("game:started");
         eventBus.emit("command:init_all");
         eventBus.emit("command:exit_lair_all");
+        this._currentClock = null;
+      },
+    );
+  }
+
+  triggerGhostEatenSequence(): void {
+    this.resetTickingState();
+
+    const clock = this.createClock("GhostEatPause");
+
+    clock.start(
+      GHOST_EAT_PAUSE_DURATION,
+      1000,
+      () => {},
+      () => {
+        eventBus.emit("game:resumed");
       },
     );
   }
 
   handlePacmanDeath(): void {
     this.resetTickingState();
+
     eventBus.emit("command:execute_life_loss", {
       currentScore: this.tally.score,
     });
@@ -141,6 +160,7 @@ export class Director {
         eventBus.emit("level:transition_end");
         eventBus.emit("game:resumed");
         eventBus.emit("command:exit_lair_all");
+        this._currentClock = null;
       },
     );
   }
@@ -176,7 +196,7 @@ export class Director {
 
       this.sceneRegistry.startRandomScene(INTERMISSION_DURATION, () => {
         eventBus.emit("command:clear_canvases");
-        eventBus.emit("game:mode_change", { mode: "LEVEL_TRANSITION" });
+        this.gameState.mode = "LEVEL_TRANSITION";
         this.loadLevel();
         this.startGame();
       });
