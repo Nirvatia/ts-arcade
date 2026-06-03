@@ -3,13 +3,7 @@
 ## High Priority (Core Gameplay Fixes)
 - [ ] **Core**
   - Fix: director -> intermission scene type checks.
-  - Fix: environment -> path graph creation should happen in gamestate on level load.
-
-## Ghost AI & Gameplay Logic
-- [ ] **Authentic Ghost Personalities**
-  - Implement Pinky's ambush logic (targeting 4 tiles ahead of Pac-Man).
-  - Implement Inky's vector targeting (based on both Blinky and Pac-Man).
-  - Implement Clyde's proximity retreat algorithm.
+  - Fix: environment -> path graph creation should happen in gamestate on level load or happen in Director
 
 ## Visuals & UI
   - Implement active keyboard listener navigation for selecting games on the main menu.
