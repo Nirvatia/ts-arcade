@@ -1,6 +1,6 @@
 export const CFG_CANVAS = {
   tile: {
-    size: 26, // Size of each tile in pixels
+    size: 28, // Size of each tile in pixels
   },
   canvasIds: {
     maze: "cvs-maze",
