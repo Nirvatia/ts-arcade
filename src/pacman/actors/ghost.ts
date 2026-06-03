@@ -1,30 +1,49 @@
 import { CFG_CANVAS } from "../config/canvas.js";
-import type { GhostConfig } from "../config/ghosts.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
-import { findLairExit, findShortestPath } from "../utils.js";
 import { Actor } from "./actor.js";
+import type { GhostConfig } from "../config/ghosts.js";
+import { findShortestPath } from "../pathfinding/search.js";
+import { findLairExit } from "../pathfinding/lair.js";
+import {
+  getScatterTarget,
+  getBlinkyTarget,
+  getPinkyTarget,
+  getInkyTarget,
+  getClydeTarget,
+  type TargetCoords,
+} from "../ai/ghostAI.js";
 
 export class Ghost extends Actor {
   public name: string;
+  public codename: string;
   public defaultColor: string;
   public color: string;
 
   public state: "CHASE" | "SCATTER" | "FRIGHTENED" | "EATEN" = "CHASE";
+  public personality: "shadow" | "ambush" | "wild" | "shy";
 
   private path: string[] = [];
   private currentPathTarget: { x: number; y: number } | null = null;
+  private lastEvaluatedGrid: { x: number; y: number } = { x: -1, y: -1 };
   private spawnGridX: number = 0;
   private spawnGridY: number = 0;
   private defaultSpeed: number;
   private frightenedSpeed: number;
   private eatenSpeed: number;
-  public personality: "shadow" | "ambush" | "wild" | "shy";
   private isReturningHome: boolean = false;
   private isFlashing: boolean = false;
   private flashSpeed: number = 200;
 
-  // Scythe.sys Predatory Glitch Particle Trail
+  private lastEvaluatedTile: string = "";
+
+  // --- Wave Timer State Tracker Variables ---
+  private waveTimer: number = 0;
+  private waveIndex: number = 0;
+  private waveDurations: number[] = [
+    7000, 20000, 7000, 20000, 5000, 20000, 5000, -1,
+  ];
+
   private particleTimer: number = 0;
   private trailParticles: Array<{
     x: number;
@@ -38,6 +57,7 @@ export class Ghost extends Actor {
   constructor(config: GhostConfig, sharedCtx?: CanvasRenderingContext2D) {
     super(CFG_CANVAS.canvasIds.ghosts, sharedCtx);
     this.name = config.name;
+    this.codename = config.codename;
     this.defaultColor = config.defaultColor;
     this.color = config.color;
     this.personality = config.personality;
@@ -55,10 +75,15 @@ export class Ghost extends Actor {
   // --- Lifecycle ---
 
   init(): void {
-    this.getRandomDirection();
+    this.lastEvaluatedGrid = { x: -1, y: -1 };
+    this.waveTimer = 0;
+    this.waveIndex = 0;
+    this.state = "SCATTER";
+    this.updateTargetNavigation();
   }
 
   reset(): void {
+    this.lastEvaluatedGrid = { x: -1, y: -1 };
     this.lastTeleportExit = null;
     this.direction = { dx: 0, dy: 0 };
     this.speed = this.defaultSpeed;
@@ -67,21 +92,25 @@ export class Ghost extends Actor {
     this.currentPathTarget = null;
     this.isReturningHome = false;
     this.isFlashing = false;
-    this.state = "CHASE";
+    this.state = "SCATTER";
+    this.waveTimer = 0;
+    this.waveIndex = 0;
     this.trailParticles = [];
+    this.lastEvaluatedTile = "";
     this.needsRedraw = true;
   }
 
   private initEventListeners(): void {
     eventBus.on("power_pill:activated", () => {
       if (this.state !== "EATEN") {
+        const previousState = this.state;
         this.state = "FRIGHTENED";
         this.isFlashing = false;
         this.speed = this.frightenedSpeed;
         this.reverseDirection();
         eventBus.emit("ghost:state_changed", {
           ghostName: this.name,
-          from: this.state,
+          from: previousState,
           to: "FRIGHTENED",
         });
       }
@@ -98,11 +127,14 @@ export class Ghost extends Actor {
       if (this.state === "FRIGHTENED") {
         const previousState = this.state;
         this.speed = this.defaultSpeed;
-        this.state = "CHASE";
+
+        const activeWaveType = this.getActiveWaveType();
+        this.state = activeWaveType;
+
         eventBus.emit("ghost:state_changed", {
           ghostName: this.name,
           from: previousState,
-          to: "CHASE",
+          to: activeWaveType,
         });
       }
     });
@@ -119,43 +151,168 @@ export class Ghost extends Actor {
     });
   }
 
-  // --- Update ---
+  // --- Update Loop Engine ---
 
   update(dt: number): void {
     if (this.gameState.mode !== "PLAYING") return;
 
+    const dtMs = dt * 1000;
+    this.updateStateTimer(dtMs);
+
+    // 1. Scripted Path Control (Inside Lair / Eyeballs traveling home)
     if (this.path.length > 0 || this.currentPathTarget !== null) {
       this.moveAlongPath(dt);
       this.needsRedraw = true;
       return;
     }
 
+    // 2. Tile Center Intersection Navigation Check
+    const currentTile = Collision.getTile(this.x, this.y);
+
     if (this.isAtTileCenter(dt)) {
-      if (this.willHitWall(dt)) {
-        this.snapToCenter();
-        this.getRandomDirection();
+      if (
+        this.lastEvaluatedGrid.x !== currentTile.tileX ||
+        this.lastEvaluatedGrid.y !== currentTile.tileY
+      ) {
+        this.snapToMovementAxis();
+        this.updateTargetNavigation();
+        this.lastEvaluatedGrid = { x: currentTile.tileX, y: currentTile.tileY };
       }
     }
 
     this.teleport();
 
-    if (
-      (this.direction.dx !== 0 || this.direction.dy !== 0) &&
-      !this.willHitWall(dt)
-    ) {
+    // 3. Single-Pass Movement execution
+    if (!this.willHitWall(dt)) {
       const { newX, newY } = this.getNextPosition(dt);
       this.x = newX;
       this.y = newY;
+    } else {
+      // Corner-case emergency routing check (Handles dead ends without double-moving coordinates)
+      this.snapToMovementAxis();
+      this.updateTargetNavigation();
     }
 
     this.needsRedraw = true;
   }
 
-  private getNextPosition(dt: number): { newX: number; newY: number } {
-    return {
-      newX: this.x + this.direction.dx * this.speed * dt,
-      newY: this.y + this.direction.dy * this.speed * dt,
-    };
+  /**
+   * Evaluates background wave configuration states independently of underlying active behaviors
+   */
+  private updateStateTimer(dtMs: number): void {
+    const currentLimit = this.waveDurations[this.waveIndex];
+    if (currentLimit === -1) return;
+
+    this.waveTimer += dtMs;
+
+    if (this.waveTimer >= currentLimit) {
+      this.waveTimer -= currentLimit;
+      this.waveIndex++;
+
+      const nextState = this.getActiveWaveType();
+
+      if (this.state === "CHASE" || this.state === "SCATTER") {
+        const previousState = this.state;
+        this.state = nextState;
+        this.reverseDirection();
+
+        eventBus.emit("ghost:state_changed", {
+          ghostName: this.name,
+          from: previousState,
+          to: nextState,
+        });
+      }
+    }
+  }
+
+  /**
+   * Helper utility to determine what structural mode the global pattern clock expects
+   */
+  private getActiveWaveType(): "CHASE" | "SCATTER" {
+    return this.waveIndex % 2 === 0 ? "SCATTER" : "CHASE";
+  }
+
+  /**
+   * Evaluates valid tiles and processes targeting routing logic by ghost name.
+   */
+  private updateTargetNavigation(): void {
+    const map = this.gameState.levelData.map;
+    const currentTile = Collision.getTile(this.x, this.y);
+
+    if (this.state === "FRIGHTENED") {
+      this.getRandomDirection();
+      return;
+    }
+
+    let target: TargetCoords = { tileX: 0, tileY: 0 };
+
+    if (this.state === "SCATTER") {
+      target = getScatterTarget(this.name, map);
+    } else if (this.state === "CHASE") {
+      switch (this.name) {
+        case "blinky":
+          target = getBlinkyTarget();
+          break;
+        case "pinky":
+          target = getPinkyTarget();
+          break;
+        case "inky":
+          target = getInkyTarget();
+          break;
+        case "clyde":
+          target = getClydeTarget(this.x, this.y, map);
+          break;
+        default:
+          target = getScatterTarget(this.name, map);
+      }
+    }
+
+    const directions = [
+      { dx: 0, dy: -1 }, // Up
+      { dx: -1, dy: 0 }, // Left
+      { dx: 0, dy: 1 }, // Down
+      { dx: 1, dy: 0 }, // Right
+    ];
+
+    let bestDir = this.direction;
+    let minDistance = Infinity;
+    let foundValidMove = false;
+
+    for (const dir of directions) {
+      // Disallow 180 direct turnaround flips
+      if (dir.dx === -this.direction.dx && dir.dy === -this.direction.dy) {
+        continue;
+      }
+
+      const nextTileX = currentTile.tileX + dir.dx;
+      const nextTileY = currentTile.tileY + dir.dy;
+
+      if (!Collision.isWall(nextTileX, nextTileY)) {
+        foundValidMove = true;
+
+        const diffX = nextTileX - target.tileX;
+        const diffY = nextTileY - target.tileY;
+        const dist = diffX * diffX + diffY * diffY;
+
+        if (dist < minDistance) {
+          minDistance = dist;
+          bestDir = dir;
+        }
+      }
+    }
+
+    if (!foundValidMove) {
+      for (const dir of directions) {
+        const nextTileX = currentTile.tileX + dir.dx;
+        const nextTileY = currentTile.tileY + dir.dy;
+        if (!Collision.isWall(nextTileX, nextTileY)) {
+          bestDir = dir;
+          break;
+        }
+      }
+    }
+
+    this.direction = bestDir;
   }
 
   private moveAlongPath(dt: number): void {
@@ -200,7 +357,8 @@ export class Ghost extends Actor {
         if (this.path.length === 0) {
           if (this.isReturningHome) {
             const previousState = this.state;
-            this.state = "CHASE";
+            const activeWaveType = this.getActiveWaveType();
+            this.state = activeWaveType;
             this.speed = this.defaultSpeed;
             this.color = this.defaultColor;
             this.isReturningHome = false;
@@ -208,23 +366,19 @@ export class Ghost extends Actor {
             eventBus.emit("ghost:state_changed", {
               ghostName: this.name,
               from: previousState,
-              to: "CHASE",
+              to: activeWaveType,
             });
 
             eventBus.emit("ghost:returned_home", { ghostName: this.name });
-
             this.calculateExitPath();
           } else {
-            this.getRandomDirection();
+            this.currentPathTarget = null;
+            this.snapToMovementAxis();
 
-            if (
-              budgetDistance > 0 &&
-              (this.direction.dx !== 0 || this.direction.dy !== 0) &&
-              !this.willHitWallDirect(budgetDistance)
-            ) {
-              this.x += this.direction.dx * budgetDistance;
-              this.y += this.direction.dy * budgetDistance;
-            }
+            this.direction = { dx: 0, dy: 0 };
+            this.lastEvaluatedGrid = { x: -1, y: -1 };
+
+            this.updateTargetNavigation();
             budgetDistance = 0;
           }
         }
@@ -246,30 +400,6 @@ export class Ghost extends Actor {
     );
   }
 
-  private snapToCenter(): void {
-    const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    if (this.direction.dx !== 0) this.x = centerX;
-    if (this.direction.dy !== 0) this.y = centerY;
-  }
-
-  private willHitWall(dt: number): boolean {
-    if (this.direction.dx === 0 && this.direction.dy === 0) return false;
-    const moveDistance = this.speed * dt;
-    return this.willHitWallDirect(moveDistance);
-  }
-
-  private willHitWallDirect(distance: number): boolean {
-    const lookAheadDistance = distance + this.r;
-
-    const boundX = this.x + this.direction.dx * lookAheadDistance;
-    const boundY = this.y + this.direction.dy * lookAheadDistance;
-
-    const { tileX, tileY } = Collision.getTile(boundX, boundY);
-    const isExiting = this.path.length > 0;
-
-    return Collision.isWall(tileX, tileY, isExiting);
-  }
-
   getRandomDirection(): void {
     const directions = [
       { dx: 1, dy: 0 },
@@ -280,15 +410,9 @@ export class Ghost extends Actor {
 
     const horizontalDirs = directions.filter((dir) => dir.dy === 0);
     const verticalDirs = directions.filter((dir) => dir.dx === 0);
-
     const isCurrentlyHorizontal = this.direction.dy === 0;
 
-    let preferredDirs;
-    if (Math.random() < 0.7) {
-      preferredDirs = isCurrentlyHorizontal ? verticalDirs : horizontalDirs;
-    } else {
-      preferredDirs = isCurrentlyHorizontal ? horizontalDirs : verticalDirs;
-    }
+    let preferredDirs = isCurrentlyHorizontal ? verticalDirs : horizontalDirs;
 
     for (let i = preferredDirs.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -310,14 +434,25 @@ export class Ghost extends Actor {
       }
     }
 
-    for (const dir of directions) {
-      const targetTileX = currentTile.tileX + dir.dx;
-      const targetTileY = currentTile.tileY + dir.dy;
+    const straightDir = this.direction;
+    if (
+      !Collision.isWall(
+        currentTile.tileX + straightDir.dx,
+        currentTile.tileY + straightDir.dy,
+      )
+    ) {
+      return;
+    }
 
-      if (!Collision.isWall(targetTileX, targetTileY)) {
-        this.direction = dir;
-        return;
-      }
+    const reverseDir = { dx: -this.direction.dx, dy: -this.direction.dy };
+    if (
+      !Collision.isWall(
+        currentTile.tileX + reverseDir.dx,
+        currentTile.tileY + reverseDir.dy,
+      )
+    ) {
+      this.direction = reverseDir;
+      return;
     }
 
     this.direction = { dx: 0, dy: 0 };
@@ -355,12 +490,10 @@ export class Ghost extends Actor {
     }
   }
 
-  // --- Spawn ---
-
   spawn(): void {
     const map = this.gameState.levelData.map;
     for (let y = 0; y < map.length; y++) {
-      const x = map[y].findIndex((tile) => tile === this.name);
+      const x = map[y].findIndex((tile) => tile === this.codename);
       if (x !== -1) {
         this.spawnGridX = x;
         this.spawnGridY = y;
@@ -387,14 +520,12 @@ export class Ghost extends Actor {
 
   private getOrientationAngle(): number {
     const { dx, dy } = this.direction;
-    if (dx === 1) return Math.PI / 2; // Right
-    if (dx === -1) return -Math.PI / 2; // Left
-    if (dy === -1) return 0; // Up
-    if (dy === 1) return Math.PI; // Down
+    if (dx === 1) return Math.PI / 2;
+    if (dx === -1) return -Math.PI / 2;
+    if (dy === -1) return 0;
+    if (dy === 1) return Math.PI;
     return 0;
   }
-
-  // --- Draw (Scythe.sys Predator Protocol - Sleek Narrow Variant) ---
 
   draw(): void {
     const ctx = this.ctx;
@@ -419,15 +550,17 @@ export class Ghost extends Actor {
 
     const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
 
-    // --- SLEEK SCANLINE DRIFT GLITCH TRAIL ---
     if (isGamePlaying && (this.direction.dx !== 0 || this.direction.dy !== 0)) {
       this.particleTimer++;
       if (this.particleTimer >= 3) {
+        const baseRoundedX = Math.round(this.x);
+        const baseRoundedY = Math.round(this.y);
+
         this.trailParticles.push({
-          x: this.x + (Math.random() - 0.5) * (r * 0.7), // Concentrated layout width
-          y: this.y + (Math.random() - 0.5) * r,
+          x: baseRoundedX + (Math.random() - 0.5) * (r * 0.7),
+          y: baseRoundedY + (Math.random() - 0.5) * r,
           alpha: 0.85,
-          width: Math.random() > 0.5 ? r * 0.8 : r * 0.4, // Streamlined slice cuts
+          width: Math.random() > 0.5 ? r * 0.8 : r * 0.4,
           height: 1.5,
           drift: (Math.random() - 0.5) * 3,
         });
@@ -438,7 +571,6 @@ export class Ghost extends Actor {
     ctx.save();
     ctx.globalCompositeOperation = "source-over";
 
-    // --- RENDER TRAIL SLICES ---
     if (this.trailParticles.length > 0) {
       ctx.save();
       for (let i = this.trailParticles.length - 1; i >= 0; i--) {
@@ -452,7 +584,7 @@ export class Ghost extends Actor {
           p.height,
         );
 
-        p.alpha -= 0.14; // Volatile rapid frame decay
+        p.alpha -= 0.14;
         if (p.alpha <= 0) {
           this.trailParticles.splice(i, 1);
         }
@@ -460,14 +592,12 @@ export class Ghost extends Actor {
       ctx.restore();
     }
 
-    // --- COORDINATE MATRIX TRANSFORM ---
     ctx.save();
-    ctx.translate(this.x, this.y);
+    ctx.translate(Math.round(this.x), Math.round(this.y));
 
     const rotationAngle = this.getOrientationAngle();
     ctx.rotate(rotationAngle);
 
-    // --- DESPATCH RENDER ENGINE CORES ---
     if (!isEaten) {
       this.drawVectorCore(ctx, r, vectorColor, isFrightened);
     } else {
@@ -478,10 +608,6 @@ export class Ghost extends Actor {
     ctx.restore();
   }
 
-  /**
-   * Balanced standard scale (r * 2.2).
-   * Aggressively narrow coordinate geometry footprint (width pinched on X axis).
-   */
   private drawVectorCore(
     ctx: CanvasRenderingContext2D,
     r: number,
@@ -489,7 +615,6 @@ export class Ghost extends Actor {
     isFrightened: boolean,
   ): void {
     ctx.save();
-
     const scaleFactor = (r * 2.2) / 100;
     ctx.scale(scaleFactor, scaleFactor);
     ctx.translate(-50, -50);
@@ -500,7 +625,6 @@ export class Ghost extends Actor {
     ctx.lineJoin = "miter";
     ctx.miterLimit = 4;
 
-    // 1. Solid High-Contrast Opaque Backdrop Fill (Pinched X positions: 88->72, 12->28)
     ctx.beginPath();
     ctx.moveTo(50, 8);
     ctx.lineTo(72, 78);
@@ -510,24 +634,19 @@ export class Ghost extends Actor {
     ctx.fillStyle = "#000000";
     ctx.fill();
 
-    // 2. Overdriven Outer Frame Stroke Line
     ctx.lineWidth = 3.5;
     ctx.stroke();
 
-    // 3. Narrow Spiked Stabilizers (Pinched to closely trace the sharper body silhouette)
     ctx.beginPath();
     ctx.lineWidth = 2.0;
-    // Left barb spike configuration
     ctx.moveTo(37, 69);
     ctx.lineTo(16, 75);
     ctx.lineTo(31, 62);
-    // Right barb spike configuration
     ctx.moveTo(63, 69);
     ctx.lineTo(84, 75);
     ctx.lineTo(69, 62);
     ctx.stroke();
 
-    // 4. Sleek Accent Internal Wire Tracking Shell
     ctx.save();
     ctx.beginPath();
     ctx.lineWidth = 1.0;
@@ -540,7 +659,6 @@ export class Ghost extends Actor {
     ctx.stroke();
     ctx.restore();
 
-    // 5. Central Data Split Indicator Wires
     ctx.save();
     ctx.beginPath();
     ctx.lineWidth = 1.5;
@@ -553,16 +671,12 @@ export class Ghost extends Actor {
     ctx.restore();
   }
 
-  /**
-   * Compact, narrow hyper-sharp fleeing kinetic splinter core.
-   */
   private drawFleeingCore(
     ctx: CanvasRenderingContext2D,
     r: number,
     themeColor: string,
   ): void {
     ctx.save();
-
     const scaleFactor = (r * 1.8) / 100;
     ctx.scale(scaleFactor, scaleFactor);
     ctx.translate(-50, -50);
@@ -572,7 +686,6 @@ export class Ghost extends Actor {
     ctx.strokeStyle = themeColor;
     ctx.lineJoin = "miter";
 
-    // Opaque background layer mask
     ctx.beginPath();
     ctx.moveTo(50, 12);
     ctx.lineTo(68, 75);
@@ -582,7 +695,6 @@ export class Ghost extends Actor {
     ctx.fillStyle = "#000000";
     ctx.fill();
 
-    // Fluctuating unstable core frame pulse line
     const rapidBlink = Math.floor(Date.now() / 45) % 2 === 0;
     ctx.lineWidth = rapidBlink ? 3.5 : 1.5;
     ctx.stroke();

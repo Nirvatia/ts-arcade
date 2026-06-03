@@ -1,10 +1,11 @@
-// config/ghosts.ts
+// src/config/ghosts.ts
 
 export interface GhostConfig {
-  name: string;
+  name: string; // Actual readable name used for keying logic
+  codename: string; // The map token string ("BY", "PY", etc.)
   color: string;
   defaultColor: string;
-  speedMultiplier: number; // relative to base tileSize speed
+  speedMultiplier: number;
   frightenedSpeedMultiplier: number;
   eatenSpeedMultiplier: number;
   personality: "shadow" | "ambush" | "wild" | "shy";
@@ -13,40 +14,44 @@ export interface GhostConfig {
 
 export const CFG_GHOSTS: Record<string, GhostConfig> = {
   blinky: {
-    name: "BY",
+    name: "blinky",
+    codename: "BY",
     color: "#ff2222",
     defaultColor: "#ff2222",
-    speedMultiplier: 5.0, // fastest, relentless (110 px/s)
-    frightenedSpeedMultiplier: 2.2, // half normal speed
-    eatenSpeedMultiplier: 8.8, // double normal speed
+    speedMultiplier: 5.0,
+    frightenedSpeedMultiplier: 2.2,
+    eatenSpeedMultiplier: 8.8,
     personality: "shadow",
     description: "Relentless pursuer. Always targets Pac-Man directly.",
   },
   pinky: {
-    name: "PY",
+    name: "pinky",
+    codename: "PY",
     color: "#ff66aa",
     defaultColor: "#ff66aa",
-    speedMultiplier: 4.7, // fast ambusher (103.4 px/s)
+    speedMultiplier: 4.7,
     frightenedSpeedMultiplier: 2.2,
     eatenSpeedMultiplier: 8.8,
     personality: "ambush",
     description: "Targets ahead of Pac-Man. Tries to ambush.",
   },
   inky: {
-    name: "IY",
+    name: "inky",
+    codename: "IY",
     color: "#44dddd",
     defaultColor: "#44dddd",
-    speedMultiplier: 4.4, // baseline (96.8 px/s)
+    speedMultiplier: 4.4,
     frightenedSpeedMultiplier: 2.2,
     eatenSpeedMultiplier: 8.8,
     personality: "wild",
     description: "Unpredictable. Uses Blinky's position to triangulate.",
   },
   clyde: {
-    name: "CE",
+    name: "clyde",
+    codename: "CE",
     color: "#ffaa33",
     defaultColor: "#ffaa33",
-    speedMultiplier: 4.1, // slowest (90.2 px/s)
+    speedMultiplier: 4.1,
     frightenedSpeedMultiplier: 2.2,
     eatenSpeedMultiplier: 8.8,
     personality: "shy",
