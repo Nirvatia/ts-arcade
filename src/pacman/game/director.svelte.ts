@@ -5,27 +5,34 @@ import { GameState } from "./gameState.svelte.js";
 import { Sequence } from "../core/sequence.js";
 import { Tally } from "./tally.svelte.js";
 import { SceneRegistry } from "../scenes/sceneRegistry.js";
-import type { IGameScene } from "../interfaces.js";
 import { trackClockLifespan } from "../debug/garbageCollector.js";
-import { createPathGraph } from "../pathfinding/graph.js";
+
+// Constants
+const TRANSITION_DURATION = 5; // seconds
+const INTERMISSION_DURATION = 10; // seconds
+const FLASH_COUNT = 4;
+const FLASH_INTERVAL_MS = 400;
 
 export class Director {
   private static instance: Director;
   private gameState: GameState;
   private registry: GameRegistry;
   private tally: Tally;
+  private sceneRegistry: SceneRegistry;
 
-  private transitionClock = $state<Clock | null>(null);
+  private _currentClock: Clock | null = null;
   private activeSequence: Sequence = new Sequence();
-
-  private sceneRegistry: SceneRegistry = new SceneRegistry();
-  private activeIntermissionScene: IGameScene | null = null;
 
   private constructor() {
     this.gameState = GameState.getInstance();
     this.registry = GameRegistry.getInstance();
     this.tally = Tally.getInstance();
+    this.sceneRegistry = new SceneRegistry();
     this.initEventListeners();
+  }
+
+  public get currentClock(): Clock | null {
+    return this._currentClock;
   }
 
   static getInstance(): Director {
@@ -33,34 +40,19 @@ export class Director {
     return Director.instance;
   }
 
-  public get currentClock(): Clock | null {
-    return this.transitionClock;
-  }
-
-  public get currentIntermissionScene(): IGameScene | null {
-    return this.activeIntermissionScene;
-  }
-
   private resetTickingState(): void {
-    if (this.transitionClock) {
-      this.transitionClock.stop();
+    if (this._currentClock) {
+      this._currentClock.stop();
+      this._currentClock = null;
     }
     this.activeSequence.clear();
   }
 
-  private spawnFreshClock(): Clock {
-    if (this.transitionClock) {
-      this.transitionClock.stop();
-    }
-
-    this.transitionClock = new Clock();
-
-    trackClockLifespan(
-      this.transitionClock,
-      `Clock_Level_${this.gameState.currentLevel}`,
-    );
-
-    return this.transitionClock;
+  private createClock(name: string): Clock {
+    const clock = new Clock();
+    trackClockLifespan(clock, name);
+    this._currentClock = clock;
+    return clock;
   }
 
   private handleGameOver(): void {
@@ -76,19 +68,12 @@ export class Director {
     eventBus.on("game:start", () => this.startGame());
     eventBus.on("game:restart", () => this.restartGame());
     eventBus.on("game:over", () => this.handleGameOver());
-
     eventBus.on("level:complete", (payload) =>
-      this.triggerIntermissionSequence(payload),
+      this.triggerIntermission(payload),
     );
-
     eventBus.on("pacman:death_triggered", () => this.handlePacmanDeath());
-
     eventBus.on("pacman:death_animation_end", () =>
       this.startRespawnCountdown(),
-    );
-
-    eventBus.on("command:ghost_eaten", (data) =>
-      this.triggerGhostEatenSequence(data),
     );
   }
 
@@ -111,13 +96,14 @@ export class Director {
 
   startGame(): void {
     this.resetTickingState();
+    eventBus.emit("level:transition_start", { duration: TRANSITION_DURATION });
 
-    eventBus.emit("level:transition_start", { duration: 5 });
-    this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
+    const clock = this.createClock(
+      `Clock_Level_${this.gameState.currentLevel}`,
+    );
 
-    const clock = this.spawnFreshClock();
     clock.start(
-      5,
+      TRANSITION_DURATION,
       1000,
       () => {},
       () => {
@@ -129,23 +115,8 @@ export class Director {
     );
   }
 
-  triggerGhostEatenSequence(data: { ghostName: string }): void {
-    this.resetTickingState();
-
-    const clock = this.spawnFreshClock();
-    clock.start(
-      1,
-      1000,
-      () => {},
-      () => {
-        eventBus.emit("game:resumed");
-      },
-    );
-  }
-
   handlePacmanDeath(): void {
     this.resetTickingState();
-
     eventBus.emit("command:execute_life_loss", {
       currentScore: this.tally.score,
     });
@@ -156,11 +127,14 @@ export class Director {
 
     eventBus.emit("command:reset_actors");
     eventBus.emit("command:spawn_actors");
-    eventBus.emit("level:transition_start", { duration: 5 });
+    eventBus.emit("level:transition_start", { duration: TRANSITION_DURATION });
 
-    const clock = this.spawnFreshClock();
+    const clock = this.createClock(
+      `Respawn_Clock_Level_${this.gameState.currentLevel}`,
+    );
+
     clock.start(
-      5,
+      TRANSITION_DURATION,
       1000,
       () => {},
       () => {
@@ -171,57 +145,43 @@ export class Director {
     );
   }
 
-  triggerIntermissionSequence(payload: { level: number; score: number }): void {
+  triggerIntermission(payload: { level: number; score: number }): void {
     this.resetTickingState();
     const maze = this.registry.getMaze();
-    if (!maze) return;
+    if (!maze) {
+      console.error("[Director] Cannot start intermission: no maze available");
+      this.startGame();
+      return;
+    }
 
-    // Phase 1: Flash the maze 4 times
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < FLASH_COUNT; i++) {
       this.activeSequence
         .addCallback(() => {
           maze.isFlashing = true;
           maze.requestRedraw();
         })
-        .addWait(400)
+        .addWait(FLASH_INTERVAL_MS)
         .addCallback(() => {
           maze.isFlashing = false;
           maze.requestRedraw();
         })
-        .addWait(400);
+        .addWait(FLASH_INTERVAL_MS);
     }
 
-    // Phase 2: Run the Intermission Screen
-    this.activeSequence
-      .addCallback(() => {
+    this.activeSequence.addCallback(() => {
+      eventBus.emit("command:clear_canvases");
+      eventBus.emit("level:intermission_start", {
+        nextLevel: payload.level + 1,
+      });
+
+      this.sceneRegistry.startRandomScene(INTERMISSION_DURATION, () => {
         eventBus.emit("command:clear_canvases");
-        eventBus.emit("level:intermission_start", {
-          nextLevel: payload.level + 1,
-        });
-
-        this.activeIntermissionScene = this.sceneRegistry.getRandomScene();
-        this.activeIntermissionScene.start(10, () => {});
-      })
-      .addWait(10000)
-
-      // Phase 3: Explicit Exit, Cleanup, and Mode Pivot
-      .addCallback(() => {
-        if (
-          this.activeIntermissionScene &&
-          "clear" in this.activeIntermissionScene
-        ) {
-          (this.activeIntermissionScene as any).clear();
-        }
-        this.activeIntermissionScene = null;
-        eventBus.emit("command:clear_canvases");
-
-        this.gameState.mode = "LEVEL_TRANSITION";
+        eventBus.emit("game:mode_change", { mode: "LEVEL_TRANSITION" });
         this.loadLevel();
-      })
-
-      // Phase 4: Spin up next level countdown tracking smoothly
-      .start(() => {
         this.startGame();
       });
+    });
+
+    this.activeSequence.start();
   }
 }

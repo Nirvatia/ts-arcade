@@ -1,3 +1,5 @@
+import type { GameMode } from "./gameModes.js";
+
 /**
  * All event payloads mapped by event name.
  * Uses void when no payload is needed.
@@ -16,6 +18,7 @@ export interface EventPayloads {
   // GAME LIFECYCLE EVENTS (Broadcast)
   // ================================================
   "game:started": void;
+  "game:mode_change": { mode: GameMode};
   "game:over": { finalScore: number; level: number };
   "game:resumed": void;
 

@@ -87,6 +87,8 @@ export class GameState {
       this.mode = "PLAYING";
     });
 
+    eventBus.on("game:mode_change", (data) => (this.mode = data.mode));
+
     eventBus.on("game:restart", () => {
       this.reset();
       this.levelData = generateLevelConfig(this.currentLevel);

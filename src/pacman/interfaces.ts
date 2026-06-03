@@ -23,4 +23,5 @@ export interface IGameScene {
   start(durationInSeconds: number, onComplete: () => void): void;
   update(dt: number): void;
   draw(): void;
+  clear(): void;
 }
