@@ -13,6 +13,10 @@ import {
   getClydeTarget,
   type TargetCoords,
 } from "../ai/ghostAI.js";
+import {
+  ClassicVectorGhostRenderer,
+  type IGhostRenderer,
+} from "./ghost/ghostRenderer.js";
 
 export class Ghost extends Actor {
   public name: string;
@@ -35,8 +39,6 @@ export class Ghost extends Actor {
   private isFlashing: boolean = false;
   private flashSpeed: number = 200;
 
-  private lastEvaluatedTile: string = "";
-
   // --- Wave Timer State Tracker Variables ---
   private waveTimer: number = 0;
   private waveIndex: number = 0;
@@ -44,15 +46,7 @@ export class Ghost extends Actor {
     7000, 20000, 7000, 20000, 5000, 20000, 5000, -1,
   ];
 
-  private particleTimer: number = 0;
-  private trailParticles: Array<{
-    x: number;
-    y: number;
-    alpha: number;
-    width: number;
-    height: number;
-    drift: number;
-  }> = [];
+  private renderer: IGhostRenderer;
 
   constructor(config: GhostConfig, sharedCtx?: CanvasRenderingContext2D) {
     super(CFG_CANVAS.canvasIds.ghosts, sharedCtx);
@@ -69,12 +63,17 @@ export class Ghost extends Actor {
     this.eatenSpeed = tileSize * config.eatenSpeedMultiplier;
 
     this.direction = { dx: 0, dy: 0 };
+    this.renderer = new ClassicVectorGhostRenderer();
     this.initEventListeners();
+  }
+
+  public draw(): void {
+    this.renderer.draw(this.ctx, this, this.tileSize);
   }
 
   // --- Lifecycle ---
 
-  init(): void {
+  public init(): void {
     this.lastEvaluatedGrid = { x: -1, y: -1 };
     this.waveTimer = 0;
     this.waveIndex = 0;
@@ -82,7 +81,7 @@ export class Ghost extends Actor {
     this.updateTargetNavigation();
   }
 
-  reset(): void {
+  public reset(): void {
     this.lastEvaluatedGrid = { x: -1, y: -1 };
     this.lastTeleportExit = null;
     this.direction = { dx: 0, dy: 0 };
@@ -95,8 +94,6 @@ export class Ghost extends Actor {
     this.state = "SCATTER";
     this.waveTimer = 0;
     this.waveIndex = 0;
-    this.trailParticles = [];
-    this.lastEvaluatedTile = "";
     this.needsRedraw = true;
   }
 
@@ -153,7 +150,7 @@ export class Ghost extends Actor {
 
   // --- Update Loop Engine ---
 
-  update(dt: number): void {
+  public update(dt: number): void {
     if (this.gameState.mode !== "PLAYING") return;
 
     const dtMs = dt * 1000;
@@ -166,33 +163,63 @@ export class Ghost extends Actor {
       return;
     }
 
-    // 2. Tile Center Intersection Navigation Check
-    const currentTile = Collision.getTile(this.x, this.y);
+    // 2. High-Precision Distance-Budget Movement Sub-stepping
+    let budgetDistance = this.speed * dt;
 
-    if (this.isAtTileCenter(dt)) {
-      if (
-        this.lastEvaluatedGrid.x !== currentTile.tileX ||
-        this.lastEvaluatedGrid.y !== currentTile.tileY
-      ) {
-        this.snapToMovementAxis();
-        this.updateTargetNavigation();
-        this.lastEvaluatedGrid = { x: currentTile.tileX, y: currentTile.tileY };
+    while (budgetDistance > 0) {
+      const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
+      const currentTile = Collision.getTile(this.x, this.y);
+
+      // Determine distance to the tile intersection point along current axis
+      let distanceToCenter = 0;
+      if (this.direction.dx !== 0) {
+        distanceToCenter = (centerX - this.x) * this.direction.dx;
+      } else if (this.direction.dy !== 0) {
+        distanceToCenter = (centerY - this.y) * this.direction.dy;
+      }
+
+      // If we are moving toward a tile center and can reach/cross it within this step's budget
+      if (distanceToCenter > 0 && budgetDistance >= distanceToCenter) {
+        // Perfect Snap directly to the pivot center to consume that precise piece of distance
+        this.x = centerX;
+        this.y = centerY;
+        budgetDistance -= distanceToCenter;
+
+        // Trigger AI updates exactly on the center pixel before consuming remaining budget
+        if (
+          this.lastEvaluatedGrid.x !== currentTile.tileX ||
+          this.lastEvaluatedGrid.y !== currentTile.tileY
+        ) {
+          this.updateTargetNavigation();
+          this.lastEvaluatedGrid = {
+            x: currentTile.tileX,
+            y: currentTile.tileY,
+          };
+        }
+      } else {
+        // We aren't crossing a tile center this sub-step, so we check for wall collisions
+        // Create an explicit single-pass look-ahead check for the remaining budget
+        const lookAheadDistance = budgetDistance + this.r;
+        const boundX = this.x + this.direction.dx * lookAheadDistance;
+        const boundY = this.y + this.direction.dy * lookAheadDistance;
+        const nextTile = Collision.getTile(boundX, boundY);
+
+        if (Collision.isWall(nextTile.tileX, nextTile.tileY)) {
+          // Hit a wall: Move directly up to the center of the current tile and stop moving
+          this.x = centerX;
+          this.y = centerY;
+          this.updateTargetNavigation(); // Re-evaluate path because we're blocked
+          budgetDistance = 0;
+        } else {
+          // Path clear: Consume the rest of the distance budget cleanly
+          this.x += this.direction.dx * budgetDistance;
+          this.y += this.direction.dy * budgetDistance;
+          budgetDistance = 0;
+        }
       }
     }
 
     this.teleport();
-
-    // 3. Single-Pass Movement execution
-    if (!this.willHitWall(dt)) {
-      const { newX, newY } = this.getNextPosition(dt);
-      this.x = newX;
-      this.y = newY;
-    } else {
-      // Corner-case emergency routing check (Handles dead ends without double-moving coordinates)
-      this.snapToMovementAxis();
-      this.updateTargetNavigation();
-    }
-
     this.needsRedraw = true;
   }
 
@@ -400,7 +427,7 @@ export class Ghost extends Actor {
     );
   }
 
-  getRandomDirection(): void {
+  private getRandomDirection(): void {
     const directions = [
       { dx: 1, dy: 0 },
       { dx: -1, dy: 0 },
@@ -458,14 +485,14 @@ export class Ghost extends Actor {
     this.direction = { dx: 0, dy: 0 };
   }
 
-  reverseDirection(): void {
+  private reverseDirection(): void {
     this.direction = {
       dx: -this.direction.dx,
       dy: -this.direction.dy,
     };
   }
 
-  beEaten(): void {
+  private beEaten(): void {
     const previousState = this.state;
     this.state = "EATEN";
     this.speed = this.eatenSpeed;
@@ -490,7 +517,7 @@ export class Ghost extends Actor {
     }
   }
 
-  spawn(): void {
+  public spawn(): void {
     const map = this.gameState.levelData.map;
     for (let y = 0; y < map.length; y++) {
       const x = map[y].findIndex((tile) => tile === this.codename);
@@ -504,7 +531,7 @@ export class Ghost extends Actor {
     }
   }
 
-  calculateExitPath(): void {
+  public calculateExitPath(): void {
     const map = this.gameState.levelData.map;
     const startNode = `${this.spawnGridY},${this.spawnGridX}`;
     const targetNode = findLairExit(map);
@@ -516,189 +543,5 @@ export class Ghost extends Actor {
         this.path = foundPath;
       }
     }
-  }
-
-  private getOrientationAngle(): number {
-    const { dx, dy } = this.direction;
-    if (dx === 1) return Math.PI / 2;
-    if (dx === -1) return -Math.PI / 2;
-    if (dy === -1) return 0;
-    if (dy === 1) return Math.PI;
-    return 0;
-  }
-
-  draw(): void {
-    const ctx = this.ctx;
-    const r = this.tileSize / 2;
-
-    let vectorColor = this.color || this.defaultColor;
-    let isFrightened = false;
-    let isEaten = false;
-
-    if (this.state === "FRIGHTENED") {
-      isFrightened = true;
-      if (this.isFlashing) {
-        const isWhite = Math.floor(Date.now() / this.flashSpeed) % 2 === 0;
-        vectorColor = isWhite ? "#ffffff" : "#1144bb";
-      } else {
-        vectorColor = "#1144bb";
-      }
-    } else if (this.state === "EATEN") {
-      isEaten = true;
-      vectorColor = "rgba(0, 240, 255, 0.9)";
-    }
-
-    const isGamePlaying = this.gameState && this.gameState.mode === "PLAYING";
-
-    if (isGamePlaying && (this.direction.dx !== 0 || this.direction.dy !== 0)) {
-      this.particleTimer++;
-      if (this.particleTimer >= 3) {
-        const baseRoundedX = Math.round(this.x);
-        const baseRoundedY = Math.round(this.y);
-
-        this.trailParticles.push({
-          x: baseRoundedX + (Math.random() - 0.5) * (r * 0.7),
-          y: baseRoundedY + (Math.random() - 0.5) * r,
-          alpha: 0.85,
-          width: Math.random() > 0.5 ? r * 0.8 : r * 0.4,
-          height: 1.5,
-          drift: (Math.random() - 0.5) * 3,
-        });
-        this.particleTimer = 0;
-      }
-    }
-
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-
-    if (this.trailParticles.length > 0) {
-      ctx.save();
-      for (let i = this.trailParticles.length - 1; i >= 0; i--) {
-        const p = this.trailParticles[i];
-        ctx.fillStyle = vectorColor;
-        ctx.globalAlpha = p.alpha;
-        ctx.fillRect(
-          p.x - p.width / 2 + p.drift,
-          p.y - p.height / 2,
-          p.width,
-          p.height,
-        );
-
-        p.alpha -= 0.14;
-        if (p.alpha <= 0) {
-          this.trailParticles.splice(i, 1);
-        }
-      }
-      ctx.restore();
-    }
-
-    ctx.save();
-    ctx.translate(Math.round(this.x), Math.round(this.y));
-
-    const rotationAngle = this.getOrientationAngle();
-    ctx.rotate(rotationAngle);
-
-    if (!isEaten) {
-      this.drawVectorCore(ctx, r, vectorColor, isFrightened);
-    } else {
-      this.drawFleeingCore(ctx, r, vectorColor);
-    }
-
-    ctx.restore();
-    ctx.restore();
-  }
-
-  private drawVectorCore(
-    ctx: CanvasRenderingContext2D,
-    r: number,
-    themeColor: string,
-    isFrightened: boolean,
-  ): void {
-    ctx.save();
-    const scaleFactor = (r * 2.2) / 100;
-    ctx.scale(scaleFactor, scaleFactor);
-    ctx.translate(-50, -50);
-
-    ctx.shadowBlur = isFrightened ? 6 : 15;
-    ctx.shadowColor = themeColor;
-    ctx.strokeStyle = themeColor;
-    ctx.lineJoin = "miter";
-    ctx.miterLimit = 4;
-
-    ctx.beginPath();
-    ctx.moveTo(50, 8);
-    ctx.lineTo(72, 78);
-    ctx.lineTo(50, 62);
-    ctx.lineTo(28, 78);
-    ctx.closePath();
-    ctx.fillStyle = "#000000";
-    ctx.fill();
-
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.lineWidth = 2.0;
-    ctx.moveTo(37, 69);
-    ctx.lineTo(16, 75);
-    ctx.lineTo(31, 62);
-    ctx.moveTo(63, 69);
-    ctx.lineTo(84, 75);
-    ctx.lineTo(69, 62);
-    ctx.stroke();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.lineWidth = 1.0;
-    ctx.globalAlpha = 0.55;
-    ctx.moveTo(50, 24);
-    ctx.lineTo(66, 67);
-    ctx.lineTo(50, 56);
-    ctx.lineTo(34, 67);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 2]);
-    ctx.moveTo(50, 8);
-    ctx.lineTo(50, 56);
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.restore();
-  }
-
-  private drawFleeingCore(
-    ctx: CanvasRenderingContext2D,
-    r: number,
-    themeColor: string,
-  ): void {
-    ctx.save();
-    const scaleFactor = (r * 1.8) / 100;
-    ctx.scale(scaleFactor, scaleFactor);
-    ctx.translate(-50, -50);
-
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = themeColor;
-    ctx.strokeStyle = themeColor;
-    ctx.lineJoin = "miter";
-
-    ctx.beginPath();
-    ctx.moveTo(50, 12);
-    ctx.lineTo(68, 75);
-    ctx.lineTo(50, 60);
-    ctx.lineTo(32, 75);
-    ctx.closePath();
-    ctx.fillStyle = "#000000";
-    ctx.fill();
-
-    const rapidBlink = Math.floor(Date.now() / 45) % 2 === 0;
-    ctx.lineWidth = rapidBlink ? 3.5 : 1.5;
-    ctx.stroke();
-
-    ctx.restore();
   }
 }
