@@ -15,7 +15,7 @@ interface EatParticle {
   life: number;
   maxLife: number;
   color: string;
-  type: "SHARD" | "RING" | "LINE" | "GLITCH" | "GATEWAY" | "SCANLINE"; // Added GLITCH variant
+  type: "SHARD" | "RING" | "LINE" | "GLITCH" | "GATEWAY" | "SCANLINE" | "THERMAL_BAR";
   size: number;
 }
 
@@ -85,6 +85,7 @@ export class Pacman extends Actor {
   public update(dt: number): void {
     if (this.state === "DYING") {
       this.deathTimer += dt;
+      this.updateEatParticles(dt); // Keep particles processing during core detonation crosshairs
       if (this.deathTimer >= this.config.deathAnimationDuration) {
         eventBus.emit("pacman:death_animation_end");
       }
@@ -102,6 +103,23 @@ export class Pacman extends Actor {
 
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
       this.spawnTrailParticle();
+      
+      // Ambient core data emissions while engine is rolling
+      if (Math.random() > 0.85) {
+        const tX = this.x - (this.direction.dx * this.r);
+        const tY = this.y - (this.direction.dy * this.r);
+        this.eatParticles.push({
+          x: tX,
+          y: tY,
+          vx: -this.direction.dx * 40,
+          vy: -this.direction.dy * 40,
+          life: 0.4,
+          maxLife: 0.4,
+          color: this.isBuffed ? "#00ffff" : "#00ff66",
+          type: "SHARD",
+          size: 2
+        });
+      }
     }
 
     const prevX = this.x;
@@ -115,7 +133,6 @@ export class Pacman extends Actor {
       Math.abs(this.y - prevY) > this.tileSize * 2
     ) {
       this.trailHistory = [];
-
       this.spawnTeleportVFX(prevX, prevY);
       this.spawnTeleportVFX(this.x, this.y);
     }
@@ -244,7 +261,6 @@ export class Pacman extends Actor {
 
     if (pill.positions.has(key)) {
       this.spawnPillEatVFX(tileX, tileY);
-
       eventBus.emit("power_pill:collect", { position: { i: tileY, j: tileX } });
     }
   }
@@ -331,7 +347,7 @@ export class Pacman extends Actor {
         vy: Math.sin(angle) * speed,
         life: 0.2 + Math.random() * 0.15,
         maxLife: 0.3,
-        color: "#ffcc00",
+        color: this.isBuffed ? "#00ffff" : "#00ff66", // Synced to dark matrix tones
         type: "SHARD",
         size: 2 + Math.random() * 2,
       });
@@ -341,20 +357,35 @@ export class Pacman extends Actor {
   private spawnPillEatVFX(tileX: number, tileY: number): void {
     const cx = tileX * this.tileSize + this.tileSize / 2;
     const cy = tileY * this.tileSize + this.tileSize / 2;
+    const col = "#00ffff"; // Overclock Neon Cyan
 
-    for (let i = 0; i < 12; i++) {
-      const angle = (i / 12) * Math.PI * 2;
-      const speed = 90 + Math.random() * 40;
+    // 1. Instantaneous Structural shockwave expand ring
+    this.eatParticles.push({
+      x: cx,
+      y: cy,
+      vx: 0,
+      vy: 0,
+      life: 0.45,
+      maxLife: 0.45,
+      color: col,
+      type: "RING",
+      size: this.r * 0.5
+    });
+
+    // 2. High velocity directional thermal dissipation bars shooting laterally
+    for (let i = 0; i < 14; i++) {
+      const speed = 180 + Math.random() * 260;
+      const directionalSign = Math.random() > 0.5 ? 1 : -1;
       this.eatParticles.push({
         x: cx,
-        y: cy,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.3 + Math.random() * 0.2,
-        maxLife: 0.5,
-        color: "#ff3300",
-        type: "SHARD",
-        size: 3,
+        y: cy + (Math.random() - 0.5) * this.r,
+        vx: speed * directionalSign,
+        vy: 0,
+        life: 0.3 + Math.random() * 0.3,
+        maxLife: 0.6,
+        color: col,
+        type: "THERMAL_BAR",
+        size: 12 + Math.random() * 15
       });
     }
   }
@@ -403,13 +434,14 @@ export class Pacman extends Actor {
         continue;
       }
 
-      if (p.type !== "RING") {
+      if (p.type === "RING") {
+        p.size += 260 * dt;
+      } else {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        p.vx *= 0.93;
-        p.vy *= 0.93;
-      } else {
-        p.size += 260 * dt;
+        // Friction decay on standard debris; thermal bars utilize friction drag too
+        p.vx *= 0.92;
+        p.vy *= 0.92;
       }
     }
   }
@@ -441,7 +473,7 @@ export class Pacman extends Actor {
     if (this.state === "DYING" || this.trailHistory.length < 2) return;
 
     const ctx = this.ctx;
-    const color = this.isBuffed ? "#ff3300" : "#ffcc00";
+    const color = this.isBuffed ? "#00ffff" : "#00ff66";
     const width = this.r * 0.75;
 
     ctx.save();
@@ -482,7 +514,7 @@ export class Pacman extends Actor {
       ctx.strokeStyle = p.color;
       ctx.fillStyle = p.color;
       ctx.shadowColor = p.color;
-      ctx.shadowBlur = 10 * alpha;
+      ctx.shadowBlur = 12 * alpha;
 
       if (p.type === "SHARD") {
         const s = p.size * alpha;
@@ -495,28 +527,23 @@ export class Pacman extends Actor {
         ctx.stroke();
       } else if (p.type === "RING") {
         ctx.lineWidth = 2 * alpha;
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.life * 3.5);
-        ctx.strokeRect(-p.size / 2, -p.size / 2, p.size, p.size);
-        ctx.restore();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (p.type === "THERMAL_BAR") {
+        ctx.fillRect(p.x - p.size / 2, p.y - 1, p.size, 2);
       } else if (p.type === "GLITCH") {
-        // Render logic for our horizontal velocity data slivers
         ctx.fillRect(p.x - p.size, p.y - 0.5, p.size * 2, 1);
       } else if (p.type === "GATEWAY") {
-        // A thick, rotating, neon geometric portal frame
         const progress = p.life / p.maxLife;
         const radius = p.size + (1 - progress) * (this.r * 3);
-
-        // Recover the blast direction sign from our vx container storage!
         const directionSign = p.vx;
 
         ctx.lineWidth = 3 * progress;
         ctx.save();
         ctx.translate(p.x, p.y);
-        ctx.rotate(p.life * 8 * directionSign); // Clean, high-speed spin direction
+        ctx.rotate(p.life * 8 * directionSign);
 
-        // Outer hexagon/diamond gateway portal
         ctx.beginPath();
         for (let side = 0; side < 4; side++) {
           const angle = (side * Math.PI) / 2;
@@ -526,13 +553,10 @@ export class Pacman extends Actor {
         ctx.stroke();
         ctx.restore();
       } else if (p.type === "SCANLINE") {
-        // Long, tailing horizontal energy beams that simulate data streams
         const progress = p.life / p.maxLife;
         ctx.lineWidth = 2 * progress;
-
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
-        // Draws a tail dragging backward against its velocity vector
         ctx.lineTo(p.x - p.vx * 0.08, p.y);
         ctx.stroke();
       }
@@ -574,15 +598,15 @@ export class Pacman extends Actor {
     const startAngle = mouthAngle;
     const endAngle = 2 * Math.PI - mouthAngle;
 
-    const neonColor = this.isBuffed ? "#ff3300" : "#ffcc00";
-    const coreColor = this.isBuffed ? "#ffaa00" : "#ffffff";
+    const primaryColor = this.isBuffed ? "#00ffff" : "#00ff66";
+    const structuralColor = this.isBuffed ? "#ffffff" : "#b3ffd1";
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rotation);
 
     if (this.ghostEatFlash > 0) {
-      ctx.shadowColor = "#fff";
+      ctx.shadowColor = "#ffffff";
       ctx.shadowBlur = 30 * this.ghostEatFlash;
       ctx.fillStyle = `rgba(255, 255, 255, ${0.15 * this.ghostEatFlash})`;
       ctx.beginPath();
@@ -590,15 +614,16 @@ export class Pacman extends Actor {
       ctx.fill();
     }
 
-    ctx.shadowColor = neonColor;
-    ctx.shadowBlur = this.isBuffed ? 16 : 10;
-    ctx.strokeStyle = neonColor;
+    // Outer Chassis Matrix Vector Frame
+    ctx.shadowColor = primaryColor;
+    ctx.shadowBlur = this.isBuffed ? 22 : 12;
+    ctx.strokeStyle = primaryColor;
     ctx.lineWidth = 3;
 
     ctx.beginPath();
     ctx.arc(0, 0, r - 2, startAngle, endAngle);
 
-    const innerCutoff = r * 0.4;
+    const innerCutoff = r * 0.35;
     ctx.lineTo(
       Math.cos(2 * Math.PI - mouthAngle) * innerCutoff,
       Math.sin(2 * Math.PI - mouthAngle) * innerCutoff,
@@ -609,54 +634,74 @@ export class Pacman extends Actor {
     );
     ctx.closePath();
 
-    ctx.fillStyle = this.isBuffed
-      ? "rgba(255, 51, 0, 0.15)"
-      : "rgba(255, 204, 0, 0.08)";
+    ctx.fillStyle = this.isBuffed ? "rgba(0, 240, 255, 0.04)" : "rgba(0, 255, 102, 0.02)";
     ctx.fill();
     ctx.stroke();
 
+    // Internal Scanline Intercept Mask
     ctx.save();
-    const spinSpeed = timestamp * (this.isBuffed ? 0.012 : 0.004);
-    ctx.rotate(spinSpeed);
-
-    ctx.shadowBlur = this.isBuffed ? 10 : 5;
-    ctx.strokeStyle = coreColor;
-    ctx.lineWidth = 1.5;
-
-    const boxSize = r * 0.4;
-    ctx.strokeRect(-boxSize / 2, -boxSize / 2, boxSize, boxSize);
-
-    if (this.isBuffed) {
-      ctx.strokeStyle = neonColor;
-      ctx.beginPath();
-      ctx.moveTo(-boxSize / 2, 0);
-      ctx.lineTo(boxSize / 2, 0);
-      ctx.moveTo(0, -boxSize / 2);
-      ctx.lineTo(0, boxSize / 2);
-      ctx.stroke();
+    ctx.clip();
+    ctx.strokeStyle = this.isBuffed ? "rgba(0, 255, 255, 0.25)" : "rgba(0, 255, 102, 0.15)";
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 0;
+    const lineSpacing = 4;
+    const scrollOffset = Math.floor((timestamp * 0.035)) % lineSpacing;
+    for (let y = -r; y < r; y += lineSpacing) {
+      ctx.beginPath(); ctx.moveTo(-r, y + scrollOffset); ctx.lineTo(r, y + scrollOffset); ctx.stroke();
     }
     ctx.restore();
 
-    ctx.strokeStyle = coreColor;
+    // --- REFINED HIGH-VELOCITY REACTION CORE ENGINE ---
+    ctx.save();
+    const coreRadius = r * 0.35;
+
+    // Outer Stator Bracket Ring
+    ctx.strokeStyle = this.isBuffed ? "rgba(255,255,255,0.9)" : "rgba(0, 255, 102, 0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.shadowBlur = this.isBuffed ? 12 : 0;
+    ctx.shadowColor = primaryColor;
+    ctx.beginPath(); ctx.arc(0, 0, coreRadius, 0, Math.PI * 2); ctx.stroke();
+
+    if (this.isBuffed) {
+      const speedMult = (timestamp * 0.025);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        ctx.save();
+        ctx.rotate(speedMult + (i * Math.PI / 3));
+        const pulseRadius = coreRadius * (0.68 + Math.sin((timestamp * 0.018) + i) * 0.06);
+        ctx.strokeStyle = i === 0 ? "#ffffff" : "rgba(0, 240, 255, 0.85)";
+        ctx.beginPath(); ctx.arc(0, 0, pulseRadius, 0, Math.PI * 1.3); ctx.stroke();
+        ctx.restore();
+      }
+      // Dead Center Singularity Node Locked down
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowBlur = 15;
+      ctx.beginPath(); ctx.arc(0, 0, coreRadius * 0.32, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // Idle Low-Frequency Calibration Spin
+      ctx.save();
+      ctx.rotate(timestamp * 0.002);
+      ctx.strokeStyle = structuralColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, coreRadius * 0.6, 0, Math.PI * 0.4); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, coreRadius * 0.6, Math.PI, Math.PI * 1.4); ctx.stroke();
+      ctx.fillStyle = primaryColor;
+      ctx.fillRect(-1.5, -1.5, 3, 3);
+      ctx.restore();
+    }
+    ctx.restore();
+
+    // Peripheral Array Sensors Tracker
+    ctx.strokeStyle = structuralColor;
     ctx.lineWidth = 1;
     ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.arc(0, 0, r * 0.68, Math.PI * 0.65, Math.PI * 1.35);
+    ctx.arc(0, 0, r * 0.68, Math.PI * 0.7, Math.PI * 1.3);
     ctx.stroke();
 
-    ctx.fillStyle = neonColor;
-    ctx.fillRect(
-      Math.cos(Math.PI * 0.65) * (r * 0.68) - 1,
-      Math.sin(Math.PI * 0.65) * (r * 0.68) - 1,
-      2,
-      2,
-    );
-    ctx.fillRect(
-      Math.cos(Math.PI * 1.35) * (r * 0.68) - 1,
-      Math.sin(Math.PI * 1.35) * (r * 0.68) - 1,
-      2,
-      2,
-    );
+    ctx.fillStyle = primaryColor;
+    ctx.fillRect(Math.cos(Math.PI * 0.7) * (r * 0.68) - 1, Math.sin(Math.PI * 0.7) * (r * 0.68) - 1, 2, 2);
+    ctx.fillRect(Math.cos(Math.PI * 1.3) * (r * 0.68) - 1, Math.sin(Math.PI * 1.3) * (r * 0.68) - 1, 2, 2);
 
     ctx.restore();
   }
@@ -671,64 +716,71 @@ export class Pacman extends Actor {
     ctx.save();
     ctx.translate(cx, cy);
 
-    const neonColor = this.isBuffed ? "#ff3300" : "#ffcc00";
+    if (p < 0.3) {
+      // --- PHASE 1: COMPRESSION ENGINE HOUSING LOCKDOWN ---
+      const scale = 1.0 - (p / 0.3) * 0.75;
+      const flashAlert = Math.floor(p * 40) % 2 === 0;
 
-    if (p < 0.4) {
-      const glitcheffect = Math.sin(p * 120) * 3 * (p / 0.4);
-      ctx.strokeStyle = neonColor;
-      ctx.shadowColor = neonColor;
-      ctx.shadowBlur = 12 * (1 - p);
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = flashAlert ? "#ff3300" : "#ffaa00";
+      ctx.shadowColor = ctx.strokeStyle;
+      ctx.shadowBlur = 20 * (1 - p);
+      ctx.lineWidth = 3 * scale;
+
+      ctx.save();
+      ctx.scale(scale, scale);
+      ctx.rotate(p * 15);
+
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.strokeStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.15, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
+    } else {
+      // --- PHASE 2: MECH SINGULARITY DETONATION AXIS ---
+      const blastProgress = (p - 0.3) / 0.7;
+      const alpha = Math.max(0, 1.0 - blastProgress);
+      const blastColor = this.isBuffed ? "#00ffff" : "#00ff66";
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      if (blastProgress < 0.25) {
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = blastColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 2.0 * (1.0 - blastProgress * 4), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Hard crosshair vector beam alignment matching game-map grids
+      ctx.strokeStyle = blastColor;
+      ctx.shadowColor = blastColor;
+      ctx.shadowBlur = 15;
+
+      const railLength = r * 4.5 * blastProgress;
+      ctx.lineWidth = 4 * (1.0 - blastProgress);
 
       ctx.beginPath();
-      ctx.arc(glitcheffect, 0, r - 2, 0, Math.PI * 2);
+      ctx.moveTo(-railLength, 0); ctx.lineTo(railLength, 0);
+      ctx.moveTo(0, -railLength); ctx.lineTo(0, railLength);
       ctx.stroke();
 
-      ctx.strokeRect(
-        (-r * 0.4) / 2,
-        (-r * 0.4) / 2 - glitcheffect,
-        r * 0.4,
-        r * 0.4,
-      );
-    } else {
-      const collapseProgress = (p - 0.4) / 0.6;
-      ctx.fillStyle = neonColor;
-      ctx.shadowColor = neonColor;
-
-      const particleRows = 14;
-      for (let i = 0; i < particleRows; i++) {
-        const angle = (i / particleRows) * Math.PI * 2;
-
-        const driftRadius = r * (1 + collapseProgress * 1.8);
-        const px = Math.cos(angle) * driftRadius + Math.sin(i + p * 10) * 4;
-        const py =
-          Math.sin(angle) * driftRadius +
-          collapseProgress * collapseProgress * 45;
-
-        const alpha = Math.max(0, 1 - collapseProgress);
-        const blockDimensions = Math.max(1, 3.5 * alpha);
-
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.shadowBlur = 6 * alpha;
-
-        if (i % 3 === 0) {
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(px - blockDimensions * 2, py);
-          ctx.lineTo(px + blockDimensions * 2, py);
-          ctx.stroke();
-        } else {
-          ctx.fillRect(
-            px - blockDimensions / 2,
-            py - blockDimensions / 2,
-            blockDimensions,
-            blockDimensions,
-          );
-        }
-        ctx.restore();
+      // Binary debris scattering inside crosshairs spaces
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px 'Courier New'";
+      ctx.textAlign = "center";
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const offsetDistance = r * 1.5 * (1.0 + blastProgress * 2);
+        const tx = Math.cos(angle) * offsetDistance;
+        const ty = Math.sin(angle) * offsetDistance;
+        ctx.fillText(Math.random() > 0.5 ? "0" : "1", tx, ty);
       }
+      ctx.restore();
     }
 
     ctx.restore();
