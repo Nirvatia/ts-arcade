@@ -30,7 +30,6 @@ export class Environment {
     eventBus.on("command:setup_environment", () => this.setup());
   }
 
-
   setup(): void {
     const map = this.gameState.levelData.map;
 
@@ -53,17 +52,10 @@ export class Environment {
     // Spawn elements from map configuration matrix coordinates
     dotLayer.spawn();
     pillLayer.spawn();
-    
+
     // Flag elements to trigger initial rendering cycles
     mazeLayer.requestRedraw();
     dotLayer.requestRedraw();
     pillLayer.requestRedraw();
-  }
-
-  /**
-   * Safe operational utility hook for ad-hoc runtime modifications
-   */
-  updatePathGraph(): void {
-    this.gameState.pathGraph = createPathGraph(this.gameState.levelData.map);
   }
 }

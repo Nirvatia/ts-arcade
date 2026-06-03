@@ -105,6 +105,7 @@ export class Director {
   loadLevel(): void {
     eventBus.emit("command:reset_all");
     eventBus.emit("command:setup_environment");
+    eventBus.emit("command:create_path_graph");
     eventBus.emit("command:spawn_actors");
   }
 

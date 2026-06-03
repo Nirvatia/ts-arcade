@@ -30,6 +30,7 @@ export interface EventPayloads {
   "command:init_all": void;
   "command:clear_canvases": void;
   "command:setup_environment": void;
+  "command:create_path_graph": void;
   "command:execute_life_loss": { currentScore: number };
   "command:death_sequence_continue": void;
 

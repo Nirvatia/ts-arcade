@@ -1,8 +1,9 @@
 import { Clock } from "../core/clock.svelte.js";
 import { eventBus } from "../core/eventBus.js";
-import type { GameMode } from "../gameModes.js";
-import type { GraphType, LevelConfigType } from "../types.js";
+import { createPathGraph } from "../pathfinding/graph.js";
 import { generateLevelConfig } from "../utils.js";
+import type { GraphType, LevelConfigType } from "../types.js";
+import type { GameMode } from "../gameModes.js";
 
 export class GameState {
   private static instance: GameState;
@@ -73,6 +74,11 @@ export class GameState {
   }
 
   private initEventListeners(): void {
+    eventBus.on(
+      "command:create_path_graph",
+      () => (this.pathGraph = createPathGraph(this.levelData.map)),
+    );
+
     eventBus.on("level:transition_start", () => {
       this.mode = "LEVEL_TRANSITION";
     });
