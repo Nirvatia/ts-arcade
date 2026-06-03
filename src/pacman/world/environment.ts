@@ -1,10 +1,8 @@
-// src/world/Environment.ts
-
-import { createPathGraph } from "../utils.js";
 import { GameState } from "../game/gameState.svelte.js";
 import { GameRegistry } from "../game/gameRegistry.js";
 import { Collision } from "../core/collision.js";
 import { eventBus } from "../core/eventBus.js";
+import { createPathGraph } from "../pathfinding/graph.js";
 
 /**
  * Manages the generation of the maze graph configuration,

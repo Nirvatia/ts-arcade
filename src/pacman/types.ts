@@ -1,4 +1,4 @@
-export type TeleportType = `0${string}`; // Подходит для "0A", "0B", "0C", "01" и т.д.
+export type TeleportType = `0${string}`;
 
 export type TileType =
   | "WH" // Wall Horizontal
@@ -7,7 +7,7 @@ export type TileType =
   | "TR" // Top Right Corner
   | "BL" // Bottom Left Corner
   | "BR" // Bottom Right Corner
-  | "FD" // Food
+  | "FD" // Dot
   | "PP" // Power Pill
   | TeleportType // Teleport
   | "ES" // Empty Space

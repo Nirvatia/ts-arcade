@@ -1,6 +1,5 @@
 import { Clock } from "../core/clock.svelte.js";
 import { eventBus } from "../core/eventBus.js";
-import { createPathGraph } from "../utils.js";
 import { GameRegistry } from "./gameRegistry.js";
 import { GameState } from "./gameState.svelte.js";
 import { Sequence } from "../core/sequence.js";
@@ -8,6 +7,7 @@ import { Tally } from "./tally.svelte.js";
 import { SceneRegistry } from "../scenes/sceneRegistry.js";
 import type { IGameScene } from "../interfaces.js";
 import { trackClockLifespan } from "../debug/garbageCollector.js";
+import { createPathGraph } from "../pathfinding/graph.js";
 
 export class Director {
   private static instance: Director;
