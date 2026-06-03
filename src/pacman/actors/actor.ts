@@ -61,7 +61,7 @@ export abstract class Actor implements Updatable {
   }
 
   /** HTML Canvas элемент */
-get canvas(): HTMLCanvasElement {
+  get canvas(): HTMLCanvasElement {
     return this.canvasLayer ? this.canvasLayer.canvas : this.sharedCtx!.canvas;
   }
 
@@ -124,6 +124,43 @@ get canvas(): HTMLCanvasElement {
         this.lastTeleportExit = exit;
       }
     }
+  }
+
+  protected getNextPosition(dt: number): { newX: number; newY: number } {
+    return {
+      newX: this.x + this.direction.dx * this.speed * dt,
+      newY: this.y + this.direction.dy * this.speed * dt,
+    };
+  }
+
+  protected snapToMovementAxis(): void {
+    const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
+    if (this.direction.dx !== 0) this.x = centerX;
+    if (this.direction.dy !== 0) this.y = centerY;
+  }
+
+  protected snapToTileCenter(): void {
+    const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
+    this.x = centerX;
+    this.y = centerY;
+  }
+
+  protected willHitWall(
+    dt: number,
+    dir = this.direction,
+    isExitingGhostHouse = false,
+  ): boolean {
+    if (dir.dx === 0 && dir.dy === 0) return false;
+
+    const moveDistance = this.speed * dt;
+    const lookAheadDistance = moveDistance + this.r;
+
+    const boundX = this.x + dir.dx * lookAheadDistance;
+    const boundY = this.y + dir.dy * lookAheadDistance;
+
+    const { tileX, tileY } = Collision.getTile(boundX, boundY);
+
+    return Collision.isWall(tileX, tileY, isExitingGhostHouse);
   }
 
   /** Инициализация актора */

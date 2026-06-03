@@ -54,9 +54,9 @@ export class Pacman extends Actor {
     return this.gameState.isBuffed;
   }
 
-  init(): void {}
+  public init(): void {}
 
-  reset(): void {
+  public reset(): void {
     this.state = "ALIVE";
     this.direction = { dx: 0, dy: 0 };
     this.nextDirection = null;
@@ -68,7 +68,7 @@ export class Pacman extends Actor {
     this.needsRedraw = true;
   }
 
-  spawn(): void {
+  public spawn(): void {
     const map = this.gameState.levelData.map;
     for (let y = 0; y < map.length; y++) {
       const x = map[y].findIndex((tile: string) => tile === "PM");
@@ -82,7 +82,7 @@ export class Pacman extends Actor {
     console.warn("Pac-Man spawn point (PM) not found on the current map!");
   }
 
-  update(dt: number): void {
+  public update(dt: number): void {
     if (this.state === "DYING") {
       this.deathTimer += dt;
       if (this.deathTimer >= this.config.deathAnimationDuration) {
@@ -116,8 +116,8 @@ export class Pacman extends Actor {
     ) {
       this.trailHistory = [];
 
-      this.spawnTeleportVFX(prevX, prevY); 
-      this.spawnTeleportVFX(this.x, this.y); 
+      this.spawnTeleportVFX(prevX, prevY);
+      this.spawnTeleportVFX(this.x, this.y);
     }
 
     const collidedGhost = this.getCollidedGhost();
@@ -152,7 +152,7 @@ export class Pacman extends Actor {
       this.tryExecuteTurn();
     }
 
-    const isHittingWall = this.willHitWall(this.direction, dt);
+    const isHittingWall = this.willHitWall(dt, this.direction);
     if (isHittingWall) {
       this.snapToTileCenter();
       return;
@@ -171,13 +171,6 @@ export class Pacman extends Actor {
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
     this.tryEatFood(tileX, tileY);
     this.tryEatPill(tileX, tileY);
-  }
-
-  private getNextPosition(dt: number): { newX: number; newY: number } {
-    return {
-      newX: this.x + this.direction.dx * this.speed * dt,
-      newY: this.y + this.direction.dy * this.speed * dt,
-    };
   }
 
   private tryExecuteTurn(): void {
@@ -224,23 +217,7 @@ export class Pacman extends Actor {
     }
   }
 
-  private snapToTileCenter(): void {
-    const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    this.x = centerX;
-    this.y = centerY;
-  }
-
-  private willHitWall(dir: { dx: number; dy: number }, dt: number): boolean {
-    if (dir.dx === 0 && dir.dy === 0) return false;
-    const moveDistance = this.speed * dt;
-    const lookAheadDistance = moveDistance + this.r;
-    const boundX = this.x + dir.dx * lookAheadDistance;
-    const boundY = this.y + dir.dy * lookAheadDistance;
-    const { tileX, tileY } = Collision.getTile(boundX, boundY);
-    return Collision.isWall(tileX, tileY);
-  }
-
-  changeDirection(dir: { dx: number; dy: number }): void {
+  public changeDirection(dir: { dx: number; dy: number }): void {
     this.nextDirection = dir;
   }
 
@@ -448,7 +425,7 @@ export class Pacman extends Actor {
 
   // --- Rendering Pipeline ---
 
-  draw(): void {
+  public draw(): void {
     this.drawTrailVFX();
 
     if (this.state === "DYING") {
