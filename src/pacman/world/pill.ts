@@ -23,7 +23,7 @@ export class Pill extends WorldObject implements Updatable, Collectible {
   }
 
   spawn(): void {
-    this.positions.clear(); 
+    this.positions.clear();
     const map = this.gameState.levelData.map;
 
     for (let i = 0; i < map.length; i++) {
@@ -51,10 +51,10 @@ export class Pill extends WorldObject implements Updatable, Collectible {
 
   update(dt: number): void {
     if (this.gameState.mode !== "PLAYING") return;
-    
+
     // Smooth time tracking for the wave cycle
     this.animationCounter += dt;
-    this.needsRedraw = true; 
+    this.needsRedraw = true;
   }
 
   draw(): void {
@@ -62,9 +62,9 @@ export class Pill extends WorldObject implements Updatable, Collectible {
     const ctx = this.ctx;
     const ts = this.tileSize;
 
-    // Stable, grid-tested boundary footprint
-    const maxRadius = ts * 0.5; 
-    const breathingPulse = 0.5 + 0.5 * Math.sin(this.animationCounter * 6.5);
+    const maxRadius = ts * 0.54;
+    const pulseFactor = 0.5 + 0.5 * Math.sin(this.animationCounter * 8.5);
+    const rotationAngle = this.animationCounter * 1.2;
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
@@ -73,49 +73,69 @@ export class Pill extends WorldObject implements Updatable, Collectible {
       const [i, j] = posKey.split(",").map(Number);
       const cx = ts * j + ts / 2;
       const cy = ts * i + ts / 2;
-      
+
       ctx.save();
       ctx.translate(cx, cy);
 
-      // --- PASS 1: KINETIC RADAR WAVEFRONTS ---
-      // Fixed 2px structural stroke avoids sub-pixel anti-aliasing collapse
-      ctx.lineWidth = 2.0;
-      ctx.shadowBlur = 4;
-
-      const waveCount = 2; // Reduced count to keep the paths looking clean and distinct
+      // --- PASS 1: SHARP TRON PHOTONIC RINGS ---
+      // Hard, crisp data rings pulsing outward without anti-aliasing wash
+      ctx.lineWidth = 1.5;
+      const waveCount = 2;
       for (let k = 0; k < waveCount; k++) {
-        const waveProgress = ((this.animationCounter * 1.1) + (k / waveCount)) % 1.0;
-        const currentRadius = maxRadius * waveProgress;
-        const alpha = 1.0 - waveProgress;
+        const progress = (this.animationCounter * 1.4 + k / waveCount) % 1.0;
+        const currentRadius = maxRadius * (0.35 + progress * 0.65);
+        const alpha = 1.0 - progress;
 
-        ctx.strokeStyle = `rgba(0, 240, 255, ${alpha * 0.95})`;
-        ctx.shadowColor = `rgba(0, 240, 255, ${alpha * 0.6})`;
-        
+        // Frozen Ice Cyan: High frequency energy signature
+        ctx.strokeStyle = `rgba(0, 255, 213, ${alpha * 0.85})`;
+        ctx.shadowColor = "rgb(0, 255, 213)";
+        ctx.shadowBlur = 4 * alpha;
+
         ctx.beginPath();
         ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // --- PASS 2: SOLID CORE SHROUD ---
-      // A substantial magenta mass that fills the center space cleanly
-      ctx.fillStyle = "rgba(255, 0, 187, 0.85)";
-      ctx.shadowColor = "rgba(255, 0, 187, 1)";
-      ctx.shadowBlur = 6 + breathingPulse * 4;
-      
-      const shroudRadius = maxRadius * (0.35 + breathingPulse * 0.08);
+      // --- PASS 2: ROTATING VECTOR CONFINEMENT MATRIX ---
+      // A hard, cold-white geometric square that traps the inner plasma core
+      ctx.save();
+      ctx.rotate(rotationAngle);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; // Cold stark containment line
+      ctx.shadowColor = "rgb(0, 255, 213)";
+      ctx.shadowBlur = 3;
+
+      const boxSize = maxRadius * 0.42;
       ctx.beginPath();
-      ctx.arc(0, 0, shroudRadius, 0, Math.PI * 2);
+      ctx.rect(-boxSize, -boxSize, boxSize * 2, boxSize * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // --- PASS 3: THE ANTI-MATTER SINK (THE VOID) ---
+      // Creates a hard visual drop-off before the bright core hits
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(0, 0, maxRadius * 0.4, 0, Math.PI * 2);
       ctx.fill();
 
-      // --- PASS 3: INCANDESCENT SEED ---
-      // Pure white hot pinpoint inside the shroud for crisp contrast
-      ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 3;
-      
-      const coreRadius = maxRadius * 0.18;
+      // --- PASS 4: HIGH-EMISSION INDIUM PLASMA CORE ---
+      // Electric mint/cyan center with deep-blue underlying shadows for mass
+      const coreRadius = maxRadius * (0.28 + pulseFactor * 0.05);
+
+      ctx.fillStyle = "rgb(0, 255, 242)"; // Pure Tron Cyan
+      ctx.shadowColor = "rgb(0, 102, 255)"; // Deep stellar blue falloff bloom
+      ctx.shadowBlur = 12 + pulseFactor * 8;
+
       ctx.beginPath();
       ctx.arc(0, 0, coreRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Blinding white hyper-dense focal point
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "#ffffff";
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, coreRadius * 0.5, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
