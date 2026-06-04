@@ -1,3 +1,4 @@
+// src/entities/Maze.ts
 import { CFG_CANVAS } from "../config/canvas.js";
 import { WorldObject } from "./worldObject.js";
 
@@ -15,12 +16,16 @@ export class Maze extends WorldObject {
     this._isFlashing = value;
   }
 
-  private getColors(): { bg: string; neonWire: string; glow: string } {
+  private getColors(): { bg: string; wallCore: string; neonWire: string; glow: string } {
     const hue = this.gameState.levelData.mapHue ?? 190;
     return {
-      bg: "#01050d",
-      neonWire: `hsla(${hue}, 100%, 55%, 0.95)`,
-      glow: `hsla(${hue}, 100%, 50%, 0.4)`,
+      bg: "#000000",
+      // Dark solid infill for the center of the walls
+      wallCore: `hsla(${hue}, 60%, 8%, 0.95)`, 
+      // Muted laser line strictly defining the corridor perimeter edges
+      neonWire: `hsla(${hue}, 75%, 35%, 0.80)`,
+      // Minimal light bleed to maintain high contrast
+      glow: `hsla(${hue}, 80%, 40%, 0.12)`,
     };
   }
 
@@ -36,28 +41,41 @@ export class Maze extends WorldObject {
 
     if (this._isFlashing) {
       const time = Date.now() / 150;
-      ctx.globalAlpha = 0.2 + Math.sin(time) * 0.4;
+      ctx.globalAlpha = 0.15 + Math.sin(time) * 0.3;
     }
 
     ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, cw, ch);
 
-    ctx.lineCap = "square";
-    ctx.lineJoin = "miter";
-    ctx.lineWidth = 1.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
-    ctx.strokeStyle = colors.neonWire;
-    ctx.shadowColor = colors.glow;
-    ctx.shadowBlur = this._isFlashing ? 12 : 5;
-
-    const offset = ts * 0.28;
-
+    // --- STEP 1: FILL THE WALL CORE MASS ---
+    // This establishes solid volume down the center first
     ctx.beginPath();
-    this.buildTronPath(map, ctx, ts, offset);
+    this.buildTronPath(map, ctx, ts, 0);
+    ctx.strokeStyle = colors.wallCore;
+    ctx.lineWidth = ts * 0.75; // Thick blocking fill
+    ctx.shadowBlur = 0;
     ctx.stroke();
 
+    // --- STEP 2: SHIFT ACCENTS TO THE OUTER EDGES ---
+    // We calculate the boundary lines by offsetting the track slightly outwards (+ and -)
+    // This frames the corridors perfectly and eliminates the wide illusion
+    const edgeOffset = ts * 0.36; 
+    ctx.strokeStyle = colors.neonWire;
+    ctx.lineWidth = 1.5; // Crisper, thinner lines
+    ctx.shadowColor = colors.glow;
+    ctx.shadowBlur = this._isFlashing ? 6 : 2;
+
+    // Left/Top boundary profile
     ctx.beginPath();
-    this.buildTronPath(map, ctx, ts, -offset);
+    this.buildTronPath(map, ctx, ts, edgeOffset);
+    ctx.stroke();
+
+    // Right/Bottom boundary profile
+    ctx.beginPath();
+    this.buildTronPath(map, ctx, ts, -edgeOffset);
     ctx.stroke();
 
     ctx.restore();
