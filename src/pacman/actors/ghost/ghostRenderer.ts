@@ -1,195 +1,312 @@
+// src/renderers/GhostRenderer.ts
+
 import type { Ghost } from "../ghost.js";
 
 export interface IGhostRenderer {
   draw(ctx: CanvasRenderingContext2D, ghost: Ghost, tileSize: number): void;
 }
 
+interface CosmicParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  alpha: number;
+  size: number;
+  maxLife: number;
+  life: number;
+  color: string;
+  type: "SPARK" | "JET";
+}
+
 export class ClassicVectorGhostRenderer implements IGhostRenderer {
-  private particleTimer = 0;
-  private trailParticles: Array<{
-    x: number;
-    y: number;
-    alpha: number;
-    width: number;
-    height: number;
-    drift: number;
-  }> = [];
+  private particles: CosmicParticle[] = [];
+  private vortexRotation = 0;
 
   public draw(
     ctx: CanvasRenderingContext2D,
     ghost: Ghost,
     tileSize: number,
   ): void {
-    const r = tileSize / 2;
-    let vectorColor = ghost.color || ghost.defaultColor;
+    // 1. Tighter baseline footprint radius to avoid map clipping
+    const r = tileSize * 0.36; 
+    let themeColor = ghost.color || ghost.defaultColor;
     let isFrightened = false;
     let isEaten = false;
+    const timestamp = Date.now();
 
-    // Evaluate state purely using state indicators from the entity
+    // 2. Evaluate Cosmic States
     if (ghost.state === "FRIGHTENED") {
       isFrightened = true;
       if (ghost["isFlashing"]) {
-        // Accessing private property safely, or make it public/protected
-        const isWhite = Math.floor(Date.now() / ghost["flashSpeed"]) % 2 === 0;
-        vectorColor = isWhite ? "#ffffff" : "#1144bb";
+        const isWhite = Math.floor(timestamp / ghost["flashSpeed"]) % 2 === 0;
+        themeColor = isWhite ? "#ffffff" : "#ff00bb"; 
       } else {
-        vectorColor = "#1144bb";
+        themeColor = "#4d00ff"; 
       }
     } else if (ghost.state === "EATEN") {
       isEaten = true;
-      vectorColor = "rgba(0, 240, 255, 0.9)";
+      themeColor = "rgba(0, 240, 255, 0.85)";
     }
 
-    // Particle Trail Engine
-    if (ghost.direction.dx !== 0 || ghost.direction.dy !== 0) {
-      this.particleTimer++;
-      if (this.particleTimer >= 3) {
-        this.trailParticles.push({
-          x: Math.round(ghost.x) + (Math.random() - 0.5) * (r * 0.7),
-          y: Math.round(ghost.y) + (Math.random() - 0.5) * r,
-          alpha: 0.85,
-          width: Math.random() > 0.5 ? r * 0.8 : r * 0.4,
-          height: 1.5,
-          drift: (Math.random() - 0.5) * 3,
-        });
-        this.particleTimer = 0;
-      }
+    // 3. Increment orbital rotation
+    this.vortexRotation += isFrightened ? 0.12 : 0.05; 
+
+    // 4. Propulsion Particles
+    this.updateParticles(ctx);
+    if (!isEaten && (ghost.direction.dx !== 0 || ghost.direction.dy !== 0)) {
+      this.emitPropulsionJets(ghost, r, themeColor, isFrightened);
     }
 
+    // 5. Render Core Assembly
     ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-
-    // Draw Tail Particles
-    if (this.trailParticles.length > 0) {
-      ctx.save();
-      for (let i = this.trailParticles.length - 1; i >= 0; i--) {
-        const p = this.trailParticles[i];
-        ctx.fillStyle = vectorColor;
-        ctx.globalAlpha = p.alpha;
-        ctx.fillRect(
-          p.x - p.width / 2 + p.drift,
-          p.y - p.height / 2,
-          p.width,
-          p.height,
-        );
-
-        p.alpha -= 0.14;
-        if (p.alpha <= 0) this.trailParticles.splice(i, 1);
-      }
-      ctx.restore();
-    }
-
-    ctx.save();
-    ctx.translate(Math.round(ghost.x), Math.round(ghost.y));
-    ctx.rotate(this.getOrientationAngle(ghost.direction));
+    ctx.globalCompositeOperation = "screen"; 
+    ctx.translate(ghost.x, ghost.y);
 
     if (!isEaten) {
-      this.drawVectorCore(ctx, r, vectorColor, isFrightened);
+      this.drawGravitationalVortex(ctx, r, themeColor, isFrightened, timestamp);
     } else {
-      this.drawFleeingCore(ctx, r, vectorColor);
+      this.drawSingularityRemnant(ctx, r, themeColor, timestamp);
     }
 
     ctx.restore();
   }
 
-  private getOrientationAngle(direction: { dx: number; dy: number }): number {
-    if (direction.dx === 1) return Math.PI / 2;
-    if (direction.dx === -1) return -Math.PI / 2;
-    if (direction.dy === -1) return 0;
-    if (direction.dy === 1) return Math.PI;
-    return 0;
+  private emitPropulsionJets(ghost: Ghost, r: number, color: string, isFrightened: boolean): void {
+    const spawnRate = isFrightened ? 2 : 1; 
+    for (let i = 0; i < spawnRate; i++) {
+      const ox = ghost.x - ghost.direction.dx * (r * 0.4);
+      const oy = ghost.y - ghost.direction.dy * (r * 0.4);
+
+      const jetPower = isFrightened ? 50 : 95;
+      const vx = -ghost.direction.dx * jetPower + (Math.random() - 0.5) * 35;
+      const vy = -ghost.direction.dy * jetPower + (Math.random() - 0.5) * 35;
+
+      this.particles.push({
+        x: ox + (Math.random() - 0.5) * (r * 0.4),
+        y: oy + (Math.random() - 0.5) * (r * 0.4),
+        vx,
+        vy,
+        alpha: 0.85,
+        size: Math.random() * (isFrightened ? 1.5 : 3.0) + 1,
+        maxLife: isFrightened ? 0.18 : 0.32,
+        life: isFrightened ? 0.18 : 0.32,
+        color,
+        type: Math.random() > 0.5 ? "SPARK" : "JET"
+      });
+    }
   }
 
-  private drawVectorCore(
+  private updateParticles(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      const dt = 1 / 60;
+      p.life -= dt;
+
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.91;
+      p.vy *= 0.91;
+
+      const alphaProgress = p.life / p.maxLife;
+
+      ctx.save();
+      ctx.globalAlpha = p.alpha * alphaProgress;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = p.type === "JET" ? 10 : 3;
+      ctx.fillStyle = p.color;
+
+      if (p.type === "JET") {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * alphaProgress, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const sz = p.size * alphaProgress;
+        ctx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  private drawGravitationalVortex(
     ctx: CanvasRenderingContext2D,
     r: number,
     themeColor: string,
     isFrightened: boolean,
+    timestamp: number
   ): void {
+    // --- 1. THE GALAXY ACCRETION FIELD (SOFTENED BRIGHTNESS) ---
     ctx.save();
-    const scaleFactor = (r * 2.2) / 100;
-    ctx.scale(scaleFactor, scaleFactor);
-    ctx.translate(-50, -50);
+    ctx.rotate(this.vortexRotation);
 
-    ctx.shadowBlur = isFrightened ? 6 : 15;
-    ctx.shadowColor = themeColor;
-    ctx.strokeStyle = themeColor;
-    ctx.lineJoin = "miter";
-    ctx.miterLimit = 4;
+    if (isFrightened) {
+      // Retained your exact preferred frightened vector line style completely
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = themeColor;
+      const arms = 5;
+      const maxRadius = r * 1.3;
 
+      for (let j = 0; j < arms; j++) {
+        ctx.save();
+        ctx.rotate((j * Math.PI * 2) / arms);
+        ctx.strokeStyle = themeColor;
+        ctx.lineWidth = 3.0;
+        ctx.globalAlpha = 0.75;
+
+        ctx.beginPath();
+        ctx.moveTo(maxRadius, 0);
+        ctx.quadraticCurveTo(r * 0.6, r * 0.6, r * 0.25, 0);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(r * 0.85, 0);
+        ctx.quadraticCurveTo(r * 0.4, r * 0.4, r * 0.3, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else {
+      // NORMAL STATE: Denser mathematical strands but dropped thickness/opacity for smooth gas glow
+      const totalStrands = 20;
+      const pointsPerStrand = 18;
+      const maxRadius = r * 1.35;
+
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = themeColor;
+
+      for (let i = 0; i < totalStrands; i++) {
+        ctx.save();
+        const startAngle = (i * Math.PI * 2) / 6;
+        ctx.rotate(startAngle);
+
+        ctx.beginPath();
+        // Toned down to avoid thick blinding vector lines
+        ctx.lineWidth = i % 4 === 0 ? 1.5 : 0.8; 
+        ctx.strokeStyle = i % 4 === 0 ? "rgba(255, 255, 255, 0.85)" : themeColor;
+        ctx.globalAlpha = i % 4 === 0 ? 0.4 : 0.22;
+
+        for (let j = 0; j < pointsPerStrand; j++) {
+          const ratio = j / pointsPerStrand;
+          const currentRadius = maxRadius * (1.0 - ratio);
+          const spiralArc = ratio * Math.PI * 1.4;
+
+          const x = Math.cos(spiralArc) * currentRadius;
+          const y = Math.sin(spiralArc) * currentRadius;
+
+          if (j === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+
+    // --- 2. THE EVENT HORIZON LENS ---
+    ctx.save();
+    const pulseRadius = r * (0.82 + Math.sin(timestamp * 0.012) * 0.04);
+    const lensGrad = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, pulseRadius);
+    
+    if (isFrightened) {
+      lensGrad.addColorStop(0, "#0d0033"); 
+      lensGrad.addColorStop(0.4, "rgba(77, 0, 255, 0.6)");
+      lensGrad.addColorStop(0.8, "rgba(255, 0, 187, 0.15)");
+    } else {
+      lensGrad.addColorStop(0, "rgba(0, 0, 0, 1)");
+      lensGrad.addColorStop(0.35, themeColor);
+      lensGrad.addColorStop(0.70, `${themeColor}1A`);
+    }
+    lensGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+    ctx.fillStyle = lensGrad;
     ctx.beginPath();
-    ctx.moveTo(50, 8);
-    ctx.lineTo(72, 78);
-    ctx.lineTo(50, 62);
-    ctx.lineTo(28, 78);
-    ctx.closePath();
-    ctx.fillStyle = "#000000";
+    ctx.arc(0, 0, pulseRadius * 1.35, 0, Math.PI * 2);
     ctx.fill();
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
-
-    // Secondary vector detail lines
-    ctx.beginPath();
-    ctx.lineWidth = 2.0;
-    ctx.moveTo(37, 69);
-    ctx.lineTo(16, 75);
-    ctx.lineTo(31, 62);
-    ctx.moveTo(63, 69);
-    ctx.lineTo(84, 75);
-    ctx.lineTo(69, 62);
-    ctx.stroke();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.lineWidth = 1.0;
-    ctx.globalAlpha = 0.55;
-    ctx.moveTo(50, 24);
-    ctx.lineTo(66, 67);
-    ctx.lineTo(50, 56);
-    ctx.lineTo(34, 67);
-    ctx.closePath();
-    ctx.stroke();
     ctx.restore();
 
+    // --- 3. THE 3D GRAVITATIONAL SINGULARITY CORE ---
+    // Layers a reverse light falloff so the center pulls inward visually instead of sitting flat
     ctx.save();
+    const singularitySize = isFrightened ? r * 0.38 : r * 0.44;
+
+    // Use a complex radial gradient directly inside the horizon lip to fake spatial distortion
+    const coreSphericalGrad = ctx.createRadialGradient(
+      0, 0, singularitySize * 0.4, 
+      0, 0, singularitySize
+    );
+    coreSphericalGrad.addColorStop(0, "#000000"); // Dark absolute pit center
+    coreSphericalGrad.addColorStop(0.7, "rgba(5, 5, 10, 1)");
+    coreSphericalGrad.addColorStop(0.9, `${themeColor}4D`); // Light grazing the edge of space
+    coreSphericalGrad.addColorStop(1, "#000000");
+
+    ctx.fillStyle = coreSphericalGrad;
     ctx.beginPath();
+    ctx.arc(0, 0, singularitySize, 0, Math.PI * 2);
+    ctx.fill();
+
+    // High-frequency rim border
+    ctx.strokeStyle = isFrightened ? "#ffffff" : `${themeColor}BB`;
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 2]);
-    ctx.moveTo(50, 8);
-    ctx.lineTo(50, 56);
+    ctx.beginPath();
+    ctx.arc(0, 0, singularitySize, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.restore();
-
     ctx.restore();
   }
 
-  private drawFleeingCore(
+  private drawSingularityRemnant(
     ctx: CanvasRenderingContext2D,
     r: number,
     themeColor: string,
+    timestamp: number
   ): void {
+    // --- COMPLETED FLEEING STATE ---
     ctx.save();
-    const scaleFactor = (r * 1.8) / 100;
-    ctx.scale(scaleFactor, scaleFactor);
-    ctx.translate(-50, -50);
-
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 18;
     ctx.shadowColor = themeColor;
-    ctx.strokeStyle = themeColor;
-    ctx.lineJoin = "miter";
 
+    // 1. High-Intensity particle vector stream
+    const beamLength = r * 2.4;
+    const beamThickness = 3.5;
+    
+    const beamGradient = ctx.createLinearGradient(-beamLength / 2, 0, beamLength / 2, 0);
+    beamGradient.addColorStop(0, "rgba(0, 240, 255, 0)");
+    beamGradient.addColorStop(0.5, "#ffffff");
+    beamGradient.addColorStop(1, "rgba(0, 240, 255, 0)");
+
+    ctx.fillStyle = beamGradient;
+    ctx.fillRect(-beamLength / 2, -beamThickness / 2, beamLength, beamThickness);
+
+    // 2. High-frequency bracket scanner lines
+    ctx.strokeStyle = "rgba(0, 240, 255, 0.65)";
+    ctx.lineWidth = 1.2;
+    
+    const waveOffset = Math.sin(timestamp * 0.02) * 2.5;
     ctx.beginPath();
-    ctx.moveTo(50, 12);
-    ctx.lineTo(68, 75);
-    ctx.lineTo(50, 60);
-    ctx.lineTo(32, 75);
-    ctx.closePath();
-    ctx.fillStyle = "#000000";
-    ctx.fill();
-
-    const rapidBlink = Math.floor(Date.now() / 45) % 2 === 0;
-    ctx.lineWidth = rapidBlink ? 3.5 : 1.5;
+    // Left Wing Bracket
+    ctx.moveTo(-r * 0.6, -5 + waveOffset);
+    ctx.lineTo(-r * 0.75, 0);
+    ctx.lineTo(-r * 0.6, 5 - waveOffset);
+    // Right Wing Bracket
+    ctx.moveTo(r * 0.6, -5 - waveOffset);
+    ctx.lineTo(r * 0.75, 0);
+    ctx.lineTo(r * 0.6, 5 + waveOffset);
     ctx.stroke();
+
+    // 3. Point Singularity Core
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.restore();
   }
