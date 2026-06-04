@@ -1,25 +1,16 @@
-// GameLoop.ts
-import { GameRegistry } from "../game/gameRegistry.js";
+// src/core/gameLoop.ts
 import { GameState } from "../game/gameState.svelte.js";
-import { eventBus } from "./eventBus.js";
-import { Renderer } from "./renderer.js";
-import { Director } from "../game/director.svelte.js";
-import { SceneRegistry } from "../scenes/sceneRegistry.js";
 import { GameLoopTracker } from "../debug/gameLoopTracker.js";
+import { Renderer } from "./renderer.js";
+import type { IGameScene, Updatable } from "../interfaces.js";
 
-/**
- * Main game loop.
- * Manages frame rate, calls update and render.
- * Guarantees stable delta time for physics when FPS drops.
- */
 export class GameLoop {
   private static instance: GameLoop;
-  private director: Director;
   private gameState: GameState;
   private renderer: Renderer;
-  private registry: GameRegistry;
-  private sceneRegistry: SceneRegistry;
+  private activeScene: IGameScene | null = null;
   private tracker: GameLoopTracker;
+  private updatables: Updatable[] | null = null;
 
   private fps: number;
   private then: number;
@@ -27,16 +18,12 @@ export class GameLoop {
   private timer: number | null = null;
 
   constructor(fps: number = 60) {
-    this.director = Director.getInstance();
     this.gameState = GameState.getInstance();
     this.renderer = Renderer.getInstance();
-    this.registry = GameRegistry.getInstance();
-    this.sceneRegistry = new SceneRegistry();
     this.fps = fps;
     this.then = performance.now();
     this.interval = 1000 / this.fps;
     this.tracker = new GameLoopTracker(this.fps);
-    this.initEventListeners();
   }
 
   static getInstance(): GameLoop {
@@ -46,21 +33,22 @@ export class GameLoop {
     return GameLoop.instance;
   }
 
-  private initEventListeners() {
-    eventBus.on("game:load", () => this.start());
-    eventBus.on("game:over", () => this.stop());
+  public setUpdatables(updatables: Updatable[] | null): void {
+    this.updatables = updatables;
   }
 
-  /** Start or resume the loop */
-  start(): void {
+  public setActiveScene(scene: IGameScene | null): void {
+    this.activeScene = scene;
+  }
+
+  public start(): void {
     if (!this.timer) {
       this.then = performance.now();
       this.loop();
     }
   }
 
-  /** Stop the loop */
-  stop(): void {
+  public stop(): void {
     if (this.timer) {
       cancelAnimationFrame(this.timer);
       this.timer = null;
@@ -82,29 +70,17 @@ export class GameLoop {
 
       // --- LOGIC UPDATE ---
       if (mode === "PLAYING" || mode === "PACMAN_DEAD") {
-        this.registry.getAllUpdatable().forEach((e) => e.update(fixedDt));
-      } else if (mode === "INTERMISSION") {
-        const activeScene = this.sceneRegistry.getActiveScene();
-        if (activeScene?.update) {
-          activeScene.update(fixedDt);
-        }
+        this.updatables?.forEach((e) => e.update(fixedDt));
+      } else if (mode === "INTERMISSION" && this.activeScene) {
+        this.activeScene.update(fixedDt);
       }
 
       // --- RENDER PIPELINE ---
-      const shouldRender = mode !== "GAME_OVER";
-
-      if (shouldRender) {
-        if (mode === "INTERMISSION") {
-          const activeScene = this.sceneRegistry.getActiveScene();
-          if (activeScene?.draw) {
-            activeScene.draw();
-          }
-        } else {
-          this.renderer.render();
-        }
+      if (mode !== "GAME_OVER") {
+        this.renderer.render();
       }
 
-      this.tracker.endFrame(workStart);
+      //this.tracker.endFrame(workStart);
     }
   }
 }

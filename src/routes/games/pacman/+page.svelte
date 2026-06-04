@@ -106,7 +106,7 @@
                 <span class="score-number">{tally.score.toLocaleString()}</span>
               </div>
               <button class="cabinet-button" onclick={handleRestart}>
-                [ RE-ENGAGE_SYSTEM ]
+                [ RESTART ]
               </button>
               <div class="credit-text">TERMINAL_READY // INSERT_COIN</div>
             {:else}

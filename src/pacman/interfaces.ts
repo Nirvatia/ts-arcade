@@ -25,3 +25,8 @@ export interface IGameScene {
   draw(): void;
   clear(): void;
 }
+
+export interface IRenderer {
+  render(): void;
+  clear(): void;
+}

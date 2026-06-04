@@ -1,9 +1,8 @@
-// src/renderers/GhostRenderer.ts
-
 import type { Ghost } from "../ghost.js";
 
 export interface IGhostRenderer {
   draw(ctx: CanvasRenderingContext2D, ghost: Ghost, tileSize: number): void;
+  clear(): void; 
 }
 
 interface CosmicParticle {
@@ -23,44 +22,49 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
   private particles: CosmicParticle[] = [];
   private vortexRotation = 0;
 
+  public clear(): void {
+    this.particles = [];
+    this.vortexRotation = 0;
+  }
+
   public draw(
     ctx: CanvasRenderingContext2D,
     ghost: Ghost,
     tileSize: number,
   ): void {
-    // 1. Tighter baseline footprint radius to avoid map clipping
-    const r = tileSize * 0.36; 
+    const r = tileSize * 0.36;
     let themeColor = ghost.color || ghost.defaultColor;
     let isFrightened = false;
     let isEaten = false;
     const timestamp = Date.now();
 
-    // 2. Evaluate Cosmic States
+    // Evaluate Cosmic States
     if (ghost.state === "FRIGHTENED") {
       isFrightened = true;
       if (ghost["isFlashing"]) {
         const isWhite = Math.floor(timestamp / ghost["flashSpeed"]) % 2 === 0;
-        themeColor = isWhite ? "#ffffff" : "#ff00bb"; 
+        themeColor = isWhite ? "#ffffff" : "#ff00bb";
       } else {
-        themeColor = "#4d00ff"; 
+        themeColor = "#4d00ff";
       }
     } else if (ghost.state === "EATEN") {
       isEaten = true;
       themeColor = "rgba(0, 240, 255, 0.85)";
     }
 
-    // 3. Increment orbital rotation
-    this.vortexRotation += isFrightened ? 0.12 : 0.05; 
+    this.vortexRotation += isFrightened ? 0.12 : 0.05;
 
-    // 4. Propulsion Particles
+    // Process existing particle streams cleanly
     this.updateParticles(ctx);
+
+    // Stop emitting new propulsion trails if the ghost has no directional vector
     if (!isEaten && (ghost.direction.dx !== 0 || ghost.direction.dy !== 0)) {
       this.emitPropulsionJets(ghost, r, themeColor, isFrightened);
     }
 
-    // 5. Render Core Assembly
+    // Render Core Assembly
     ctx.save();
-    ctx.globalCompositeOperation = "screen"; 
+    ctx.globalCompositeOperation = "screen";
     ctx.translate(ghost.x, ghost.y);
 
     if (!isEaten) {
@@ -72,8 +76,13 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
     ctx.restore();
   }
 
-  private emitPropulsionJets(ghost: Ghost, r: number, color: string, isFrightened: boolean): void {
-    const spawnRate = isFrightened ? 2 : 1; 
+  private emitPropulsionJets(
+    ghost: Ghost,
+    r: number,
+    color: string,
+    isFrightened: boolean,
+  ): void {
+    const spawnRate = isFrightened ? 2 : 1;
     for (let i = 0; i < spawnRate; i++) {
       const ox = ghost.x - ghost.direction.dx * (r * 0.4);
       const oy = ghost.y - ghost.direction.dy * (r * 0.4);
@@ -92,7 +101,7 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
         maxLife: isFrightened ? 0.18 : 0.32,
         life: isFrightened ? 0.18 : 0.32,
         color,
-        type: Math.random() > 0.5 ? "SPARK" : "JET"
+        type: Math.random() > 0.5 ? "SPARK" : "JET",
       });
     }
   }
@@ -140,7 +149,7 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
     r: number,
     themeColor: string,
     isFrightened: boolean,
-    timestamp: number
+    timestamp: number,
   ): void {
     // --- 1. THE GALAXY ACCRETION FIELD (SOFTENED BRIGHTNESS) ---
     ctx.save();
@@ -189,8 +198,9 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
 
         ctx.beginPath();
         // Toned down to avoid thick blinding vector lines
-        ctx.lineWidth = i % 4 === 0 ? 1.5 : 0.8; 
-        ctx.strokeStyle = i % 4 === 0 ? "rgba(255, 255, 255, 0.85)" : themeColor;
+        ctx.lineWidth = i % 4 === 0 ? 1.5 : 0.8;
+        ctx.strokeStyle =
+          i % 4 === 0 ? "rgba(255, 255, 255, 0.85)" : themeColor;
         ctx.globalAlpha = i % 4 === 0 ? 0.4 : 0.22;
 
         for (let j = 0; j < pointsPerStrand; j++) {
@@ -214,15 +224,15 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
     ctx.save();
     const pulseRadius = r * (0.82 + Math.sin(timestamp * 0.012) * 0.04);
     const lensGrad = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, pulseRadius);
-    
+
     if (isFrightened) {
-      lensGrad.addColorStop(0, "#0d0033"); 
+      lensGrad.addColorStop(0, "#0d0033");
       lensGrad.addColorStop(0.4, "rgba(77, 0, 255, 0.6)");
       lensGrad.addColorStop(0.8, "rgba(255, 0, 187, 0.15)");
     } else {
       lensGrad.addColorStop(0, "rgba(0, 0, 0, 1)");
       lensGrad.addColorStop(0.35, themeColor);
-      lensGrad.addColorStop(0.70, `${themeColor}1A`);
+      lensGrad.addColorStop(0.7, `${themeColor}1A`);
     }
     lensGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
 
@@ -239,8 +249,12 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
 
     // Use a complex radial gradient directly inside the horizon lip to fake spatial distortion
     const coreSphericalGrad = ctx.createRadialGradient(
-      0, 0, singularitySize * 0.4, 
-      0, 0, singularitySize
+      0,
+      0,
+      singularitySize * 0.4,
+      0,
+      0,
+      singularitySize,
     );
     coreSphericalGrad.addColorStop(0, "#000000"); // Dark absolute pit center
     coreSphericalGrad.addColorStop(0.7, "rgba(5, 5, 10, 1)");
@@ -265,7 +279,7 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
     ctx: CanvasRenderingContext2D,
     r: number,
     themeColor: string,
-    timestamp: number
+    timestamp: number,
   ): void {
     // --- COMPLETED FLEEING STATE ---
     ctx.save();
@@ -275,19 +289,29 @@ export class ClassicVectorGhostRenderer implements IGhostRenderer {
     // 1. High-Intensity particle vector stream
     const beamLength = r * 2.4;
     const beamThickness = 3.5;
-    
-    const beamGradient = ctx.createLinearGradient(-beamLength / 2, 0, beamLength / 2, 0);
+
+    const beamGradient = ctx.createLinearGradient(
+      -beamLength / 2,
+      0,
+      beamLength / 2,
+      0,
+    );
     beamGradient.addColorStop(0, "rgba(0, 240, 255, 0)");
     beamGradient.addColorStop(0.5, "#ffffff");
     beamGradient.addColorStop(1, "rgba(0, 240, 255, 0)");
 
     ctx.fillStyle = beamGradient;
-    ctx.fillRect(-beamLength / 2, -beamThickness / 2, beamLength, beamThickness);
+    ctx.fillRect(
+      -beamLength / 2,
+      -beamThickness / 2,
+      beamLength,
+      beamThickness,
+    );
 
     // 2. High-frequency bracket scanner lines
     ctx.strokeStyle = "rgba(0, 240, 255, 0.65)";
     ctx.lineWidth = 1.2;
-    
+
     const waveOffset = Math.sin(timestamp * 0.02) * 2.5;
     ctx.beginPath();
     // Left Wing Bracket

@@ -6,6 +6,10 @@ import { Sequence } from "../core/sequence.js";
 import { Tally } from "./tally.svelte.js";
 import { SceneRegistry } from "../scenes/sceneRegistry.js";
 import { trackClockLifespan } from "../debug/garbageCollector.js";
+import { GameLoop } from "../core/gameLoop.js";
+import { SceneRenderer } from "../core/SceneRenderer.js";
+import { GameRenderer } from "../core/gameRenderer.js";
+import { Renderer } from "../core/renderer.js";
 
 // Constants
 const TRANSITION_DURATION = 5;
@@ -20,6 +24,10 @@ export class Director {
   private registry: GameRegistry;
   private tally: Tally;
   private sceneRegistry: SceneRegistry;
+  private gameLoop: GameLoop;
+  private renderer: Renderer;
+  private sceneRenderer: SceneRenderer;
+  private gameRenderer: GameRenderer;
 
   private _currentClock: Clock | null = null;
   private activeSequence: Sequence = new Sequence();
@@ -28,7 +36,11 @@ export class Director {
     this.gameState = GameState.getInstance();
     this.registry = GameRegistry.getInstance();
     this.tally = Tally.getInstance();
-    this.sceneRegistry = new SceneRegistry();
+    this.sceneRegistry = SceneRegistry.getInstance();
+    this.gameLoop = GameLoop.getInstance();
+    this.renderer = Renderer.getInstance();
+    this.gameRenderer = GameRenderer.getInstance();
+    this.sceneRenderer = SceneRenderer.getInstance();
     this.initEventListeners();
   }
 
@@ -58,6 +70,9 @@ export class Director {
 
   private handleGameOver(): void {
     this.resetTickingState();
+
+    this.gameLoop.stop();
+
     eventBus.emit("ui:game_over_show", {
       score: this.tally.score,
       level: this.gameState.currentLevel,
@@ -73,31 +88,26 @@ export class Director {
       this.triggerIntermission(payload),
     );
     eventBus.on("pacman:death_triggered", () => this.handlePacmanDeath());
-    eventBus.on("pacman:death_animation_end", () =>
-      this.startRespawnCountdown(),
-    );
+    eventBus.on("pacman:death_animation_end", () => this.evaluateLifeLoss());
     eventBus.on("command:ghost_eaten", () => this.triggerGhostEatenSequence());
-  }
-
-  restartGame(): void {
-    this.loadLevel();
-    this.startGame();
   }
 
   loadGame(): void {
     eventBus.emit("command:create_all");
     this.loadLevel();
-  }
 
-  loadLevel(): void {
-    eventBus.emit("command:reset_all");
-    eventBus.emit("command:setup_environment");
-    eventBus.emit("command:create_path_graph");
-    eventBus.emit("command:spawn_actors");
+    const updatables = this.registry.getAllUpdatable();
+    const drawables = this.registry.getAllDrawable();
+
+    this.gameLoop.setUpdatables(updatables);
+    this.gameRenderer.setDrawables(drawables);
   }
 
   startGame(): void {
     this.resetTickingState();
+
+    this.gameLoop.start();
+
     eventBus.emit("level:transition_start", { duration: TRANSITION_DURATION });
 
     const clock = this.createClock(
@@ -118,6 +128,25 @@ export class Director {
     );
   }
 
+  restartGame(): void {
+    this.loadLevel();
+
+    const updatables = this.registry.getAllUpdatable();
+    const drawables = this.registry.getAllDrawable();
+    this.gameLoop.setUpdatables(updatables);
+    this.gameRenderer.setDrawables(drawables);
+
+    this.gameLoop.start();
+    this.startGame();
+  }
+
+  loadLevel(): void {
+    eventBus.emit("command:reset_all");
+    eventBus.emit("command:setup_environment");
+    eventBus.emit("command:create_path_graph");
+    eventBus.emit("command:spawn_actors");
+  }
+
   triggerGhostEatenSequence(): void {
     this.resetTickingState();
 
@@ -135,10 +164,24 @@ export class Director {
 
   handlePacmanDeath(): void {
     this.resetTickingState();
+  }
 
+  private evaluateLifeLoss(): void {
+    this.resetTickingState();
+
+    // Deduct the life inside GameState
     eventBus.emit("command:execute_life_loss", {
       currentScore: this.tally.score,
     });
+
+    // Clean, explicit branching. No hidden conditional checks down the line.
+    if (this.gameState.mode === "GAME_OVER") {
+      // GameState has already emitted "game:over", which triggers handleGameOver()
+      return;
+    }
+
+    // If we survived, explicitly move to the next logical phase
+    this.startRespawnCountdown();
   }
 
   startRespawnCountdown(): void {
@@ -167,12 +210,8 @@ export class Director {
 
   triggerIntermission(payload: { level: number; score: number }): void {
     this.resetTickingState();
+
     const maze = this.registry.getMaze();
-    if (!maze) {
-      console.error("[Director] Cannot start intermission: no maze available");
-      this.startGame();
-      return;
-    }
 
     for (let i = 0; i < FLASH_COUNT; i++) {
       this.activeSequence
@@ -190,14 +229,45 @@ export class Director {
 
     this.activeSequence.addCallback(() => {
       eventBus.emit("command:clear_canvases");
+
+      // Step 1: Allocate the scene in memory safely
+      this.sceneRegistry.loadRandomScene();
+      const newScene = this.sceneRegistry.getActiveScene();
+
+      if (!newScene) {
+        throw new Error("[Director] Failed to resolve active scene resource.");
+      }
+
+      // Step 2: Explicitly PUSH the cache pointer to the engine cores.
+      // There is zero guessing games or race conditions here.
+      this.gameLoop.setActiveScene(newScene);
+      this.sceneRenderer.setActiveScene(newScene);
+
+      this.renderer.switchRenderer("INTERMISSION");
+
+      // Step 3: Now it is perfectly safe to broadcast that the phase has started
       eventBus.emit("level:intermission_start", {
         nextLevel: payload.level + 1,
       });
 
-      this.sceneRegistry.startRandomScene(INTERMISSION_DURATION, () => {
+      // Step 4: Fire the scene timeline execution
+      this.sceneRegistry.startActiveScene(INTERMISSION_DURATION, () => {
         eventBus.emit("command:clear_canvases");
-        this.gameState.mode = "LEVEL_TRANSITION";
+
+        // Step 5: Clean teardown. Scrub the references explicitly.
+        this.gameLoop.setActiveScene(null);
+        this.sceneRenderer.setActiveScene(null);
+        this.sceneRenderer.clear();
+
+        eventBus.emit("game:mode_change", { mode: "LEVEL_TRANSITION" });
         this.loadLevel();
+
+        const updatables = this.registry.getAllUpdatable();
+        const drawables = this.registry.getAllDrawable();
+        this.gameLoop.setUpdatables(updatables);
+        this.gameRenderer.setDrawables(drawables);
+        this.renderer.switchRenderer("LEVEL_TRANSITION");
+
         this.startGame();
       });
     });

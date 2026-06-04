@@ -232,19 +232,23 @@ export class ClassicChaseScene implements IGameScene {
     this.elapsedTime += dt;
     this.animTime += dt;
 
+    // --- 1. POST-CHASE RECONSTRUCTION VISUAL PHASE ---
     if (this.simState !== "CHASE") {
       this.fxRadius += 550 * dt;
       this.fxAlpha = Math.max(0, this.fxAlpha - 1.6 * dt);
 
-      if (this.elapsedTime >= this.duration || this.fxAlpha <= 0) {
+      // FIX: Only wrap up the scene when the Director's allocated intermission clock completely runs out
+      if (this.elapsedTime >= this.duration) {
         this.wrapUpScene();
       }
       return;
     }
 
+    // --- 2. RUN ACTOR SIMULATION Ticks ---
     this.advancePacman(dt);
     this.advanceBlinkyHunt(dt);
 
+    // --- 3. STATE MATCHING CALCULATIONS ---
     const distanceBetweenCrafts = Math.hypot(
       this.pacman.x - this.blinky.x,
       this.pacman.y - this.blinky.y,
@@ -261,6 +265,7 @@ export class ClassicChaseScene implements IGameScene {
       this.simState = "PACMAN_ESCAPED";
     }
 
+    // --- 4. GLOBAL TIMEOUT FALLBACK ---
     if (this.elapsedTime >= this.duration) {
       this.wrapUpScene();
     }
@@ -290,9 +295,12 @@ export class ClassicChaseScene implements IGameScene {
       this.pacman.angle = Math.atan2(dy, dx);
       this.pacman.x += (dx / dist) * step;
       this.pacman.y += (dy / dist) * step;
-      
+
       const lastPoint = this.pacman.history[this.pacman.history.length - 1];
-      if (!lastPoint || Math.hypot(this.pacman.x - lastPoint.x, this.pacman.y - lastPoint.y) > 6) {
+      if (
+        !lastPoint ||
+        Math.hypot(this.pacman.x - lastPoint.x, this.pacman.y - lastPoint.y) > 6
+      ) {
         this.pacman.history.push({ x: this.pacman.x, y: this.pacman.y });
       }
     }
@@ -342,7 +350,10 @@ export class ClassicChaseScene implements IGameScene {
       this.blinky.y += (dy / dist) * step;
 
       const lastPoint = this.blinky.history[this.blinky.history.length - 1];
-      if (!lastPoint || Math.hypot(this.blinky.x - lastPoint.x, this.blinky.y - lastPoint.y) > 6) {
+      if (
+        !lastPoint ||
+        Math.hypot(this.blinky.x - lastPoint.x, this.blinky.y - lastPoint.y) > 6
+      ) {
         this.blinky.history.push({ x: this.blinky.x, y: this.blinky.y });
       }
     }
@@ -357,7 +368,10 @@ export class ClassicChaseScene implements IGameScene {
     }
   }
 
-  private drawPacmanArt(ctx: CanvasRenderingContext2D, actor: VectorActor): void {
+  private drawPacmanArt(
+    ctx: CanvasRenderingContext2D,
+    actor: VectorActor,
+  ): void {
     ctx.save();
     ctx.translate(actor.x, actor.y);
     ctx.rotate(actor.angle);
@@ -368,7 +382,7 @@ export class ClassicChaseScene implements IGameScene {
     ctx.lineWidth = 2;
     ctx.fillStyle = "#020914";
 
-    const mouthAngle = (Math.sin(this.animTime * 24) + 1) * 0.20 + 0.05;
+    const mouthAngle = (Math.sin(this.animTime * 24) + 1) * 0.2 + 0.05;
 
     ctx.beginPath();
     ctx.arc(0, 0, 9, mouthAngle, Math.PI * 2 - mouthAngle, false);
@@ -380,7 +394,10 @@ export class ClassicChaseScene implements IGameScene {
     ctx.restore();
   }
 
-  private drawBlinkyArt(ctx: CanvasRenderingContext2D, actor: VectorActor): void {
+  private drawBlinkyArt(
+    ctx: CanvasRenderingContext2D,
+    actor: VectorActor,
+  ): void {
     ctx.save();
     ctx.translate(actor.x, actor.y);
     ctx.rotate(actor.angle);
@@ -410,10 +427,13 @@ export class ClassicChaseScene implements IGameScene {
     ctx.restore();
   }
 
-  private drawLightTrail(ctx: CanvasRenderingContext2D, actor: VectorActor): void {
+  private drawLightTrail(
+    ctx: CanvasRenderingContext2D,
+    actor: VectorActor,
+  ): void {
     if (actor.history.length < 2) return;
     ctx.save();
-    ctx.lineCap = "round"; 
+    ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
     const head = { x: actor.x, y: actor.y };
@@ -447,7 +467,13 @@ export class ClassicChaseScene implements IGameScene {
     ctx.restore();
   }
 
-  private renderFXLayer(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, canvasW: number, canvasH: number): void {
+  private renderFXLayer(
+    ctx: CanvasRenderingContext2D,
+    centerX: number,
+    centerY: number,
+    canvasW: number,
+    canvasH: number,
+  ): void {
     ctx.save();
     const pulseFade = Math.max(0, this.fxAlpha);
     ctx.globalAlpha = pulseFade;
@@ -457,11 +483,20 @@ export class ClassicChaseScene implements IGameScene {
       ctx.shadowColor = "#ff3300";
       ctx.shadowBlur = 12;
       ctx.lineWidth = 2;
-      
-      ctx.strokeRect(centerX - this.fxRadius, centerY - this.fxRadius, this.fxRadius * 2, this.fxRadius * 2);
-      ctx.strokeRect(centerX - this.fxRadius * 0.4, centerY - this.fxRadius * 0.4, this.fxRadius * 0.8, this.fxRadius * 0.8);
-    } 
-    else if (this.simState === "PACMAN_ESCAPED") {
+
+      ctx.strokeRect(
+        centerX - this.fxRadius,
+        centerY - this.fxRadius,
+        this.fxRadius * 2,
+        this.fxRadius * 2,
+      );
+      ctx.strokeRect(
+        centerX - this.fxRadius * 0.4,
+        centerY - this.fxRadius * 0.4,
+        this.fxRadius * 0.8,
+        this.fxRadius * 0.8,
+      );
+    } else if (this.simState === "PACMAN_ESCAPED") {
       ctx.strokeStyle = "rgba(0, 240, 255, " + pulseFade * 0.8 + ")";
       ctx.lineWidth = 1.5;
       ctx.shadowColor = "#00f0ff";
@@ -476,10 +511,20 @@ export class ClassicChaseScene implements IGameScene {
 
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;
-      ctx.strokeRect(centerX - this.fxRadius * 0.5, centerY - this.fxRadius * 0.5, this.fxRadius, this.fxRadius);
-      
+      ctx.strokeRect(
+        centerX - this.fxRadius * 0.5,
+        centerY - this.fxRadius * 0.5,
+        this.fxRadius,
+        this.fxRadius,
+      );
+
       ctx.strokeStyle = "#00f0ff";
-      ctx.strokeRect(centerX - this.fxRadius * 0.9, centerY - this.fxRadius * 0.9, this.fxRadius * 1.8, this.fxRadius * 1.8);
+      ctx.strokeRect(
+        centerX - this.fxRadius * 0.9,
+        centerY - this.fxRadius * 0.9,
+        this.fxRadius * 1.8,
+        this.fxRadius * 1.8,
+      );
 
       ctx.fillStyle = "#00f0ff";
       ctx.font = "14px monospace";
@@ -509,13 +554,21 @@ export class ClassicChaseScene implements IGameScene {
     ctx.strokeStyle = "rgba(0, 160, 255, 0.12)"; // Increased visibility
     ctx.lineWidth = 1.0;
 
-    for (let x = offsetX; x <= offsetX + this.cols * this.tileSize; x += this.tileSize) {
+    for (
+      let x = offsetX;
+      x <= offsetX + this.cols * this.tileSize;
+      x += this.tileSize
+    ) {
       ctx.beginPath();
       ctx.moveTo(x + 0.5, offsetY);
       ctx.lineTo(x + 0.5, offsetY + this.rows * this.tileSize);
       ctx.stroke();
     }
-    for (let y = offsetY; y <= offsetY + this.rows * this.tileSize; y += this.tileSize) {
+    for (
+      let y = offsetY;
+      y <= offsetY + this.rows * this.tileSize;
+      y += this.tileSize
+    ) {
       ctx.beginPath();
       ctx.moveTo(offsetX, y + 0.5);
       ctx.lineTo(offsetX + this.cols * this.tileSize, y + 0.5);
@@ -535,21 +588,33 @@ export class ClassicChaseScene implements IGameScene {
           const tx = offsetX + c * this.tileSize;
           const ty = offsetY + r * this.tileSize;
 
-          const upWall    = r > 0 && this.mapData[r - 1][c] === "1";
+          const upWall = r > 0 && this.mapData[r - 1][c] === "1";
           const rightWall = c < this.cols - 1 && this.mapData[r][c + 1] === "1";
-          const downWall  = r < this.rows - 1 && this.mapData[r + 1][c] === "1";
-          const leftWall  = c > 0 && this.mapData[r][c - 1] === "1";
+          const downWall = r < this.rows - 1 && this.mapData[r + 1][c] === "1";
+          const leftWall = c > 0 && this.mapData[r][c - 1] === "1";
 
-          if (upWall) { ctx.moveTo(tx, ty); ctx.lineTo(tx + this.tileSize, ty); }
-          if (rightWall) { ctx.moveTo(tx + this.tileSize, ty); ctx.lineTo(tx + this.tileSize, ty + this.tileSize); }
-          if (downWall) { ctx.moveTo(tx, ty + this.tileSize); ctx.lineTo(tx + this.tileSize, ty + this.tileSize); }
-          if (leftWall) { ctx.moveTo(tx, ty); ctx.lineTo(tx, ty + this.tileSize); }
+          if (upWall) {
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(tx + this.tileSize, ty);
+          }
+          if (rightWall) {
+            ctx.moveTo(tx + this.tileSize, ty);
+            ctx.lineTo(tx + this.tileSize, ty + this.tileSize);
+          }
+          if (downWall) {
+            ctx.moveTo(tx, ty + this.tileSize);
+            ctx.lineTo(tx + this.tileSize, ty + this.tileSize);
+          }
+          if (leftWall) {
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(tx, ty + this.tileSize);
+          }
         }
       }
     }
 
     // Single-Pass Neon Glow Environment Ring (Lowered global alpha to 0.3 for transparency balance)
-    ctx.strokeStyle = "rgba(0, 210, 255, 0.3)"; 
+    ctx.strokeStyle = "rgba(0, 210, 255, 0.3)";
     ctx.shadowBlur = 6;
     ctx.shadowColor = "#00bfff";
     ctx.lineWidth = 2.0;
@@ -557,7 +622,7 @@ export class ClassicChaseScene implements IGameScene {
 
     // Single-Pass Electric White Center Core Filament
     ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-    ctx.shadowBlur = 0; 
+    ctx.shadowBlur = 0;
     ctx.lineWidth = 1.0;
     ctx.stroke();
     ctx.restore();
@@ -567,7 +632,7 @@ export class ClassicChaseScene implements IGameScene {
     this.drawLightTrail(ctx, this.blinky);
 
     const exitCoord = this.getAbsoluteCoords(this.exitNode.r, this.exitNode.c);
-    
+
     ctx.save();
     ctx.translate(exitCoord.x, exitCoord.y);
     ctx.strokeStyle = "#00ffea";
@@ -583,11 +648,11 @@ export class ClassicChaseScene implements IGameScene {
       this.drawBlinkyArt(ctx, this.blinky);
     } else {
       this.renderFXLayer(
-        ctx, 
-        this.simState === "PACMAN_CAUGHT" ? this.pacman.x : exitCoord.x, 
+        ctx,
+        this.simState === "PACMAN_CAUGHT" ? this.pacman.x : exitCoord.x,
         this.simState === "PACMAN_CAUGHT" ? this.pacman.y : exitCoord.y,
         w,
-        h
+        h,
       );
     }
 
@@ -600,15 +665,27 @@ export class ClassicChaseScene implements IGameScene {
       ctx.textAlign = "left";
       ctx.fillText(`// I/O_PORT_TRACE: RUNNING`, offsetX, offsetY - 35);
       ctx.textAlign = "right";
-      ctx.fillText(`GRID_SEGMENT: 0x4F9B`, offsetX + this.cols * this.tileSize, offsetY - 35);
+      ctx.fillText(
+        `GRID_SEGMENT: 0x4F9B`,
+        offsetX + this.cols * this.tileSize,
+        offsetY - 35,
+      );
     } else if (this.simState === "PACMAN_CAUGHT") {
       ctx.fillStyle = "rgba(255, 45, 0, 0.85)";
       ctx.textAlign = "center";
-      ctx.fillText(`>> CORE_ERR: SOCKET_CLOSED_BY_INTERCEPTOR <<`, w / 2, offsetY - 35);
+      ctx.fillText(
+        `>> CORE_ERR: SOCKET_CLOSED_BY_INTERCEPTOR <<`,
+        w / 2,
+        offsetY - 35,
+      );
     } else if (this.simState === "PACMAN_ESCAPED") {
       ctx.fillStyle = "#00ffd5";
       ctx.textAlign = "center";
-      ctx.fillText(`>> DE_RES_COMPLETE: OVERRIDE_VECTOR_LOADED <<`, w / 2, offsetY - 35);
+      ctx.fillText(
+        `>> DE_RES_COMPLETE: OVERRIDE_VECTOR_LOADED <<`,
+        w / 2,
+        offsetY - 35,
+      );
     }
   }
 

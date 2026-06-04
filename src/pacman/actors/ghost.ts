@@ -95,6 +95,7 @@ export class Ghost extends Actor {
     this.waveTimer = 0;
     this.waveIndex = 0;
     this.needsRedraw = true;
+    this.renderer.clear();
   }
 
   private initEventListeners(): void {

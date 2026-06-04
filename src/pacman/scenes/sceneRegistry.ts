@@ -1,15 +1,23 @@
-// sceneRegistry.ts - Now manages the active scene lifecycle
+// src/scenes/sceneRegistry.ts
 import { eventBus } from "../core/eventBus.js";
 import { ClassicChaseScene } from "./classicChaseScene.js";
 import type { IGameScene } from "../interfaces.js";
 
 export class SceneRegistry {
+  private static instance: SceneRegistry | null = null;
   private scenes: IGameScene[] = [];
   private activeScene: IGameScene | null = null;
   private isInitialized = false;
 
-  constructor() {
+  private constructor() {
     this.initEventListeners();
+  }
+
+  static getInstance(): SceneRegistry {
+    if (!SceneRegistry.instance) {
+      SceneRegistry.instance = new SceneRegistry();
+    }
+    return SceneRegistry.instance;
   }
 
   private initEventListeners(): void {
@@ -22,17 +30,23 @@ export class SceneRegistry {
     this.isInitialized = true;
   }
 
-  public getRandomScene(): IGameScene {
+  public loadRandomScene(): void {
     if (!this.isInitialized || this.scenes.length === 0) {
-      throw new Error("[SceneRegistry] No scenes available");
+      throw new Error("[SceneRegistry] No scenes available or initialized.");
     }
+
+    this.clearActiveScene();
     const randomIndex = Math.floor(Math.random() * this.scenes.length);
-    return this.scenes[randomIndex];
+    this.activeScene = this.scenes[randomIndex];
   }
 
-  public startRandomScene(duration: number, onComplete?: () => void): void {
-    this.clearActiveScene();
-    this.activeScene = this.getRandomScene();
+  public startActiveScene(duration: number, onComplete?: () => void): void {
+    if (!this.activeScene) {
+      throw new Error(
+        "[SceneRegistry] Cannot start scene: No active scene loaded.",
+      );
+    }
+
     this.activeScene.start(duration, () => {
       this.clearActiveScene();
       onComplete?.();

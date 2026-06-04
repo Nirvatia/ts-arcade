@@ -1,15 +1,17 @@
-// src/game/Renderer.ts
-import { RenderTracker } from "../debug/renderTracker.js";
-import { GameRegistry } from "../game/gameRegistry.js";
+import { GameRenderer } from "./gameRenderer.js";
+import { SceneRenderer } from "./SceneRenderer.js";
+import type { IRenderer } from "../interfaces.js";
 
 export class Renderer {
   private static instance: Renderer | null = null;
-  private registry: GameRegistry;
-  private tracker: RenderTracker;
+  private gameRenderer: GameRenderer;
+  private sceneRenderer: SceneRenderer;
+  private currentRenderer: IRenderer | null = null;
 
   private constructor() {
-    this.registry = GameRegistry.getInstance();
-    this.tracker = RenderTracker.getInstance();
+    this.gameRenderer = GameRenderer.getInstance();
+    this.sceneRenderer = SceneRenderer.getInstance();
+    this.currentRenderer = this.gameRenderer;
   }
 
   static getInstance(): Renderer {
@@ -19,18 +21,22 @@ export class Renderer {
     return Renderer.instance;
   }
 
+  public switchRenderer(mode: string): void {
+    switch (mode) {
+      case "INTERMISSION":
+        this.currentRenderer = this.sceneRenderer;
+        break;
+      case "LEVEL_TRANSITION":
+        this.currentRenderer = this.gameRenderer;
+        break;
+      case "GAME_OVER":
+      default:
+        this.currentRenderer = null;
+        break;
+    }
+  }
+
   render(): void {
-    this.registry.getAllDrawable().forEach((entity) => {
-      if (entity.needsRedraw) {
-        entity.clearCanvas();
-        entity.draw();
-        entity.needsRedraw = false;
-
-        const key = entity.canvasId || entity.constructor.name;
-        this.tracker.recordDraw(key);
-      }
-    });
-
-    this.tracker.processMetrics();
+    this.currentRenderer?.render();
   }
 }
