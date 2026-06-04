@@ -1,3 +1,4 @@
+// src/entities/dot.ts
 import { CFG_CANVAS } from "../config/canvas.js";
 import { eventBus } from "../core/eventBus.js";
 import type { Collectible } from "../interfaces.js";
@@ -9,7 +10,7 @@ export class Dot extends WorldObject implements Collectible {
 
   constructor() {
     super(CFG_CANVAS.canvasIds.dots);
-    this.dotSize = this.tileSize * 0.11;
+    this.dotSize = this.tileSize * 0.16; // Marginally increased for vector tracking lines
     this.initEventListeners();
   }
 
@@ -64,19 +65,42 @@ export class Dot extends WorldObject implements Collectible {
   draw(): void {
     this.clearCanvas();
     const ctx = this.ctx;
+    const ts = this.tileSize;
 
     ctx.save();
-    ctx.shadowColor = "rgba(0, 200, 255, 0.5)";
-    ctx.shadowBlur = 3;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+    // Using screen composition so overlapping neon vectors blend cleanly
+    ctx.globalCompositeOperation = "screen";
 
     this.positions.forEach((pos) => {
       const [i, j] = pos.split(",").map(Number);
-      const cx = this.tileSize * j + this.tileSize / 2;
-      const cy = this.tileSize * i + this.tileSize / 2;
-      const half = this.dotSize / 2;
+      const cx = ts * j + ts / 2;
+      const cy = ts * i + ts / 2;
+      const r = this.dotSize * 0.5;
 
-      ctx.fillRect(cx - half, cy - half, this.dotSize, this.dotSize);
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      // --- PASS 1: TRON GRID GLOW MATRIX ---
+      ctx.shadowColor = "rgba(0, 180, 255, 0.85)";
+      ctx.shadowBlur = 4;
+      ctx.strokeStyle = "rgba(0, 210, 255, 0.65)";
+      ctx.lineWidth = 1.0;
+
+      // Draw horizontal and vertical tracking crosses
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.5, 0);
+      ctx.lineTo(r * 1.5, 0);
+      ctx.moveTo(0, -r * 1.5);
+      ctx.lineTo(0, r * 1.5);
+      ctx.stroke();
+
+      // --- PASS 2: COMPRESSED DATA CORE ---
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "#ffffff";
+      ctx.shadowBlur = 2;
+      ctx.fillRect(-r * 0.5, -r * 0.5, r, r);
+
+      ctx.restore();
     });
 
     ctx.restore();
