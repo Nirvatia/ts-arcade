@@ -104,7 +104,7 @@ export class GameLoop {
         }
       }
 
-      // this.tracker.endFrame(workStart);
+      this.tracker.endFrame(workStart);
     }
   }
 }
