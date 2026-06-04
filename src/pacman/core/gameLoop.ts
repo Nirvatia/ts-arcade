@@ -1,8 +1,8 @@
-// src/core/gameLoop.ts
-import { GameState } from "../game/gameState.svelte.js";
-import { GameLoopTracker } from "../debug/gameLoopTracker.js";
-import { Renderer } from "./renderer.js";
-import type { IGameScene, Updatable } from "../interfaces.js";
+import { GameLoopTracker } from "../debug/GameLoopTracker.js";
+import { GameState } from "../game/GameState.svelte.js";
+import { Renderer } from "../render/Renderer.js";
+
+import type { IGameScene, Updatable } from "../shared/types.js";
 
 export class GameLoop {
   private static instance: GameLoop;

@@ -1,6 +1,7 @@
-import { CFG_CANVAS } from "../config/canvas.js";
-import { CanvasLayer } from "../core/canvasLayer.js";
-import type { IGameScene } from "../interfaces.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { CanvasLayer } from "../render/CanvasLayer.js";
+
+import type { IGameScene } from "../shared/types.js";
 
 interface Point {
   r: number;
@@ -21,7 +22,7 @@ interface VectorActor {
 
 type SimulationState = "CHASE" | "PACMAN_ESCAPED" | "PACMAN_CAUGHT";
 
-export class ClassicChaseScene implements IGameScene {
+export class ChaseScene implements IGameScene {
   public readonly id = "classic_chase";
   private layer: CanvasLayer;
   private fontStyle: string;

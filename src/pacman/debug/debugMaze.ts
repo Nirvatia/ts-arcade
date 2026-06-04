@@ -1,6 +1,6 @@
-import type { TileType } from "../types.js";
+import type { TileType } from "../shared/types.js";
 
-export function drawLevel4Debug(map: TileType[][]): () => void {
+export function debugMaze(map: TileType[][]): () => void {
   // 1. Create a full-screen top-layer canvas
   const canvas = document.createElement("canvas");
   canvas.style.position = "fixed";

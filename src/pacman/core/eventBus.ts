@@ -1,4 +1,4 @@
-import type { EventPayloads, GameEvent } from "../gameEvents.js";
+import type { EventPayloads, GameEvent } from "../shared/gameEvents.js";
 
 /**
  * Type-safe event bus for Pacman game.
@@ -6,7 +6,8 @@ import type { EventPayloads, GameEvent } from "../gameEvents.js";
  */
 class EventBus {
   // Partial record ensures we don't need to initialize every event key at startup
-  private listeners: Partial<Record<GameEvent, Array<(payload: any) => void>>> = {};
+  private listeners: Partial<Record<GameEvent, Array<(payload: any) => void>>> =
+    {};
 
   /**
    * Subscribe to an event.
@@ -14,7 +15,7 @@ class EventBus {
    */
   public on<K extends GameEvent>(
     event: K,
-    handler: (payload: EventPayloads[K]) => void
+    handler: (payload: EventPayloads[K]) => void,
   ): void {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
@@ -27,7 +28,7 @@ class EventBus {
    */
   public off<K extends GameEvent>(
     event: K,
-    handler: (payload: EventPayloads[K]) => void
+    handler: (payload: EventPayloads[K]) => void,
   ): void {
     const handlers = this.listeners[event];
     if (!handlers) return;

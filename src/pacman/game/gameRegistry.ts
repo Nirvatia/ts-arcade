@@ -1,17 +1,17 @@
-// src/core/GameRegistry.ts
+import { CFG_PACMAN } from "../config/pacman.config.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { CFG_GHOSTS } from "../config/ghost.config.js";
 
-import { Ghost } from "../actors/ghost.js";
-import { Pacman } from "../actors/pacman.js";
-import { CFG_CANVAS } from "../config/canvas.js";
-import { CFG_GHOSTS } from "../config/ghosts.js";
-import { CFG_PACMAN } from "../config/pacman.js";
-import { CanvasComposite } from "../core/canvasComposite.js";
-import { eventBus } from "../core/eventBus.js";
-import type { Drawable, Updatable } from "../interfaces.js";
-import { Vignette } from "../vfx/vignette.js";
-import { Dot } from "../world/dot.js";
-import { Maze } from "../world/maze.js";
-import { Pill } from "../world/pill.js";
+import { CanvasComposite } from "../render/CanvasComposite.js";
+import { eventBus } from "../core/EventBus.js";
+import { Ghost } from "../actors/ghost/Ghost.js";
+import { Pacman } from "../actors/pacman/Pacman.js";
+import { Pill } from "../world/Pill.js";
+import { Dot } from "../world/Dot.js";
+import { Maze } from "../world/Maze.js";
+import { Vignette } from "../vfx/Vignette.js";
+
+import type { Drawable, Updatable } from "../shared/types.js";
 
 export class GameRegistry {
   private static instance: GameRegistry | null = null;

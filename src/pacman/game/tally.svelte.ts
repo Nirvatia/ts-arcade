@@ -1,11 +1,11 @@
-import { CFG_SCORE } from "../config/score.js";
-import { eventBus } from "../core/eventBus.js";
+import { CFG_SCORE } from "../config/score.config.js";
+import { eventBus } from "../core/EventBus.js";
 
 export class Tally {
   private static instance: Tally;
 
   private _state = $state({
-    score: 0
+    score: 0,
   });
 
   private _ghostMultiplier: number = 0;

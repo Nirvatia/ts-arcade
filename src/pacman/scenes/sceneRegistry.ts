@@ -1,7 +1,7 @@
-// src/scenes/sceneRegistry.ts
-import { eventBus } from "../core/eventBus.js";
-import { ClassicChaseScene } from "./classicChaseScene.js";
-import type { IGameScene } from "../interfaces.js";
+import { eventBus } from "../core/EventBus.js";
+import { ChaseScene } from "./ChaseScene.js";
+
+import type { IGameScene } from "../shared/types.js";
 
 export class SceneRegistry {
   private static instance: SceneRegistry | null = null;
@@ -26,7 +26,7 @@ export class SceneRegistry {
 
   private init(): void {
     if (this.isInitialized) return;
-    this.scenes.push(new ClassicChaseScene());
+    this.scenes.push(new ChaseScene());
     this.isInitialized = true;
   }
 

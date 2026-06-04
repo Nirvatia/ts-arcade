@@ -1,6 +1,6 @@
-import { eventBus } from "../core/eventBus.js";
-import { GameRegistry } from "../game/gameRegistry.js";
-import { GameState } from "../game/gameState.svelte.js";
+import { eventBus } from "../core/EventBus.js";
+import { GameRegistry } from "../game/GameRegistry.js";
+import { GameState } from "../game/GameState.svelte.js";
 
 /**
  * Управляет всеми звуковыми эффектами и музыкой в игре.
@@ -202,14 +202,20 @@ export class SFX {
 
     eventBus.on("game:started", () => {
       // FIX 2: Explicit state protection against runtime frame updates
-      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") {
+      if (
+        gameState.mode === "LEVEL_TRANSITION" ||
+        gameState.mode === "LEVEL_COMPLETE"
+      ) {
         return;
       }
       switchMusic("siren_0", true);
     });
 
     eventBus.on("game:resumed", () => {
-      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") {
+      if (
+        gameState.mode === "LEVEL_TRANSITION" ||
+        gameState.mode === "LEVEL_COMPLETE"
+      ) {
         return;
       }
       switchMusic("siren_0", true);
@@ -217,8 +223,12 @@ export class SFX {
 
     eventBus.on("power_pill:activated", () => {
       // Don't play chase audio if we are during intermission sequence transitions
-      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") return;
-      
+      if (
+        gameState.mode === "LEVEL_TRANSITION" ||
+        gameState.mode === "LEVEL_COMPLETE"
+      )
+        return;
+
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) {
         this.currentMusicName = "fright";
@@ -228,7 +238,11 @@ export class SFX {
     });
 
     eventBus.on("power_pill:expired", () => {
-      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") return;
+      if (
+        gameState.mode === "LEVEL_TRANSITION" ||
+        gameState.mode === "LEVEL_COMPLETE"
+      )
+        return;
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) return;
       switchMusic("siren_0", true);
@@ -241,7 +255,11 @@ export class SFX {
     });
 
     eventBus.on("ghost:returned_home", () => {
-      if (gameState.mode === "LEVEL_TRANSITION" || gameState.mode === "LEVEL_COMPLETE") return;
+      if (
+        gameState.mode === "LEVEL_TRANSITION" ||
+        gameState.mode === "LEVEL_COMPLETE"
+      )
+        return;
       const runningEyes = registry.getGhosts().some((g) => g.state === "EATEN");
       if (runningEyes) return;
       if (gameState.isBuffed) {

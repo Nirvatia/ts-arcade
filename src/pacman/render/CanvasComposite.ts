@@ -1,6 +1,5 @@
-// src/core/CanvasComposite.ts
-import type { Drawable } from "../interfaces.js";
-import { CanvasLayer } from "./canvasLayer.js";
+import type { Drawable } from "../shared/types.js";
+import { CanvasLayer } from "./CanvasLayer.js";
 
 export class CanvasComposite implements Drawable {
   public readonly canvasId: string;
@@ -16,12 +15,10 @@ export class CanvasComposite implements Drawable {
     this.children.push(child);
   }
 
-  // Pass-through context so children can draw on this canvas
   get ctx(): CanvasRenderingContext2D {
     return this.canvasLayer.ctx;
   }
 
-  // The group needs a redraw if ANY child inside it needs a redraw
   get needsRedraw(): boolean {
     return this.children.some((child) => child.needsRedraw);
   }
@@ -30,30 +27,28 @@ export class CanvasComposite implements Drawable {
     this.children.forEach((child) => (child.needsRedraw = value));
   }
 
-  requestRedraw(): void {
+  public requestRedraw(): void {
     this.needsRedraw = true;
   }
 
-  // Wipes the shared sheet EXACTLY ONCE per frame step
-  clearCanvas(): void {
+  public clearCanvas(): void {
     this.canvasLayer.clear();
   }
 
-  init(): void {
+  public init(): void {
     this.children.forEach((child) => child.init?.());
   }
 
-  reset(): void {
+  public reset(): void {
     this.clearCanvas();
     this.canvasLayer.resize();
     this.children.forEach((child) => child.reset?.());
   }
 
-  // Draws all elements sequentially onto the cleared buffer sheet
-  draw(): void {
+  public draw(): void {
     this.children.forEach((child) => {
       child.draw();
-      child.needsRedraw = false; // Reset individual child flags safely
+      child.needsRedraw = false;
     });
   }
 }

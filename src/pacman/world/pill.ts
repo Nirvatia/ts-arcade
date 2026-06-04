@@ -1,8 +1,8 @@
-// src/entities/pill.ts
-import { CFG_CANVAS } from "../config/canvas.js";
-import { eventBus } from "../core/eventBus.js";
-import type { Collectible, Updatable } from "../interfaces.js";
-import { WorldObject } from "./worldObject.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { eventBus } from "../core/EventBus.js";
+import { WorldObject } from "./WorldObject.js";
+
+import type { Collectible, Updatable } from "../shared/types.js";
 
 export class Pill extends WorldObject implements Updatable, Collectible {
   private animationCounter: number = 0;

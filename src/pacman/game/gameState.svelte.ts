@@ -1,9 +1,10 @@
-import { Clock } from "../core/clock.svelte.js";
-import { eventBus } from "../core/eventBus.js";
+import { Clock } from "../core/Clock.svelte.js";
+import { eventBus } from "../core/EventBus.js";
 import { createPathGraph } from "../pathfinding/graph.js";
-import { generateLevelConfig } from "../utils.js";
-import type { GraphType, LevelConfigType } from "../types.js";
-import type { GameMode } from "../gameModes.js";
+import { generateLevelConfig } from "../shared/utils.js";
+
+import type { GameMode } from "../shared/gameModes.js";
+import type { GraphType, LevelConfigType } from "../shared/types.js";
 
 export class GameState {
   private static instance: GameState;

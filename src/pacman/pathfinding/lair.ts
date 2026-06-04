@@ -1,33 +1,31 @@
-import type { TileType } from "../types.js";
+import type { TileType } from "../shared/types.js";
 
 /**
- * Находит выход из логова призраков (тайл над "GL").
- *
- * @param map - двумерный массив тайлов карты
- * @returns координаты выхода в формате "y,x"
+ * Finds the tile directly above the ghost lair gate ("GL") to locate the exit point.
+ * @param map - 2D grid matrix of the level map
+ * @returns Coordinate string formatted as "y,x"
  */
-export function findLairExit(map: string[][]): string {
+export function findLairExit(map: TileType[][]): string {
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
       if (map[y][x] === "GL") {
-        // Ищем тайл непосредственно над воротами логова
+        // Target the tile immediately above the lair gate if it is not a wall
         if (y > 0 && map[y - 1][x] !== "WH" && map[y - 1][x] !== "WV") {
           return `${y - 1},${x}`;
         }
-        // Запасной вариант: справа от ворот
+        // Fallback: use the tile to the right of the gate
         return `${y},${x + 1}`;
       }
     }
   }
-  return "11,13"; // Жёсткий fallback для стандартной карты
+  return "11,13"; // Hardcoded fallback for the standard map layout
 }
 
 /**
- * Находит все внутренние тайлы логова призраков (для случайного перемещения).
- * Использует Flood Fill от тайла под воротами "GL".
- *
- * @param map - двумерный массив тайлов карты
- * @returns массив координат внутренних тайлов в формате "y,x"
+ * Finds all empty space tiles inside the ghost lair using a Flood Fill algorithm.
+ * Starts from the tile directly below the lair gate ("GL").
+ * @param map - 2D grid matrix of the level map
+ * @returns Array of internal coordinate strings formatted as "y,x"
  */
 export function findLairInternalTiles(map: TileType[][]): string[] {
   const lairInternalTiles: string[] = [];
@@ -37,7 +35,7 @@ export function findLairInternalTiles(map: TileType[][]): string[] {
   const rows = map.length;
   const cols = map[0].length;
 
-  // 1. Находим ворота ("GL") и стартуем с тайла под ними
+  // 1. Locate the gate ("GL") and queue the tile beneath it
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       if (map[y][x] === "GL") {
@@ -51,15 +49,15 @@ export function findLairInternalTiles(map: TileType[][]): string[] {
     if (queue.length > 0) break;
   }
 
-  // Если ворот нет на карте — выходим
+  // Exit early if no gate is found on the map
   if (queue.length === 0) return [];
 
-  // 2. Flood Fill для сбора "ES" тайлов внутри стен
+  // 2. Flood Fill execution to collect empty space ("ES") tiles within the lair walls
   const directions = [
-    { dy: 1, dx: 0 }, // Вниз
-    { dy: -1, dx: 0 }, // Вверх
-    { dy: 0, dx: 1 }, // Вправо
-    { dy: 0, dx: -1 }, // Влево
+    { dy: 1, dx: 0 }, // Down
+    { dy: -1, dx: 0 }, // Up
+    { dy: 0, dx: 1 }, // Right
+    { dy: 0, dx: -1 }, // Left
   ];
 
   const wallTiles = new Set<TileType>([
@@ -76,12 +74,12 @@ export function findLairInternalTiles(map: TileType[][]): string[] {
     const current = queue.shift()!;
     const currentTile = map[current.y][current.x];
 
-    // Записываем пустые тайлы как валидные точки внутри логова
+    // Collect empty spaces as valid internal tiles
     if (currentTile === "ES") {
       lairInternalTiles.push(`${current.y},${current.x}`);
     }
 
-    // Проверяем всех 4 соседей
+    // Inspect all 4 orthogonal neighbors
     for (const { dy, dx } of directions) {
       const ny = current.y + dy;
       const nx = current.x + dx;
@@ -90,7 +88,7 @@ export function findLairInternalTiles(map: TileType[][]): string[] {
       if (ny >= 0 && ny < rows && nx >= 0 && nx < cols && !visited.has(key)) {
         const neighborTile = map[ny][nx];
 
-        // Если сосед не стена — продолжаем заливку
+        // Continue the fill if the neighboring tile is not a wall boundary
         if (!wallTiles.has(neighborTile)) {
           visited.add(key);
           queue.push({ y: ny, x: nx });

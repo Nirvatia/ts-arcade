@@ -1,11 +1,11 @@
-// src/entities/Pacman.ts
-import { CFG_CANVAS } from "../config/canvas.js";
-import type { PacmanConfig } from "../config/pacman.js";
-import { Collision } from "../core/collision.js";
-import { eventBus } from "../core/eventBus.js";
-import { GameRegistry } from "../game/gameRegistry.js";
-import { Actor } from "./actor.js";
-import type { Ghost } from "./ghost.js";
+import { CFG_CANVAS } from "../../config/canvas.config.js";
+import { GameRegistry } from "../../game/GameRegistry.js";
+import { Actor } from "../Actor.js";
+import { eventBus } from "../../core/EventBus.js";
+import { Collision } from "../../core/Collision.js";
+
+import type { Ghost } from "../ghost/Ghost.js";
+import type { PacmanConfig } from "../../config/pacman.config.js";
 
 interface EatParticle {
   x: number;
@@ -15,7 +15,14 @@ interface EatParticle {
   life: number;
   maxLife: number;
   color: string;
-  type: "SHARD" | "RING" | "LINE" | "GLITCH" | "GATEWAY" | "SCANLINE" | "THERMAL_BAR";
+  type:
+    | "SHARD"
+    | "RING"
+    | "LINE"
+    | "GLITCH"
+    | "GATEWAY"
+    | "SCANLINE"
+    | "THERMAL_BAR";
   size: number;
 }
 
@@ -103,24 +110,32 @@ export class Pacman extends Actor {
 
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
       this.spawnTrailParticle();
-      
+
       // OVERCLOCKED EMISSIONS: Spawn intense heat leaks when buffed
-      const particleChance = this.isBuffed ? 0.60 : 0.15; 
+      const particleChance = this.isBuffed ? 0.6 : 0.15;
       if (Math.random() < particleChance) {
-        const tX = this.x - (this.direction.dx * this.r * 0.8);
-        const tY = this.y - (this.direction.dy * this.r * 0.8);
-        
+        const tX = this.x - this.direction.dx * this.r * 0.8;
+        const tY = this.y - this.direction.dy * this.r * 0.8;
+
         this.eatParticles.push({
           x: tX + (Math.random() - 0.5) * (this.r * 0.5),
           y: tY + (Math.random() - 0.5) * (this.r * 0.5),
           // Eject fast breaking shards if buffed
-          vx: -this.direction.dx * (this.isBuffed ? 140 : 40) + (Math.random() - 0.5) * 30,
-          vy: -this.direction.dy * (this.isBuffed ? 140 : 40) + (Math.random() - 0.5) * 30,
+          vx:
+            -this.direction.dx * (this.isBuffed ? 140 : 40) +
+            (Math.random() - 0.5) * 30,
+          vy:
+            -this.direction.dy * (this.isBuffed ? 140 : 40) +
+            (Math.random() - 0.5) * 30,
           life: this.isBuffed ? 0.4 : 0.25,
           maxLife: this.isBuffed ? 0.4 : 0.25,
-          color: this.isBuffed ? (Math.random() > 0.4 ? "#ff3300" : "#ffaa00") : "#ffea00",
+          color: this.isBuffed
+            ? Math.random() > 0.4
+              ? "#ff3300"
+              : "#ffaa00"
+            : "#ffea00",
           type: this.isBuffed ? "GLITCH" : "SHARD",
-          size: this.isBuffed ? 3 + Math.random() * 4 : 1.5
+          size: this.isBuffed ? 3 + Math.random() * 4 : 1.5,
         });
       }
     }
@@ -132,7 +147,10 @@ export class Pacman extends Actor {
     this.teleport();
 
     // Re-verify portal crossing and execute visual snap
-    if (Math.abs(this.x - prevX) > this.tileSize * 2 || Math.abs(this.y - prevY) > this.tileSize * 2) {
+    if (
+      Math.abs(this.x - prevX) > this.tileSize * 2 ||
+      Math.abs(this.y - prevY) > this.tileSize * 2
+    ) {
       this.trailHistory = [];
       this.spawnTeleportVFX(prevX, prevY);
       this.spawnTeleportVFX(this.x, this.y);
@@ -144,7 +162,11 @@ export class Pacman extends Actor {
         this.spawnGhostEatVFX(collidedGhost.x, collidedGhost.y);
         this.ghostEatFlash = 1;
         eventBus.emit("command:ghost_eaten", { ghostName: collidedGhost.name });
-      } else if (!this.isBuffed && collidedGhost.state !== "FRIGHTENED" && collidedGhost.state !== "EATEN") {
+      } else if (
+        !this.isBuffed &&
+        collidedGhost.state !== "FRIGHTENED" &&
+        collidedGhost.state !== "EATEN"
+      ) {
         this.triggerDeath();
       }
     }
@@ -153,7 +175,11 @@ export class Pacman extends Actor {
   }
 
   private updateMovement(dt: number): void {
-    if (this.direction.dx === 0 && this.direction.dy === 0 && this.nextDirection) {
+    if (
+      this.direction.dx === 0 &&
+      this.direction.dy === 0 &&
+      this.nextDirection
+    ) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
     }
@@ -189,7 +215,10 @@ export class Pacman extends Actor {
     const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
     const { tileX, tileY } = Collision.getTile(this.x, this.y);
 
-    if (this.nextDirection.dx === -this.direction.dx && this.nextDirection.dy === -this.direction.dy) {
+    if (
+      this.nextDirection.dx === -this.direction.dx &&
+      this.nextDirection.dy === -this.direction.dy
+    ) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
       return;
@@ -200,7 +229,9 @@ export class Pacman extends Actor {
     if (Collision.isWall(targetTileX, targetTileY)) return;
 
     const turnThreshold = this.tileSize * this.config.turnThreshold;
-    const distanceToCenter = Math.sqrt((this.x - centerX) ** 2 + (this.y - centerY) ** 2);
+    const distanceToCenter = Math.sqrt(
+      (this.x - centerX) ** 2 + (this.y - centerY) ** 2,
+    );
 
     if (distanceToCenter < turnThreshold) {
       if (this.nextDirection.dx !== 0) this.y = centerY;
@@ -277,10 +308,15 @@ export class Pacman extends Actor {
     // 1. Gateway Rings
     for (let i = 0; i < 3; i++) {
       this.eatParticles.push({
-        x, y, vx: blastDirection, vy: 0,
-        life: 0.15 + i * 0.08, maxLife: 0.4,
+        x,
+        y,
+        vx: blastDirection,
+        vy: 0,
+        life: 0.15 + i * 0.08,
+        maxLife: 0.4,
         color: i === 1 ? "#ffaa00" : "#ffffff",
-        type: "GATEWAY", size: this.r * 0.5,
+        type: "GATEWAY",
+        size: this.r * 0.5,
       });
     }
 
@@ -294,17 +330,20 @@ export class Pacman extends Actor {
         life: 0.2 + Math.random() * 0.2,
         maxLife: 0.4,
         color: "#ffaa00",
-        type: "SCANLINE", size: 15 + Math.random() * 25,
+        type: "SCANLINE",
+        size: 15 + Math.random() * 25,
       });
     }
 
     // 3. Complete Portal Particle Explosion Burst (Restored)
     for (let i = 0; i < 15; i++) {
-      const angle = (Math.random() - 0.5) * (Math.PI * 0.6) + (isLeftPortal ? 0 : Math.PI);
+      const angle =
+        (Math.random() - 0.5) * (Math.PI * 0.6) + (isLeftPortal ? 0 : Math.PI);
       const speed = 180 + Math.random() * 220;
 
       this.eatParticles.push({
-        x, y,
+        x,
+        y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 0.25 + Math.random() * 0.25,
@@ -324,10 +363,15 @@ export class Pacman extends Actor {
       const angle = Math.random() * Math.PI * 2;
       const speed = 60 + Math.random() * 50;
       this.eatParticles.push({
-        x: cx, y: cy, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-        life: 0.2 + Math.random() * 0.15, maxLife: 0.3,
+        x: cx,
+        y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.2 + Math.random() * 0.15,
+        maxLife: 0.3,
         color: this.isBuffed ? "#ff5500" : "#ffea00",
-        type: "SHARD", size: 2 + Math.random() * 2,
+        type: "SHARD",
+        size: 2 + Math.random() * 2,
       });
     }
   }
@@ -338,25 +382,47 @@ export class Pacman extends Actor {
     const col = "#ffaa00";
 
     this.eatParticles.push({
-      x: cx, y: cy, vx: 0, vy: 0, life: 0.45, maxLife: 0.45,
-      color: col, type: "RING", size: this.r * 0.5
+      x: cx,
+      y: cy,
+      vx: 0,
+      vy: 0,
+      life: 0.45,
+      maxLife: 0.45,
+      color: col,
+      type: "RING",
+      size: this.r * 0.5,
     });
 
     for (let i = 0; i < 14; i++) {
       const speed = 180 + Math.random() * 260;
       const directionalSign = Math.random() > 0.5 ? 1 : -1;
       this.eatParticles.push({
-        x: cx, y: cy + (Math.random() - 0.5) * this.r,
-        vx: speed * directionalSign, vy: 0,
-        life: 0.3 + Math.random() * 0.3, maxLife: 0.6,
-        color: col, type: "THERMAL_BAR", size: 12 + Math.random() * 15
+        x: cx,
+        y: cy + (Math.random() - 0.5) * this.r,
+        vx: speed * directionalSign,
+        vy: 0,
+        life: 0.3 + Math.random() * 0.3,
+        maxLife: 0.6,
+        color: col,
+        type: "THERMAL_BAR",
+        size: 12 + Math.random() * 15,
       });
     }
   }
 
   private spawnGhostEatVFX(gx: number, gy: number): void {
     const particleCount = 28;
-    this.eatParticles.push({ x: gx, y: gy, vx: 0, vy: 0, life: 0.45, maxLife: 0.45, color: "#ffffff", type: "RING", size: 4 });
+    this.eatParticles.push({
+      x: gx,
+      y: gy,
+      vx: 0,
+      vy: 0,
+      life: 0.45,
+      maxLife: 0.45,
+      color: "#ffffff",
+      type: "RING",
+      size: 4,
+    });
 
     for (let i = 0; i < particleCount; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -364,9 +430,12 @@ export class Pacman extends Actor {
       const isLine = Math.random() > 0.55;
 
       this.eatParticles.push({
-        x: gx, y: gy,
-        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-        life: 0.3 + Math.random() * 0.4, maxLife: 0.7,
+        x: gx,
+        y: gy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.3 + Math.random() * 0.4,
+        maxLife: 0.7,
         color: Math.random() > 0.35 ? "#ffffff" : "#ffaa00",
         type: isLine ? "LINE" : "SHARD",
         size: isLine ? 4 + Math.random() * 6 : 2.5 + Math.random() * 2.5,
@@ -431,7 +500,7 @@ export class Pacman extends Actor {
       const p1 = this.trailHistory[i];
       const p2 = this.trailHistory[i + 1];
       const alpha = Math.max(0, p2.alpha);
-      
+
       ctx.globalAlpha = this.isBuffed ? alpha * 0.55 : alpha * 0.35;
       ctx.shadowBlur = this.isBuffed ? 18 * alpha : 6 * alpha;
       ctx.lineWidth = this.isBuffed ? 2.5 : 1;
@@ -468,10 +537,15 @@ export class Pacman extends Actor {
         ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
       } else if (p.type === "LINE") {
         ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(p.x, p.y - p.size); ctx.lineTo(p.x, p.y + p.size); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - p.size);
+        ctx.lineTo(p.x, p.y + p.size);
+        ctx.stroke();
       } else if (p.type === "RING") {
         ctx.lineWidth = 2 * alpha;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.stroke();
       } else if (p.type === "THERMAL_BAR") {
         ctx.fillRect(p.x - p.size / 2, p.y - 1, p.size, 2);
       } else if (p.type === "GLITCH") {
@@ -496,14 +570,20 @@ export class Pacman extends Actor {
       } else if (p.type === "SCANLINE") {
         const progress = p.life / p.maxLife;
         ctx.lineWidth = 2 * progress;
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.08, p.y); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.08, p.y);
+        ctx.stroke();
       }
       ctx.restore();
     }
   }
 
   private getRotation(): number {
-    const dir = this.direction.dx !== 0 || this.direction.dy !== 0 ? this.direction : this.lastDirection;
+    const dir =
+      this.direction.dx !== 0 || this.direction.dy !== 0
+        ? this.direction
+        : this.lastDirection;
     if (dir.dx === -1) return Math.PI;
     if (dir.dx === 1) return 0;
     if (dir.dy === -1) return -Math.PI / 2;
@@ -522,8 +602,11 @@ export class Pacman extends Actor {
 
     let mouthAngle: number;
     if (isMoving) {
-      const speedFactor = this.isBuffed ? this.config.mouthSpeed * 1.65 : this.config.mouthSpeed;
-      mouthAngle = Math.abs(Math.sin(timestamp * speedFactor)) * this.config.maxMouthAngle;
+      const speedFactor = this.isBuffed
+        ? this.config.mouthSpeed * 1.65
+        : this.config.mouthSpeed;
+      mouthAngle =
+        Math.abs(Math.sin(timestamp * speedFactor)) * this.config.maxMouthAngle;
     } else {
       mouthAngle = this.config.idleMouthAngle;
     }
@@ -535,22 +618,27 @@ export class Pacman extends Actor {
     const structuralColor = this.isBuffed ? "#ffffff" : "#ffe082";
 
     ctx.save();
-    
+
     // OVERCLOCK AFTERIMAGE JITTER: Apply micro-instability translations when buffed
     if (this.isBuffed && isMoving && Math.random() > 0.4) {
       const jitterRange = 1.8;
-      ctx.translate(cx + (Math.random() - 0.5) * jitterRange, cy + (Math.random() - 0.5) * jitterRange);
+      ctx.translate(
+        cx + (Math.random() - 0.5) * jitterRange,
+        cy + (Math.random() - 0.5) * jitterRange,
+      );
     } else {
       ctx.translate(cx, cy);
     }
-    
+
     ctx.rotate(rotation);
 
     if (this.ghostEatFlash > 0) {
       ctx.shadowColor = "#ffffff";
       ctx.shadowBlur = 30 * this.ghostEatFlash;
       ctx.fillStyle = `rgba(255, 255, 255, ${0.15 * this.ghostEatFlash})`;
-      ctx.beginPath(); ctx.arc(0, 0, r + 15, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 15, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // Outer Arc Vector Chassis
@@ -563,25 +651,38 @@ export class Pacman extends Actor {
     ctx.arc(0, 0, r - 2, startAngle, endAngle);
 
     const innerCutoff = r * 0.35;
-    ctx.lineTo(Math.cos(2 * Math.PI - mouthAngle) * innerCutoff, Math.sin(2 * Math.PI - mouthAngle) * innerCutoff);
-    ctx.lineTo(Math.cos(mouthAngle) * innerCutoff, Math.sin(mouthAngle) * innerCutoff);
+    ctx.lineTo(
+      Math.cos(2 * Math.PI - mouthAngle) * innerCutoff,
+      Math.sin(2 * Math.PI - mouthAngle) * innerCutoff,
+    );
+    ctx.lineTo(
+      Math.cos(mouthAngle) * innerCutoff,
+      Math.sin(mouthAngle) * innerCutoff,
+    );
     ctx.closePath();
 
     const pulseAlpha = 0.04 + Math.sin(timestamp * 0.006) * 0.03;
-    ctx.fillStyle = this.isBuffed ? `rgba(255, 81, 0, ${0.12 + pulseAlpha})` : `rgba(255, 234, 0, ${pulseAlpha})`;
+    ctx.fillStyle = this.isBuffed
+      ? `rgba(255, 81, 0, ${0.12 + pulseAlpha})`
+      : `rgba(255, 234, 0, ${pulseAlpha})`;
     ctx.fill();
     ctx.stroke();
 
     // Internal Matrix Scanline Overlay Grid
     ctx.save();
     ctx.clip();
-    ctx.strokeStyle = this.isBuffed ? "rgba(255, 81, 0, 0.3)" : "rgba(255, 234, 0, 0.14)";
+    ctx.strokeStyle = this.isBuffed
+      ? "rgba(255, 81, 0, 0.3)"
+      : "rgba(255, 234, 0, 0.14)";
     ctx.lineWidth = 1;
     ctx.shadowBlur = 0;
     const lineSpacing = 4;
-    const scrollOffset = Math.floor((timestamp * 0.035)) % lineSpacing;
+    const scrollOffset = Math.floor(timestamp * 0.035) % lineSpacing;
     for (let y = -r; y < r; y += lineSpacing) {
-      ctx.beginPath(); ctx.moveTo(-r, y + scrollOffset); ctx.lineTo(r, y + scrollOffset); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-r, y + scrollOffset);
+      ctx.lineTo(r, y + scrollOffset);
+      ctx.stroke();
     }
     ctx.restore();
 
@@ -589,36 +690,49 @@ export class Pacman extends Actor {
     ctx.save();
     const coreRadius = r * 0.35;
 
-    ctx.strokeStyle = this.isBuffed ? "rgba(255,255,255,0.95)" : "rgba(255, 234, 0, 0.45)";
+    ctx.strokeStyle = this.isBuffed
+      ? "rgba(255,255,255,0.95)"
+      : "rgba(255, 234, 0, 0.45)";
     ctx.lineWidth = 1.5;
     ctx.shadowBlur = this.isBuffed ? 14 : 0;
     ctx.shadowColor = primaryColor;
-    ctx.beginPath(); ctx.arc(0, 0, coreRadius, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, coreRadius, 0, Math.PI * 2);
+    ctx.stroke();
 
     if (this.isBuffed) {
-      const speedMult = (timestamp * 0.045); // Sped up core rotation
+      const speedMult = timestamp * 0.045; // Sped up core rotation
       ctx.lineWidth = 2;
-      
+
       for (let i = 0; i < 2; i++) {
         ctx.save();
         ctx.rotate(i === 0 ? speedMult : -speedMult * 1.4);
-        const pulseRadius = coreRadius * (0.72 + Math.sin((timestamp * 0.025) + i) * 0.1);
+        const pulseRadius =
+          coreRadius * (0.72 + Math.sin(timestamp * 0.025 + i) * 0.1);
         ctx.strokeStyle = i === 0 ? "#ffffff" : "#ff1100";
         ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.arc(0, 0, pulseRadius, 0, Math.PI * 1.1); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, pulseRadius, 0, Math.PI * 1.1);
+        ctx.stroke();
         ctx.restore();
       }
-      
+
       ctx.fillStyle = "#ffffff";
       ctx.shadowBlur = 20;
-      ctx.beginPath(); ctx.arc(0, 0, coreRadius * 0.38, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, coreRadius * 0.38, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       ctx.save();
       ctx.rotate(timestamp * 0.002);
       ctx.strokeStyle = structuralColor;
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(0, 0, coreRadius * 0.6, 0, Math.PI * 0.4); ctx.stroke();
-      ctx.beginPath(); ctx.arc(0, 0, coreRadius * 0.6, Math.PI, Math.PI * 1.4); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, coreRadius * 0.6, 0, Math.PI * 0.4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, coreRadius * 0.6, Math.PI, Math.PI * 1.4);
+      ctx.stroke();
       ctx.fillStyle = primaryColor;
       ctx.fillRect(-1, -1, 2, 2);
       ctx.restore();
@@ -629,11 +743,23 @@ export class Pacman extends Actor {
     ctx.strokeStyle = structuralColor;
     ctx.lineWidth = 1;
     ctx.shadowBlur = 0;
-    ctx.beginPath(); ctx.arc(0, 0, r * 0.68, Math.PI * 0.7, Math.PI * 1.3); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.68, Math.PI * 0.7, Math.PI * 1.3);
+    ctx.stroke();
 
     ctx.fillStyle = primaryColor;
-    ctx.fillRect(Math.cos(Math.PI * 0.7) * (r * 0.68) - 1, Math.sin(Math.PI * 0.7) * (r * 0.68) - 1, 2, 2);
-    ctx.fillRect(Math.cos(Math.PI * 1.3) * (r * 0.68) - 1, Math.sin(Math.PI * 1.3) * (r * 0.68) - 1, 2, 2);
+    ctx.fillRect(
+      Math.cos(Math.PI * 0.7) * (r * 0.68) - 1,
+      Math.sin(Math.PI * 0.7) * (r * 0.68) - 1,
+      2,
+      2,
+    );
+    ctx.fillRect(
+      Math.cos(Math.PI * 1.3) * (r * 0.68) - 1,
+      Math.sin(Math.PI * 1.3) * (r * 0.68) - 1,
+      2,
+      2,
+    );
 
     ctx.restore();
   }
@@ -660,9 +786,13 @@ export class Pacman extends Actor {
       ctx.save();
       ctx.scale(scale, scale);
       ctx.rotate(p * 15);
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.strokeStyle = "#ffffff";
-      ctx.beginPath(); ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     } else {
       const blastProgress = (p - 0.3) / 0.7;
@@ -676,7 +806,9 @@ export class Pacman extends Actor {
         ctx.fillStyle = "#ffffff";
         ctx.shadowBlur = 30;
         ctx.shadowColor = blastColor;
-        ctx.beginPath(); ctx.arc(0, 0, r * 2.0 * (1.0 - blastProgress * 4), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 2.0 * (1.0 - blastProgress * 4), 0, Math.PI * 2);
+        ctx.fill();
       }
 
       ctx.strokeStyle = blastColor;
@@ -687,8 +819,10 @@ export class Pacman extends Actor {
       ctx.lineWidth = 4 * (1.0 - blastProgress);
 
       ctx.beginPath();
-      ctx.moveTo(-railLength, 0); ctx.lineTo(railLength, 0);
-      ctx.moveTo(0, -railLength); ctx.lineTo(0, railLength);
+      ctx.moveTo(-railLength, 0);
+      ctx.lineTo(railLength, 0);
+      ctx.moveTo(0, -railLength);
+      ctx.lineTo(0, railLength);
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
@@ -697,7 +831,11 @@ export class Pacman extends Actor {
       for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2;
         const offsetDistance = r * 1.5 * (1.0 + blastProgress * 2);
-        ctx.fillText(Math.random() > 0.5 ? "0" : "1", Math.cos(angle) * offsetDistance, Math.sin(angle) * offsetDistance);
+        ctx.fillText(
+          Math.random() > 0.5 ? "0" : "1",
+          Math.cos(angle) * offsetDistance,
+          Math.sin(angle) * offsetDistance,
+        );
       }
       ctx.restore();
     }

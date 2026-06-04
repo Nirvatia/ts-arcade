@@ -1,22 +1,22 @@
-import { CFG_CANVAS } from "../config/canvas.js";
-import { Collision } from "../core/collision.js";
-import { eventBus } from "../core/eventBus.js";
-import { Actor } from "./actor.js";
-import type { GhostConfig } from "../config/ghosts.js";
-import { findShortestPath } from "../pathfinding/search.js";
-import { findLairExit } from "../pathfinding/lair.js";
+import { CFG_CANVAS } from "../../config/canvas.config.js";
 import {
-  getScatterTarget,
   getBlinkyTarget,
-  getPinkyTarget,
-  getInkyTarget,
   getClydeTarget,
-  type TargetCoords,
-} from "../ai/ghostAI.js";
-import {
-  ClassicVectorGhostRenderer,
-  type IGhostRenderer,
-} from "./ghost/ghostRenderer.js";
+  getInkyTarget,
+  getPinkyTarget,
+  getScatterTarget,
+} from "../../ai/ghostAI.js";
+import { Collision } from "../../core/Collision.js";
+import { eventBus } from "../../core/EventBus.js";
+import { findLairExit } from "../../pathfinding/lair.js";
+import { findShortestPath } from "../../pathfinding/search.js";
+import { Actor } from "../Actor.js";
+import { GhostRenderer } from "./GhostRenderer.js";
+
+import type { TileType } from "../../shared/types.js";
+import type { GhostConfig } from "../../config/ghost.config.js";
+import type { IGhostRenderer } from "./GhostRenderer.js";
+import type { TargetCoords } from "../../ai/ghostAI.js";
 
 export class Ghost extends Actor {
   public name: string;
@@ -63,7 +63,7 @@ export class Ghost extends Actor {
     this.eatenSpeed = tileSize * config.eatenSpeedMultiplier;
 
     this.direction = { dx: 0, dy: 0 };
-    this.renderer = new ClassicVectorGhostRenderer();
+    this.renderer = new GhostRenderer();
     this.initEventListeners();
   }
 
@@ -418,16 +418,6 @@ export class Ghost extends Actor {
     }
   }
 
-  private isAtTileCenter(dt: number): boolean {
-    const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    const maxSpeed = Math.max(this.defaultSpeed, this.eatenSpeed, this.speed);
-    const tolerance = maxSpeed * dt;
-    return (
-      Math.abs(this.x - centerX) <= tolerance &&
-      Math.abs(this.y - centerY) <= tolerance
-    );
-  }
-
   private getRandomDirection(): void {
     const directions = [
       { dx: 1, dy: 0 },
@@ -520,8 +510,9 @@ export class Ghost extends Actor {
 
   public spawn(): void {
     const map = this.gameState.levelData.map;
+
     for (let y = 0; y < map.length; y++) {
-      const x = map[y].findIndex((tile) => tile === this.codename);
+      const x = map[y].findIndex((tile: TileType) => tile === this.codename);
       if (x !== -1) {
         this.spawnGridX = x;
         this.spawnGridY = y;

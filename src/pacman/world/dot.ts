@@ -1,8 +1,8 @@
-// src/entities/dot.ts
-import { CFG_CANVAS } from "../config/canvas.js";
-import { eventBus } from "../core/eventBus.js";
-import type { Collectible } from "../interfaces.js";
-import { WorldObject } from "./worldObject.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { eventBus } from "../core/EventBus.js";
+import { WorldObject } from "./WorldObject.js";
+
+import type { Collectible } from "../shared/types.js";
 
 export class Dot extends WorldObject implements Collectible {
   private dotSize: number;
@@ -10,7 +10,7 @@ export class Dot extends WorldObject implements Collectible {
 
   constructor() {
     super(CFG_CANVAS.canvasIds.dots);
-    this.dotSize = this.tileSize * 0.16; // Marginally increased for vector tracking lines
+    this.dotSize = this.tileSize * 0.16;
     this.initEventListeners();
   }
 

@@ -1,31 +1,32 @@
-// src/core/GameLoopTracker.ts
-
 export class GameLoopTracker {
   private frameTimes: number[] = [];
   private frameDurations: number[] = []; // Actual CPU work time in ms
   private lastSummaryTime: number = performance.now();
   private readonly intervalMs: number = 3000;
   private targetFps: number;
-  private idealFrameBudget: number; // Dynamic replacement for 16.666ms
+  private idealFrameBudget: number; // Dynamic target frame time in ms
 
   /**
    * @param targetFps - The target tick-rate of the game loop (Defaults to 60)
    */
   constructor(targetFps: number = 60) {
     this.targetFps = targetFps;
-    this.idealFrameBudget = 1000 / targetFps; // e.g. 16.666ms for 60fps, 33.33ms for 30fps
+    this.idealFrameBudget = 1000 / targetFps; // e.g. 16.66ms for 60fps, 33.33ms for 30fps
   }
 
   /**
-   * Captures high-precision starting timestamp trace of a frame execution step
+   * Records the high-precision timestamp at the start of a frame.
+   * @returns The start time timestamp
    */
   public startFrame(): number {
-    this.frameTimes.push(performance.now());
-    return performance.now(); // Returns start anchor point token
+    const startTime = performance.now();
+    this.frameTimes.push(startTime);
+    return startTime;
   }
 
   /**
-   * Concludes diagnostic calculations for the current tick block
+   * Calculates the execution duration of the current frame and triggers performance logging.
+   * @param workStartToken - The starting timestamp token returned by startFrame()
    */
   public endFrame(workStartToken: number): void {
     const workEnd = performance.now();
@@ -34,6 +35,7 @@ export class GameLoopTracker {
     this.processMetrics();
   }
 
+  /** Checks if the logging interval has passed to process and print performance statistics */
   private processMetrics(): void {
     const now = performance.now();
     if (now - this.lastSummaryTime < this.intervalMs) return;
@@ -43,16 +45,17 @@ export class GameLoopTracker {
     this.lastSummaryTime = now;
   }
 
+  /** Computes and prints frame rates, task durations, and budget usage in a console table */
   private printSummary(): void {
     const totalFrames = this.frameTimes.length;
     const actualFps = Math.round(totalFrames / (this.intervalMs / 1000));
 
-    // Calculate average time spent inside execution algorithms per frame step
+    // Calculate the average CPU time spent executing logic per frame
     const avgWorkDuration =
       this.frameDurations.reduce((a, b) => a + b, 0) /
       (this.frameDurations.length || 1);
 
-    // Dynamic budget utilization calculations based on target loop limits
+    // Calculate percentage of the frame time budget used by engine processing
     const budgetUtilization = (
       (avgWorkDuration / this.idealFrameBudget) *
       100
@@ -69,6 +72,7 @@ export class GameLoopTracker {
     });
   }
 
+  /** Empties performance data tracking arrays for the next logging interval */
   private flush(): void {
     this.frameTimes = [];
     this.frameDurations = [];

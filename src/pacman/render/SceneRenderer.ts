@@ -1,5 +1,4 @@
-// src/renderers/SceneRenderer.ts
-import type { IRenderer, IGameScene } from "../interfaces.js";
+import type { IGameScene, IRenderer } from "../shared/types.js";
 
 export class SceneRenderer implements IRenderer {
   private static instance: SceneRenderer | null = null;

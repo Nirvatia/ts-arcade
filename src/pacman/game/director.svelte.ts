@@ -1,15 +1,15 @@
-import { Clock } from "../core/clock.svelte.js";
-import { eventBus } from "../core/eventBus.js";
-import { GameRegistry } from "./gameRegistry.js";
-import { GameState } from "./gameState.svelte.js";
-import { Sequence } from "../core/sequence.js";
-import { Tally } from "./tally.svelte.js";
-import { SceneRegistry } from "../scenes/sceneRegistry.js";
-import { trackClockLifespan } from "../debug/garbageCollector.js";
-import { GameLoop } from "../core/gameLoop.js";
-import { SceneRenderer } from "../core/SceneRenderer.js";
-import { GameRenderer } from "../core/gameRenderer.js";
-import { Renderer } from "../core/renderer.js";
+import { Clock } from "../core/Clock.svelte.js";
+import { eventBus } from "../core/EventBus.js";
+import { GameRegistry } from "./GameRegistry.js";
+import { GameState } from "./GameState.svelte.js";
+import { Tally } from "./Tally.svelte.js";
+import { SceneRegistry } from "../scenes/SceneRegistry.js";
+import { GameRenderer } from "../render/GameRenderer.js";
+import { Renderer } from "../render/Renderer.js";
+import { GameLoop } from "../core/GameLoop.js";
+import { SceneRenderer } from "../render/SceneRenderer.js";
+import { Sequence } from "../core/Sequence.js";
+import { trackClockLifespan } from "../debug/trackClockLifespan.js";
 
 // Constants
 const TRANSITION_DURATION = 5;

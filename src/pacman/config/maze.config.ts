@@ -1,4 +1,4 @@
-import { type TileType } from "../types.js";
+import type { TileType } from "../shared/types.js";
 
 export const CFG_MAZE_0: TileType[][] = [
   ["TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR", "TL", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "WH", "TR",],

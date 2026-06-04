@@ -1,5 +1,5 @@
-import { RenderTracker } from "../debug/renderTracker.js";
-import type { Drawable, IRenderer } from "../interfaces.js";
+import { RenderTracker } from "../debug/RenderTracker.js";
+import type { Drawable, IRenderer } from "../shared/types.js";
 
 export class GameRenderer implements IRenderer {
   private static instance: GameRenderer | null = null;
@@ -21,7 +21,7 @@ export class GameRenderer implements IRenderer {
     this.drawables = drawables;
   }
 
-  render(): void {
+  public render(): void {
     this.drawables?.forEach((entity) => {
       if (entity.needsRedraw) {
         entity.clearCanvas();
@@ -34,7 +34,7 @@ export class GameRenderer implements IRenderer {
     });
   }
 
-  clear(): void {
+  public clear(): void {
     this.drawables?.forEach((e) => e.clearCanvas());
   }
 }

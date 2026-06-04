@@ -1,8 +1,7 @@
-// src/core/CanvasLayer.ts
-import { setCanvasSize } from "../utils.js";
-import { GameState } from "../game/gameState.svelte.js";
-import { CFG_CANVAS } from "../config/canvas.js";
-import { CFG_MAZE_0 } from "../config/maze.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { CFG_MAZE_0 } from "../config/maze.config.js";
+import { GameState } from "../game/GameState.svelte.js";
+import { setCanvasSize } from "../shared/utils.js";
 
 /**
  * Управляет HTML Canvas элементом и его 2D контекстом.
@@ -57,7 +56,7 @@ export class CanvasLayer {
    * @param width - ширина очищаемой области (по умолчанию вся ширина)
    * @param height - высота очищаемой области (по умолчанию вся высота)
    */
-  clear(
+  public clear(
     x: number = 0,
     y: number = 0,
     width: number = this._canvas.width,
@@ -70,7 +69,7 @@ export class CanvasLayer {
    * Подстраивает размер холста под текущую карту уровня.
    * Вызывается при смене уровня или ресайзе окна.
    */
-  resize(): void {
+  public resize(): void {
     const gameState = GameState.getInstance();
     const currentMap = gameState.levelData?.map || CFG_MAZE_0;
 

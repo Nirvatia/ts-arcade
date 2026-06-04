@@ -1,4 +1,4 @@
-import type { Ghost } from "../ghost.js";
+import type { Ghost } from "./Ghost.js";
 
 export interface IGhostRenderer {
   draw(ctx: CanvasRenderingContext2D, ghost: Ghost, tileSize: number): void;
@@ -18,7 +18,7 @@ interface CosmicParticle {
   type: "SPARK" | "JET";
 }
 
-export class ClassicVectorGhostRenderer implements IGhostRenderer {
+export class GhostRenderer implements IGhostRenderer {
   private particles: CosmicParticle[] = [];
   private vortexRotation = 0;
 

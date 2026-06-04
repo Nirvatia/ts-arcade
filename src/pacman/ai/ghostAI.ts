@@ -1,6 +1,7 @@
-import { Collision } from "../core/collision.js";
-import { GameRegistry } from "../game/gameRegistry.js";
-import type { TileType } from "../types.js";
+import { Collision } from "../core/Collision.js";
+import { GameRegistry } from "../game/GameRegistry.js";
+
+import type { TileType } from "../shared/types.js";
 
 export interface TargetCoords {
   tileX: number;

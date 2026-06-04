@@ -1,15 +1,13 @@
-// src/effects/Vignette.ts
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { GameRegistry } from "../game/GameRegistry.js";
+import { WorldObject } from "../world/WorldObject.js";
 
-import { CFG_CANVAS } from "../config/canvas.js";
-import { GameRegistry } from "../game/gameRegistry.js";
-import type { Updatable } from "../interfaces.js";
-import { WorldObject } from "../world/worldObject.js";
+import type { Updatable } from "../shared/types.js";
 
 export class Vignette extends WorldObject implements Updatable {
   private registry: GameRegistry;
 
   constructor() {
-    // 1. Pass the vignette canvas ID straight to the WorldObject base class
     super(CFG_CANVAS.canvasIds.vignette);
     this.registry = GameRegistry.getInstance();
   }
@@ -19,8 +17,6 @@ export class Vignette extends WorldObject implements Updatable {
    * Since the vignette follows Pacman dynamically, it forces a redraw request.
    */
   update(dt: number): void {
-    // We don't restrict this by game mode here because even during intermission 
-    // or game over, you might want the static vignette to remain visible.
     this.needsRedraw = true;
   }
 
@@ -33,17 +29,20 @@ export class Vignette extends WorldObject implements Updatable {
     const w = this.canvas.width;
     const h = this.canvas.height;
 
-    // Clear the layer completely before drawing the new frame spotlight
     this.clearCanvas();
 
     const gradient = ctx.createRadialGradient(
-      pacman.x, pacman.y, 60,
-      pacman.x, pacman.y, 320
+      pacman.x,
+      pacman.y,
+      60,
+      pacman.x,
+      pacman.y,
+      320,
     );
-    gradient.addColorStop(0, 'transparent');
-    gradient.addColorStop(0.35, 'transparent');
-    gradient.addColorStop(0.7, 'rgba(1, 8, 18, 0.5)');
-    gradient.addColorStop(1, 'rgba(1, 8, 18, 0.9)');
+    gradient.addColorStop(0, "transparent");
+    gradient.addColorStop(0.35, "transparent");
+    gradient.addColorStop(0.7, "rgba(1, 8, 18, 0.5)");
+    gradient.addColorStop(1, "rgba(1, 8, 18, 0.9)");
 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);

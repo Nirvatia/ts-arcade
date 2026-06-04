@@ -1,5 +1,3 @@
-// config/pacman.ts
-
 export interface PacmanConfig {
   normalSpeedMultiplier: number;
   buffedSpeedMultiplier: number;

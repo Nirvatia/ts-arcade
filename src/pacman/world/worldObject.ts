@@ -1,7 +1,8 @@
-import { CFG_CANVAS } from "../config/canvas.js";
-import { CanvasLayer } from "../core/canvasLayer.js";
-import { GameState } from "../game/gameState.svelte.js";
-import type { Drawable } from "../interfaces.js";
+import { CanvasLayer } from "../render/CanvasLayer.js";
+import { GameState } from "../game/GameState.svelte.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+
+import type { Drawable } from "../shared/types.js";
 
 export abstract class WorldObject implements Drawable {
   protected gameState: GameState;

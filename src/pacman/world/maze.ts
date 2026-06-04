@@ -1,6 +1,5 @@
-// src/entities/Maze.ts
-import { CFG_CANVAS } from "../config/canvas.js";
-import { WorldObject } from "./worldObject.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { WorldObject } from "./WorldObject.js";
 
 export class Maze extends WorldObject {
   private _isFlashing: boolean = false;

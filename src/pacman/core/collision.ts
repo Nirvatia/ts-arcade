@@ -1,7 +1,7 @@
-// src/world/Collision.ts
-import { CFG_CANVAS } from "../config/canvas.js";
-import { GameState } from "../game/gameState.svelte.js";
-import type { TileType, TeleportType } from "../types.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import { GameState } from "../game/GameState.svelte.js";
+
+import type { TeleportType, TileType } from "../shared/types.js";
 
 interface Coords {
   x: number;
@@ -41,10 +41,15 @@ export class Collision {
    * Получить центр тайла, в котором находится точка (x, y).
    * @returns объект с centerX и centerY
    */
-  static getTileCenter(x: number, y: number): { centerX: number; centerY: number } {
+  static getTileCenter(
+    x: number,
+    y: number,
+  ): { centerX: number; centerY: number } {
     return {
-      centerX: Math.floor(x / this.tileSize) * this.tileSize + this.tileSize / 2,
-      centerY: Math.floor(y / this.tileSize) * this.tileSize + this.tileSize / 2,
+      centerX:
+        Math.floor(x / this.tileSize) * this.tileSize + this.tileSize / 2,
+      centerY:
+        Math.floor(y / this.tileSize) * this.tileSize + this.tileSize / 2,
     };
   }
 
@@ -71,7 +76,15 @@ export class Collision {
       return false;
     }
 
-    const wallTiles = new Set<TileType>(["WH", "WV", "TL", "TR", "BL", "BR", "GL"]);
+    const wallTiles = new Set<TileType>([
+      "WH",
+      "WV",
+      "TL",
+      "TR",
+      "BL",
+      "BR",
+      "GL",
+    ]);
     return wallTiles.has(tile);
   }
 

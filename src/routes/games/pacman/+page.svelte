@@ -1,17 +1,19 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { initAudio } from "../../../pacman/utils.js";
-  import { CFG_CANVAS } from "../../../pacman/config/canvas.js";
+
   import fontUrl from "$lib/assets/fonts/Jersey-Regular.ttf?url";
-  import { Director } from "../../../pacman/game/director.svelte.js";
-  import { GameState } from "../../../pacman/game/gameState.svelte.js";
-  import { sfx } from "../../../pacman/sfx/sfx.js";
-  import { Controller } from "../../../pacman/controller/controller.js";
-  import { Tally } from "../../../pacman/game/tally.svelte.js";
-  import { eventBus } from "../../../pacman/core/eventBus.js";
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
-  import { GameLoop } from "../../../pacman/core/gameLoop.js";
-  import { Environment } from "../../../pacman/world/environment.js";
+
+  import { CFG_CANVAS } from "../../../pacman/config/canvas.config.js";
+  import { Director } from "../../../pacman/game/Director.svelte.js";
+  import { sfx } from "../../../pacman/sfx/SFX.js";
+  import { eventBus } from "../../../pacman/core/EventBus.js";
+  import { Environment } from "../../../pacman/world/Environment.js";
+  import { GameLoop } from "../../../pacman/core/GameLoop.js";
+  import { Tally } from "../../../pacman/game/Tally.svelte.js";
+  import { GameState } from "../../../pacman/game/GameState.svelte.js";
+  import { Controller } from "../../../pacman/controller/Controller.js";
+  import { initAudio } from "../../../pacman/shared/utils.js";
 
   let isLoading = $state(true);
   let canvasWidth = $state(448);

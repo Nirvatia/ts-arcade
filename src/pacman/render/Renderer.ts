@@ -1,6 +1,6 @@
-import { GameRenderer } from "./gameRenderer.js";
+import type { IRenderer } from "../shared/types.js";
+import { GameRenderer } from "./GameRenderer.js";
 import { SceneRenderer } from "./SceneRenderer.js";
-import type { IRenderer } from "../interfaces.js";
 
 export class Renderer {
   private static instance: Renderer | null = null;
@@ -36,7 +36,7 @@ export class Renderer {
     }
   }
 
-  render(): void {
+  public render(): void {
     this.currentRenderer?.render();
   }
 }

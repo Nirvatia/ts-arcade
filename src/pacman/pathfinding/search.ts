@@ -1,12 +1,11 @@
-import type { GraphType } from "../types.js";
+import type { GraphType } from "../shared/types.js";
 
 /**
- * Находит кратчайший путь между двумя узлами графа (BFS).
- *
- * @param graph - граф путей (результат createPathGraph)
- * @param start - начальный узел в формате "y,x"
- * @param target - целевой узел в формате "y,x"
- * @returns массив узлов пути или null, если путь не найден
+ * Finds the shortest path between two nodes using a Breadth-First Search (BFS).
+ * @param graph - The path graph adjacency list
+ * @param start - Starting node key formatted as "y,x"
+ * @param target - Target node key formatted as "y,x"
+ * @returns Array of node keys tracking the path from start to target, or null if no path exists
  */
 export function findShortestPath(
   graph: GraphType,
@@ -18,7 +17,7 @@ export function findShortestPath(
     return null;
   }
 
-  // Проверка существования начального узла
+  // Ensure the starting point exists within the grid topology
   if (!graph[start]) {
     console.error(
       `findShortestPath failed: Start node '${start}' does not exist in the graph.`,
@@ -36,7 +35,7 @@ export function findShortestPath(
     const current = queue.shift()!;
 
     if (current === target) {
-      // Восстановление пути с конца к началу
+      // Reconstruct the path backwards from target to start
       const path: string[] = [];
       let step: string | null = current;
       while (step !== null) {
@@ -56,5 +55,5 @@ export function findShortestPath(
     }
   }
 
-  return null; // Путь не найден
+  return null; // No valid path resolved
 }

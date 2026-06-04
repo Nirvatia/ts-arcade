@@ -1,7 +1,7 @@
-import { GameState } from "../game/gameState.svelte.js";
-import { GameRegistry } from "../game/gameRegistry.js";
-import { Collision } from "../core/collision.js";
-import { eventBus } from "../core/eventBus.js";
+import { GameState } from "../game/GameState.svelte.js";
+import { GameRegistry } from "../game/GameRegistry.js";
+import { Collision } from "../core/Collision.js";
+import { eventBus } from "../core/EventBus.js";
 import { createPathGraph } from "../pathfinding/graph.js";
 
 /**

@@ -1,5 +1,4 @@
-// src/navigation/graph.ts
-import type { GraphType, TileType } from "../types.js";
+import type { GraphType, TileType } from "../shared/types.js";
 
 /**
  * Создаёт граф путей для навигации призраков.
