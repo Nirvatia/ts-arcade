@@ -25,8 +25,10 @@ export interface PacmanConfig {
 }
 
 export const CFG_PACMAN: PacmanConfig = {
-  normalSpeedMultiplier: 4.8,
-  buffedSpeedMultiplier: 5.4,
+  // Bounded up from 4.8 for high-response kinetic movement
+  normalSpeedMultiplier: 5.8,
+  // Aggressive speed step-up when power-pilled
+  buffedSpeedMultiplier: 6.6,
   deathAnimationDuration: 3,
   radiusMultiplier: 0.55,
   mouthSpeed: 0.015,

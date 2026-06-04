@@ -1,8 +1,8 @@
 // src/config/ghosts.ts
 
 export interface GhostConfig {
-  name: string; // Actual readable name used for keying logic
-  codename: string; // The map token string ("BY", "PY", etc.)
+  name: string; 
+  codename: string; 
   color: string;
   defaultColor: string;
   speedMultiplier: number;
@@ -18,9 +18,9 @@ export const CFG_GHOSTS: Record<string, GhostConfig> = {
     codename: "BY",
     color: "#ff2222",
     defaultColor: "#ff2222",
-    speedMultiplier: 5.0,
-    frightenedSpeedMultiplier: 2.2,
-    eatenSpeedMultiplier: 8.8,
+    speedMultiplier: 5.5,          // Up from 5.0 - Tight on your heels
+    frightenedSpeedMultiplier: 2.8, // Slightly faster panic routing
+    eatenSpeedMultiplier: 12.0,     // Instant network return stream
     personality: "shadow",
     description: "Relentless pursuer. Always targets Pac-Man directly.",
   },
@@ -29,9 +29,9 @@ export const CFG_GHOSTS: Record<string, GhostConfig> = {
     codename: "PY",
     color: "#ff66aa",
     defaultColor: "#ff66aa",
-    speedMultiplier: 4.7,
-    frightenedSpeedMultiplier: 2.2,
-    eatenSpeedMultiplier: 8.8,
+    speedMultiplier: 5.2,          // Up from 4.7
+    frightenedSpeedMultiplier: 2.8,
+    eatenSpeedMultiplier: 12.0,
     personality: "ambush",
     description: "Targets ahead of Pac-Man. Tries to ambush.",
   },
@@ -40,9 +40,9 @@ export const CFG_GHOSTS: Record<string, GhostConfig> = {
     codename: "IY",
     color: "#44dddd",
     defaultColor: "#44dddd",
-    speedMultiplier: 4.4,
-    frightenedSpeedMultiplier: 2.2,
-    eatenSpeedMultiplier: 8.8,
+    speedMultiplier: 4.9,          // Up from 4.4
+    frightenedSpeedMultiplier: 2.8,
+    eatenSpeedMultiplier: 12.0,
     personality: "wild",
     description: "Unpredictable. Uses Blinky's position to triangulate.",
   },
@@ -51,9 +51,9 @@ export const CFG_GHOSTS: Record<string, GhostConfig> = {
     codename: "CE",
     color: "#ffaa33",
     defaultColor: "#ffaa33",
-    speedMultiplier: 4.1,
-    frightenedSpeedMultiplier: 2.2,
-    eatenSpeedMultiplier: 8.8,
+    speedMultiplier: 4.6,          // Up from 4.1
+    frightenedSpeedMultiplier: 2.8,
+    eatenSpeedMultiplier: 12.0,
     personality: "shy",
     description: "Chases until close, then retreats to scatter corner.",
   },
