@@ -57,4 +57,6 @@ export abstract class WorldObject implements Drawable {
 
   // --- Forces child classes to specify layout painting ---
   abstract draw(): void;
+
+  public destroy(): void {}
 }

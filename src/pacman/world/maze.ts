@@ -1,11 +1,29 @@
+import * as PIXI from "pixi.js";
 import { CFG_CANVAS } from "../config/canvas.config.js";
 import { WorldObject } from "./WorldObject.js";
+import type { TileType } from "../shared/types.js";
 
 export class Maze extends WorldObject {
   private _isFlashing: boolean = false;
+  private flashTicker: number = 0;
+  private pulseTicker: number = 0;
+
+  private pixiApp: PIXI.Application | null = null;
+  private isPixiReady: boolean = false;
+
+  // Discrete rendering layers for architectural contrast control
+  private rootContainer: PIXI.Container | null = null;
+  private spaceVoidLayer: PIXI.Graphics | null = null;
+  private circuitGlowLayer: PIXI.Graphics | null = null;
+  private tronRailLayer: PIXI.Graphics | null = null;
+  private plasmaFilamentLayer: PIXI.Graphics | null = null;
+  private dataNodesLayer: PIXI.Graphics | null = null;
+
+  private nodeBlurFilter: PIXI.BlurFilter | null = null;
 
   constructor() {
     super(CFG_CANVAS.canvasIds.maze);
+    this.initPixi();
   }
 
   get isFlashing(): boolean {
@@ -13,80 +31,188 @@ export class Maze extends WorldObject {
   }
   set isFlashing(value: boolean) {
     this._isFlashing = value;
+    this.needsRedraw = true;
   }
 
-  private getColors(): { bg: string; wallCore: string; neonWire: string; glow: string } {
-    const hue = this.gameState.levelData.mapHue ?? 190;
+  private async initPixi(): Promise<void> {
+    this.pixiApp = new PIXI.Application();
+
+    await this.pixiApp.init({
+      width: this.canvas.width,
+      height: this.canvas.height,
+      backgroundAlpha: 0,
+      antialias: true,
+      resolution: window.devicePixelRatio || 1,
+      preference: "webgl",
+    });
+
+    this.rootContainer = new PIXI.Container();
+    this.pixiApp.stage.addChild(this.rootContainer);
+
+    this.spaceVoidLayer = new PIXI.Graphics();
+    this.circuitGlowLayer = new PIXI.Graphics();
+    this.tronRailLayer = new PIXI.Graphics();
+    this.plasmaFilamentLayer = new PIXI.Graphics();
+    this.dataNodesLayer = new PIXI.Graphics();
+
+    // Tighten the blur filter to prevent massive, overwhelming light bleeds
+    this.nodeBlurFilter = new PIXI.BlurFilter();
+    this.nodeBlurFilter.strength = 3;
+    this.circuitGlowLayer.filters = [this.nodeBlurFilter];
+
+    // Hardware blend pooling
+    this.circuitGlowLayer.blendMode = 'screen';
+    this.tronRailLayer.blendMode = 'screen';
+    this.plasmaFilamentLayer.blendMode = 'add';
+    this.dataNodesLayer.blendMode = 'add';
+
+    // Master layer stacking order
+    this.rootContainer.addChild(this.spaceVoidLayer);
+    this.rootContainer.addChild(this.circuitGlowLayer);
+    this.rootContainer.addChild(this.tronRailLayer);
+    this.rootContainer.addChild(this.plasmaFilamentLayer);
+    this.rootContainer.addChild(this.dataNodesLayer);
+
+    this.isPixiReady = true;
+    this.bakeTronCosmicMaze();
+  }
+
+  private getBalancedPalette() {
+    const hue = this.gameState.levelData.mapHue ?? 195; // Theme hue
     return {
-      bg: "#000000",
-      // Dark solid infill for the center of the walls
-      wallCore: `hsla(${hue}, 60%, 8%, 0.95)`, 
-      // Muted laser line strictly defining the corridor perimeter edges
-      neonWire: `hsla(${hue}, 75%, 35%, 0.80)`,
-      // Minimal light bleed to maintain high contrast
-      glow: `hsla(${hue}, 80%, 40%, 0.12)`,
+      deepSpace: 0x010103,          // Darkened backdrop from 0x03030a to drop ambient clutter
+      gridLine: 0x05080e,           // Faded background coordinate grid lines to 3% opacity
+      circuitCore: this.hslToHex(hue, 40, 8),   // Subdued runner tracks (lowered saturation and lightness)
+      tronNeon: this.hslToHex(hue, 85, 40),     // Slipped out neon intensity (85% sat, 40% light instead of 100/50)
+      energyNode: this.hslToHex(hue, 70, 30),   // Locked node hue to match theme, lowered brightness significantly
+      hotPlasma: 0xeef7ff,          // Shifted center core from bright white to a muted ice-blue
     };
   }
 
-  draw(): void {
-    const map = this.gameState.levelData.map;
-    const ctx = this.ctx;
+  public override reset(): void {
+    super.reset();
+    if (this.pixiApp && this.isPixiReady) {
+      this.pixiApp.renderer.resize(this.canvas.width, this.canvas.height);
+      this.bakeTronCosmicMaze();
+    }
+  }
+
+private bakeTronCosmicMaze(): void {
+    if (!this.isPixiReady || !this.rootContainer) return;
+
+    const map = this.gameState.levelData.map as string[][];
     const ts = this.tileSize;
-    const colors = this.getColors();
+    const colors = this.getBalancedPalette();
     const cw = this.canvas.width;
     const ch = this.canvas.height;
 
-    ctx.save();
+    // Flush graphics pipelines
+    [this.spaceVoidLayer!, this.circuitGlowLayer!, this.tronRailLayer!, this.plasmaFilamentLayer!, this.dataNodesLayer!].forEach(l => l.clear());
 
-    if (this._isFlashing) {
-      const time = Date.now() / 150;
-      ctx.globalAlpha = 0.15 + Math.sin(time) * 0.3;
+    // 1. Draw Subdued Space Void
+    this.spaceVoidLayer!.rect(0, 0, cw, ch).fill({ color: colors.deepSpace });
+    
+    // --- FAINT BACKGROUND GRID TEST ---
+    // We draw fine coordinate cross-lines at tile intervals using ultra-low visibility
+    for (let x = 0; x <= cw; x += ts) {
+      this.spaceVoidLayer!.moveTo(x, 0).lineTo(x, ch);
     }
+    for (let y = 0; y <= ch; y += ts) {
+      this.spaceVoidLayer!.moveTo(0, y).lineTo(cw, y);
+    }
+    this.spaceVoidLayer!.stroke({ 
+      width: 0.5, 
+      color: colors.gridLine, 
+      alpha: 0.15 // Dropped to a near-invisible whisper to test the background depth
+    });
+    // ----------------------------------
 
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, cw, ch);
+    // 2. Draw Circuit Runway Base Guide Tracks
+    this.buildVectorTronPath(map, this.spaceVoidLayer!, ts, 0);
+    this.spaceVoidLayer!.stroke({
+      width: ts * 0.4,
+      color: colors.circuitCore,
+      cap: "square",
+      join: "miter",
+    });
 
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    // 3. Draw Laser Fences (Corridor geometry mapping)
+    const edgeOffset = ts * 0.42; 
 
-    // --- STEP 1: FILL THE WALL CORE MASS ---
-    // This establishes solid volume down the center first
-    ctx.beginPath();
-    this.buildTronPath(map, ctx, ts, 0);
-    ctx.strokeStyle = colors.wallCore;
-    ctx.lineWidth = ts * 0.75; // Thick blocking fill
-    ctx.shadowBlur = 0;
-    ctx.stroke();
+    // Ambient Neon Underlay Pass
+    this.buildVectorTronPath(map, this.tronRailLayer!, ts, edgeOffset);
+    this.buildVectorTronPath(map, this.tronRailLayer!, ts, -edgeOffset);
+    this.tronRailLayer!.stroke({
+      width: 1.8, 
+      color: colors.tronNeon,
+      cap: "square",
+      join: "miter",
+    });
 
-    // --- STEP 2: SHIFT ACCENTS TO THE OUTER EDGES ---
-    // We calculate the boundary lines by offsetting the track slightly outwards (+ and -)
-    // This frames the corridors perfectly and eliminates the wide illusion
-    const edgeOffset = ts * 0.36; 
-    ctx.strokeStyle = colors.neonWire;
-    ctx.lineWidth = 1.5; // Crisper, thinner lines
-    ctx.shadowColor = colors.glow;
-    ctx.shadowBlur = this._isFlashing ? 6 : 2;
+    // High-Contrast Core Filament Pass
+    this.buildVectorTronPath(map, this.plasmaFilamentLayer!, ts, edgeOffset);
+    this.buildVectorTronPath(map, this.plasmaFilamentLayer!, ts, -edgeOffset);
+    this.plasmaFilamentLayer!.stroke({
+      width: 0.6, 
+      color: colors.hotPlasma,
+      cap: "square",
+      join: "miter",
+    });
 
-    // Left/Top boundary profile
-    ctx.beginPath();
-    this.buildTronPath(map, ctx, ts, edgeOffset);
-    ctx.stroke();
+    // 4. Inject Graceful, Non-Overwhelming Corner Node Indicators
+    for (let r = 0; r < map.length; r++) {
+      for (let c = 0; c < map[r].length; c++) {
+        const type = map[r][c];
+        if (type === "WH" || type === "WV" || type === "ES") continue;
+        if (this.isWall(type as TileType)) {
+          const x = c * ts + ts / 2;
+          const y = r * ts + ts / 2;
 
-    // Right/Bottom boundary profile
-    ctx.beginPath();
-    this.buildTronPath(map, ctx, ts, -edgeOffset);
-    ctx.stroke();
+          // Soft localized corner glow
+          this.circuitGlowLayer!.circle(x, y, ts * 0.25);
+          this.circuitGlowLayer!.fill({ color: colors.energyNode, alpha: 0.25 });
 
-    ctx.restore();
-    this.needsRedraw = false;
+          // Fine point pin-junction data nodes
+          this.dataNodesLayer!.circle(x, y, 1.0);
+          this.dataNodesLayer!.fill({ color: colors.hotPlasma });
+        }
+      }
+    }
   }
 
-  private buildTronPath(
+  public draw(): void {
+    if (!this.isPixiReady || !this.pixiApp) return;
+
+    const ctx = this.ctx;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+
+    if (!this._isFlashing) {
+      // Locked completely static for stable, distraction-free navigation balance
+      this.circuitGlowLayer!.alpha = 0.7;
+      this.dataNodesLayer!.alpha = 0.9;
+      this.rootContainer!.alpha = 1.0;
+      this.needsRedraw = false; 
+    } else {
+      this.flashTicker += 0.25;
+      this.rootContainer!.alpha = Math.floor(this.flashTicker) % 2 === 0 ? 0.2 : 1.0;
+      this.needsRedraw = true;
+    }
+
+    this.pixiApp.render();
+
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.drawImage(this.pixiApp.canvas, 0, 0);
+  }
+
+  private buildVectorTronPath(
     map: string[][],
-    ctx: CanvasRenderingContext2D,
+    g: PIXI.Graphics,
     ts: number,
     offset: number,
   ): void {
+    const rSize = ts * 0.15; // Smooth arc radius transition values
+
     for (let i = 0; i < map.length; i++) {
       for (let j = 0; j < map[i].length; j++) {
         const type = map[i][j];
@@ -94,30 +220,54 @@ export class Maze extends WorldObject {
         const y = i * ts;
         const hSize = ts / 2;
 
-        if (type === "WH") {
-          ctx.moveTo(x, y + hSize + offset);
-          ctx.lineTo(x + ts, y + hSize + offset);
+        if (type === "WH" || type === "GL") {
+          g.moveTo(x, y + hSize + offset);
+          g.lineTo(x + ts, y + hSize + offset);
         } else if (type === "WV") {
-          ctx.moveTo(x + hSize + offset, y + ts);
-          ctx.lineTo(x + hSize + offset, y);
+          g.moveTo(x + hSize + offset, y + ts);
+          g.lineTo(x + hSize + offset, y);
         } else if (type === "TL") {
-          ctx.moveTo(x + hSize + offset, y + ts);
-          ctx.lineTo(x + hSize + offset, y + hSize + offset);
-          ctx.lineTo(x + ts, y + hSize + offset);
+          g.moveTo(x + hSize + offset, y + ts);
+          g.arcTo(x + hSize + offset, y + hSize + offset, x + ts, y + hSize + offset, rSize);
+          g.lineTo(x + ts, y + hSize + offset);
         } else if (type === "BL") {
-          ctx.moveTo(x + hSize + offset, y);
-          ctx.lineTo(x + hSize + offset, y + hSize - offset);
-          ctx.lineTo(x + ts, y + hSize - offset);
+          g.moveTo(x + hSize + offset, y);
+          g.arcTo(x + hSize + offset, y + hSize - offset, x + ts, y + hSize - offset, rSize);
+          g.lineTo(x + ts, y + hSize - offset);
         } else if (type === "BR") {
-          ctx.moveTo(x + hSize - offset, y);
-          ctx.lineTo(x + hSize - offset, y + hSize - offset);
-          ctx.lineTo(x, y + hSize - offset);
+          g.moveTo(x + hSize - offset, y);
+          g.arcTo(x + hSize - offset, y + hSize - offset, x, y + hSize - offset, rSize);
+          g.lineTo(x, y + hSize - offset);
         } else if (type === "TR") {
-          ctx.moveTo(x + hSize - offset, y + ts);
-          ctx.lineTo(x + hSize - offset, y + hSize + offset);
-          ctx.lineTo(x, y + hSize + offset);
+          g.moveTo(x + hSize - offset, y + ts);
+          g.arcTo(x + hSize - offset, y + hSize + offset, x, y + hSize + offset, rSize);
+          g.lineTo(x, y + hSize + offset);
         }
       }
     }
+  }
+
+  private isWall(type: TileType): boolean {
+    if (!type) return false;
+    return ["WH", "WV", "TL", "TR", "BL", "BR", "GL"].includes(type);
+  }
+
+  private hslToHex(h: number, s: number, l: number): number {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, "0");
+    };
+    return parseInt(`0x${f(0)}${f(8)}${f(4)}`, 16);
+  }
+
+  public override destroy(): void {
+    if (this.pixiApp) {
+      this.pixiApp.destroy(true, { children: true });
+      this.pixiApp = null;
+    }
+    this.isPixiReady = false;
   }
 }

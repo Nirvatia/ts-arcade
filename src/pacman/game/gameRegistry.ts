@@ -81,7 +81,7 @@ export class GameRegistry {
 
   createAll(): void {
     this._vignette = new Vignette();
-    this._maze = new Maze();
+    this._maze = new Maze(CFG_CANVAS.canvasIds.maze);
     this._dot = new Dot();
     this._pill = new Pill();
     this._pacman = new Pacman(CFG_PACMAN);

@@ -14,6 +14,7 @@
   import { GameState } from "../../../pacman/game/GameState.svelte.js";
   import { Controller } from "../../../pacman/controller/Controller.js";
   import { initAudio } from "../../../pacman/shared/utils.js";
+  import { GameRegistry } from "../../../pacman/game/GameRegistry.js";
 
   let isLoading = $state(true);
   let canvasWidth = $state(448);
@@ -23,6 +24,7 @@
   const tally = Tally.getInstance();
   const director = Director.getInstance();
   const gameLoop = GameLoop.getInstance();
+  const gameRegistry = GameRegistry.getInstance();
   const environment = Environment.getInstance();
 
   let countdown = $derived.by(() => {
@@ -34,31 +36,39 @@
     return remaining;
   });
 
-  onMount(async () => {
-    const gameFont = new FontFace("Jersey-Regular", `url(${fontUrl})`);
-    document.fonts.add(gameFont);
+  onMount(() => {
+    const initGame = async () => {
+      const gameFont = new FontFace("Jersey-Regular", `url(${fontUrl})`);
+      document.fonts.add(gameFont);
 
-    try {
-      await Promise.all([gameFont.load(), initAudio()]);
-    } catch (error) {
-      console.error("Failed to preload assets:", error);
-    }
+      try {
+        await Promise.all([gameFont.load(), initAudio()]);
+      } catch (error) {
+        console.error("Failed to preload assets:", error);
+      }
 
-    isLoading = false;
-    await tick();
+      isLoading = false;
+      await tick();
 
-    eventBus.emit("game:load");
+      eventBus.emit("game:load");
 
-    const mapCanvas = document.getElementById(
-      CFG_CANVAS.canvasIds.maze,
-    ) as HTMLCanvasElement;
-    if (mapCanvas) {
-      canvasWidth = mapCanvas.width;
-      canvasHeight = mapCanvas.height;
-    }
+      const mapCanvas = document.getElementById(
+        CFG_CANVAS.canvasIds.maze,
+      ) as HTMLCanvasElement;
+      if (mapCanvas) {
+        canvasWidth = mapCanvas.width;
+        canvasHeight = mapCanvas.height;
+      }
 
-    const controller = new Controller();
-    controller.init();
+      const controller = new Controller();
+      controller.init();
+    };
+
+    initGame();
+
+    return () => {
+      gameRegistry.getMaze().destroy();
+    };
   });
 
   async function handleStart() {
