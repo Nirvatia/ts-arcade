@@ -28,7 +28,7 @@ export const CFG_PACMAN: PacmanConfig = {
   // Aggressive speed step-up when power-pilled
   buffedSpeedMultiplier: 6.6,
   deathAnimationDuration: 3,
-  radiusMultiplier: 0.55,
+  radiusMultiplier: 0.5,
   mouthSpeed: 0.015,
   maxMouthAngle: Math.PI / 2.8,
   idleMouthAngle: Math.PI / 4,
