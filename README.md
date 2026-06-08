@@ -1,12 +1,7 @@
 # Pac-Man Project
 
-A Pac-Man remake with a Tron aesthetic. Glowing trails, neon ghosts, light cycles vibes. The gameplay is classic Pac-Man but everything looks like it belongs on the Grid.
-
 ## To-Do List
-
-1. Replace singletons with DI
-2. Validate game events
-3. Refactor project structure (better folders, saner file names)
+ - Switch to game loop clock instead of timeout/interval
 
 ## Development
 
