@@ -1,26 +1,28 @@
 import type { EventPayloads, GameEvent } from "../shared/gameEvents.js";
 
-/**
- * Type-safe event bus for Pacman game.
- * Ensures compile-time checking of event names and payloads.
- */
+type AllPayloads = EventPayloads[GameEvent];
+type GenericHandler = (payload: AllPayloads) => void;
+
 class EventBus {
-  // Partial record ensures we don't need to initialize every event key at startup
-  private listeners: Partial<Record<GameEvent, Array<(payload: any) => void>>> =
-    {};
+  // We type the map value as a handler that can receive a union of all payloads.
+  // This satisfies the compiler's internal variance checks perfectly.
+  private listeners: Map<GameEvent, GenericHandler[]> = new Map();
 
   /**
    * Subscribe to an event.
-   * The handler's payload type is automatically inferred from the event name.
+   * Enforces that the handler precisely matches the specific event key.
    */
   public on<K extends GameEvent>(
     event: K,
     handler: (payload: EventPayloads[K]) => void,
   ): void {
-    if (!this.listeners[event]) {
-      this.listeners[event] = [];
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
     }
-    this.listeners[event]!.push(handler);
+    
+    // We cast the specific handler to GenericHandler when saving.
+    // This is safe because our public 'on' and 'emit' methods guard the types.
+    this.listeners.get(event)!.push(handler as GenericHandler);
   }
 
   /**
@@ -30,35 +32,39 @@ class EventBus {
     event: K,
     handler: (payload: EventPayloads[K]) => void,
   ): void {
-    const handlers = this.listeners[event];
+    const handlers = this.listeners.get(event);
     if (!handlers) return;
 
-    this.listeners[event] = handlers.filter((h) => h !== handler);
+    this.listeners.set(
+      event,
+      handlers.filter((h) => h !== (handler as GenericHandler))
+    );
   }
 
   /**
    * Emit an event.
-   * TypeScript will enforce the correct object structure for the payload.
+   * Guarantees that only the correct payload structure can be sent for this key.
    */
   public emit<K extends GameEvent>(
     event: K,
     ...args: EventPayloads[K] extends void ? [] : [EventPayloads[K]]
   ): void {
-    const handlers = this.listeners[event];
+    const handlers = this.listeners.get(event);
     if (!handlers) return;
 
-    const payload = args[0];
-    handlers.forEach((h) => h(payload));
+    const payload = args[0] as AllPayloads;
+    // Direct array iteration—no loops over unrelated events!
+    handlers.forEach((handler) => handler(payload));
   }
 
   /**
-   * Remove all listeners for a specific event, or all events if none specified.
+   * Remove all listeners for a specific event, or clear the whole bus.
    */
   public removeAllListeners(event?: GameEvent): void {
     if (event) {
-      delete this.listeners[event];
+      this.listeners.delete(event);
     } else {
-      this.listeners = {};
+      this.listeners.clear();
     }
   }
 }

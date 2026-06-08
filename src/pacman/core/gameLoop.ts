@@ -1,44 +1,29 @@
-import { GameLoopTracker } from "../debug/GameLoopTracker.js";
-import { GameState } from "../game/GameState.svelte.js";
-import { Renderer } from "../render/Renderer.js";
-
-import type { IGameScene, Updatable } from "../shared/types.js";
+// core/GameLoop.ts
+import { EngineMetrics } from "../debug/EngineMetrics.js";
+import type { GameState } from "../game/GameState.svelte.js";
+import type { Renderer } from "../render/Renderer.js";
+import type { IUpdatable } from "../shared/types.js";
 
 export class GameLoop {
-  private static instance: GameLoop;
   private gameState: GameState;
   private renderer: Renderer;
-  private activeScene: IGameScene | null = null;
-  private tracker: GameLoopTracker;
-  private updatables: Updatable[] | null = null;
+  private updatables: IUpdatable[] | null = null;
 
   private fps: number;
   private then: number;
   private interval: number;
   private timer: number | null = null;
 
-  constructor(fps: number = 60) {
-    this.gameState = GameState.getInstance();
-    this.renderer = Renderer.getInstance();
+  constructor(fps: number = 60, gameState: GameState, renderer: Renderer) {
+    this.gameState = gameState;
+    this.renderer = renderer;
     this.fps = fps;
     this.then = performance.now();
     this.interval = 1000 / this.fps;
-    this.tracker = new GameLoopTracker(this.fps);
   }
 
-  static getInstance(): GameLoop {
-    if (!GameLoop.instance) {
-      GameLoop.instance = new GameLoop();
-    }
-    return GameLoop.instance;
-  }
-
-  public setUpdatables(updatables: Updatable[] | null): void {
+  public setUpdatables(updatables: IUpdatable[] | null): void {
     this.updatables = updatables;
-  }
-
-  public setActiveScene(scene: IGameScene | null): void {
-    this.activeScene = scene;
   }
 
   public start(): void {
@@ -63,24 +48,28 @@ export class GameLoop {
 
     if (delta > this.interval) {
       this.then = now - (delta % this.interval);
-      const workStart = this.tracker.startFrame();
+
+      const workStartToken = EngineMetrics.startFrame();
 
       const mode = this.gameState.mode;
       const fixedDt = 1 / this.fps;
 
-      // --- LOGIC UPDATE ---
-      if (mode === "PLAYING" || mode === "PACMAN_DEAD") {
+      const shouldUpdate =
+        mode === "PLAYING" ||
+        mode === "PACMAN_DEAD" ||
+        mode === "LEVEL_COMPLETE";
+
+      if (shouldUpdate) {
         this.updatables?.forEach((e) => e.update(fixedDt));
-      } else if (mode === "INTERMISSION" && this.activeScene) {
-        this.activeScene.update(fixedDt);
       }
 
-      // --- RENDER PIPELINE ---
-      if (mode !== "GAME_OVER") {
+      const shouldRender = mode !== "GAME_OVER";
+
+      if (shouldRender) {
         this.renderer.render();
       }
 
-      //this.tracker.endFrame(workStart);
+      EngineMetrics.endFrame(workStartToken);
     }
   }
 }

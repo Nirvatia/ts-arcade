@@ -1,220 +1,195 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-
   import fontUrl from "$lib/assets/fonts/Jersey-Regular.ttf?url";
   import ArcadeCabinet from "$lib/layout/ArcadeCabinet.svelte";
 
   import { CFG_CANVAS } from "../../../pacman/config/canvas.config.js";
-  import { Director } from "../../../pacman/game/Director.svelte.js";
-  import { sfx } from "../../../pacman/sfx/SFX.js";
   import { eventBus } from "../../../pacman/core/EventBus.js";
-  import { Environment } from "../../../pacman/world/Environment.js";
-  import { GameLoop } from "../../../pacman/core/GameLoop.js";
-  import { Tally } from "../../../pacman/game/Tally.svelte.js";
-  import { GameState } from "../../../pacman/game/GameState.svelte.js";
-  import { Controller } from "../../../pacman/controller/Controller.js";
-  import { initAudio } from "../../../pacman/shared/utils.js";
-  import { GameRegistry } from "../../../pacman/game/GameRegistry.js";
+  import { GameMain } from "../../../pacman/game/GameMain.js";
+  import { debugMaze } from "../../../pacman/debug/debugMaze.js";
+  import { CFG_GRID_0 } from "../../../pacman/config/grid.config.js";
 
   let isLoading = $state(true);
-  let canvasWidth = $state(448);
-  let canvasHeight = $state(496);
+  let audioUnlocked = $state(false);
+  const game = new GameMain();
 
-  const gameState = GameState.getInstance();
-  const tally = Tally.getInstance();
-  const director = Director.getInstance();
-  const gameLoop = GameLoop.getInstance();
-  const gameRegistry = GameRegistry.getInstance();
-  const environment = Environment.getInstance();
+  let canvasWidth = $derived.by(() => {
+    const grid = game.gameState.levelData?.map as string[][];
+    return grid && grid[0]?.length
+      ? grid[0].length * CFG_CANVAS.tile.size
+      : 448;
+  });
+
+  let canvasHeight = $derived.by(() => {
+    const grid = game.gameState.levelData?.map as string[][];
+    return grid?.length ? grid.length * CFG_CANVAS.tile.size : 496;
+  });
 
   let countdown = $derived.by(() => {
-    const activeClock = director.currentClock;
-    if (!activeClock || !activeClock.isRunning) return 0;
-
-    const remaining = activeClock.getRemaining();
-
-    return remaining;
+    const activeClock = game.director.currentClock;
+    return activeClock && activeClock.isRunning
+      ? activeClock.getRemaining()
+      : 0;
   });
+
+  let gameOverTimer = $state(0);
+  let showRestartPrompt = $state(false);
 
   onMount(() => {
     const initGame = async () => {
+      // Load font and preload audio in parallel
       const gameFont = new FontFace("Jersey-Regular", `url(${fontUrl})`);
       document.fonts.add(gameFont);
 
-      try {
-        await Promise.all([gameFont.load(), initAudio()]);
-      } catch (error) {
-        console.error("Failed to preload assets:", error);
-      }
+      await Promise.all([
+        gameFont.load().catch(() => {}),
+        game.sfx.preloadAll(),
+      ]);
 
       isLoading = false;
       await tick();
-
-      eventBus.emit("game:load");
-
-      const mapCanvas = document.getElementById(
-        CFG_CANVAS.canvasIds.maze,
-      ) as HTMLCanvasElement;
-      if (mapCanvas) {
-        canvasWidth = mapCanvas.width;
-        canvasHeight = mapCanvas.height;
-      }
-
-      const controller = new Controller();
-      controller.init();
+      game.controller.init();
+      await game.loadAsync();
     };
-
     initGame();
-
     return () => {
-      gameRegistry.getMaze().destroy();
+      game.destroy();
     };
   });
 
+  $effect(() => {
+    if (game.gameState.mode === "GAME_OVER") {
+      gameOverTimer = 0;
+      showRestartPrompt = false;
+      const interval = setInterval(() => {
+        gameOverTimer += 0.1;
+        if (gameOverTimer >= 1.5) showRestartPrompt = true;
+        if (gameOverTimer >= 2) clearInterval(interval);
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  });
+
   async function handleStart() {
-    await sfx.unlockAudio();
+    await game.sfx.unlockAudio();
+    audioUnlocked = true;
     eventBus.emit("game:start");
   }
 
   async function handleRestart() {
-    await sfx.unlockAudio();
-    eventBus.emit("game:restart");
+    if (!showRestartPrompt) return;
+    if (!audioUnlocked) {
+      await game.sfx.unlockAudio();
+      audioUnlocked = true;
+    }
+    await game.director.restartGame();
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      if (game.gameState.mode === "INIT") handleStart();
+      else if (game.gameState.mode === "GAME_OVER" && showRestartPrompt)
+        handleRestart();
+    }
   }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <ArcadeCabinet
   gameName="Pac-Man"
   screenWidth={canvasWidth}
   screenHeight={canvasHeight}
 >
-  {#snippet game()}
-    {#if isLoading}
-      <div class="game-loader">
-        <div class="vector-spinner"></div>
-        <p class="loading-text">SYSTEM_INITIALIZE...</p>
-      </div>
-    {:else}
-      <div
-        class="game-container"
-        style="width: {canvasWidth}px; height: {canvasHeight}px;"
-      >
-        <canvas id={CFG_CANVAS.canvasIds.maze}></canvas>
+  {#snippet matrix()}
+    <div
+      class="game-wrapper"
+      style="width: {canvasWidth}px; height: {canvasHeight}px;"
+    >
+      {#if isLoading}
+        <div class="state-overlay"><span class="faint-text">LOADING</span></div>
+      {:else}
+        <canvas id={CFG_CANVAS.canvasIds.grid}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.dots}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.pills}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.pacman}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.vignette}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.scene}></canvas>
         <canvas id={CFG_CANVAS.canvasIds.ghosts}></canvas>
-        <canvas id={CFG_CANVAS.canvasIds.ui}></canvas>
 
-        {#if gameState.mode === "INIT" || gameState.mode === "GAME_OVER"}
-          <div class="screen-overlay">
-            {#if gameState.mode === "GAME_OVER"}
-              <div class="terminal-header">
-                <h1 class="game-over-title">CONNECTION_LOST // GAME_OVER</h1>
-              </div>
-              <div class="final-score-box">
-                <span class="score-label">DATA_RETRIEVED</span>
-                <span class="score-number">{tally.score.toLocaleString()}</span>
-              </div>
-              <button class="cabinet-button" onclick={handleRestart}>
-                [ RESTART ]
-              </button>
-              <div class="credit-text">TERMINAL_READY // INSERT_COIN</div>
-            {:else}
-              <div class="attract-content">
-                <h1 class="attract-title">PAC-MAN // VECTOR_OS</h1>
-                <div class="character-row">
-                  <div class="vector-node"></div>
-                  <div class="vector-node"></div>
-                  <div class="vector-node"></div>
-                  <div class="vector-node"></div>
-                </div>
-                <button class="cabinet-button start-btn" onclick={handleStart}>
-                  [ START ]
-                </button>
-                <div class="credit-text blink">CREDIT // 01</div>
-              </div>
+        {#if game.gameState.mode === "INIT"}
+          <div class="state-overlay fogged">
+            <div class="transmission-ripples">
+              <span class="ripple r1"></span>
+              <span class="ripple r2"></span>
+              <span class="ripple r3"></span>
+            </div>
+            <h1 class="title">PAC-MAN</h1>
+            <span class="hint">AWAITING OBSERVER</span>
+            <button class="btn" onclick={handleStart}>ENGAGE</button>
+          </div>
+        {/if}
+
+        {#if game.gameState.mode === "GAME_OVER"}
+          <div class="state-overlay fractured">
+            <div class="fracture-cracks">
+              <span class="crack c1"></span>
+              <span class="crack c2"></span>
+              <span class="crack c3"></span>
+              <span class="crack c4"></span>
+              <span class="crack c5"></span>
+            </div>
+            <h1 class="title">SIGNAL LOST</h1>
+            <span class="score-display"
+              >{game.tally.score.toLocaleString()}</span
+            >
+            {#if showRestartPrompt}
+              <span class="hint pulse">TRANSMIT AGAIN?</span>
+              <button class="btn" onclick={handleRestart}>REESTABLISH</button>
             {/if}
           </div>
-        {:else}
-          {#if gameState.mode === "LEVEL_TRANSITION"}
-            <div class="game-overlay ready-text">
-              {countdown > 1 ? Math.ceil(countdown) : "RUN_PROGRAM"}
-            </div>
-          {/if}
-          {#if gameState.mode === "PAUSED"}
-            <div class="game-overlay paused-overlay">
-              <span class="paused-text">EXECUTION_HALTED</span>
-            </div>
-          {/if}
-          {#if gameState.mode === "INTERMISSION"}
-            <div class="game-overlay intermission-wrapper"></div>
-          {/if}
         {/if}
-      </div>
-    {/if}
+
+        {#if game.gameState.mode === "LEVEL_TRANSITION"}
+          <div class="state-overlay">
+            <div class="sonar-rings">
+              <span class="sonar s1"></span>
+              <span class="sonar s2"></span>
+              <span class="sonar s3"></span>
+            </div>
+            <span class="big-number"
+              >{countdown > 1 ? Math.ceil(countdown) : "GO"}</span
+            >
+          </div>
+        {/if}
+
+        {#if game.gameState.mode === "PAUSED"}
+          <div class="state-overlay dimmed">
+            <span class="stasis-text">PAUSED</span>
+          </div>
+        {/if}
+      {/if}
+    </div>
   {/snippet}
 
   {#snippet hud()}
-    <div class="game-hud">
-      <div class="hud-item">
-        <span class="hud-label">SCORE:</span>
-        <span class="hud-value">{tally.score.toLocaleString()}</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">REPLICAS:</span>
-        <span class="hud-value">×{gameState.lives}</span>
-      </div>
+    <div class="hud">
+      <p class="hud-score">SCORE: {game.tally.score.toLocaleString()}</p>
+      <p class="hud-lives">LIVES &times;{game.gameState.lives}</p>
     </div>
   {/snippet}
 </ArcadeCabinet>
 
 <style lang="scss">
-  // --- Global Monochromatic Configuration Archetypes ---
-  $void-black: #000000;
-  $neon-cyan: #00f0ff;
-  $trans-cyan: rgba(0, 240, 255, 0.1);
+  $void: #040410;
+  $violet: #8877cc;
+  $violet-dim: rgba(150, 120, 200, 0.55);
+  $violet-faint: rgba(130, 100, 180, 0.22);
+  $white: #eeeedd;
 
-  // --- Game Loader ---
-  .game-loader {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 24px;
-    background: $void-black;
-  }
-
-  .vector-spinner {
-    width: 40px;
-    height: 40px;
-    border: 1px solid rgba($neon-cyan, 0.2);
-    border-top: 1px solid $neon-cyan;
-    animation: vectorSpin 1s steps(8) infinite;
-  }
-
-  @keyframes vectorSpin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-
-  .loading-text {
-    color: $neon-cyan;
-    font-size: 1.2rem;
-    letter-spacing: 4px;
-    text-shadow: 0 0 6px rgba($neon-cyan, 0.5);
-  }
-
-  // --- Game Container ---
-  .game-container {
+  .game-wrapper {
     position: relative;
+    background: #000;
 
     canvas {
       position: absolute;
@@ -224,203 +199,264 @@
     }
   }
 
-  // --- Game Overlays ---
-  .game-overlay {
+  .state-overlay {
     position: absolute;
     inset: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 10;
-    pointer-events: none;
-  }
-
-  .ready-text {
-    color: #ffffff;
-    font-size: 2.5rem;
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    text-shadow: 0 0 10px $neon-cyan;
-  }
-
-  .paused-overlay {
-    background: rgba($void-black, 0.85);
-  }
-
-  .paused-text {
-    color: $neon-cyan;
-    font-size: 2.2rem;
-    letter-spacing: 6px;
-    text-shadow: 0 0 12px $neon-cyan;
-  }
-
-  // --- Minimalist Screen Overlays ---
-  .screen-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
     z-index: 100;
-    font-family: "Jersey-Regular", monospace;
-    background: rgba($void-black, 0.9);
-  }
-
-  // --- End Cycle Layouts ---
-  .terminal-header {
-    margin-bottom: 24px;
-  }
-
-  .game-over-title {
-    font-size: 2rem;
-    color: #ffffff;
-    margin: 0;
-    letter-spacing: 4px;
-    text-shadow: 0 0 10px rgba($neon-cyan, 0.8);
-  }
-
-  .final-score-box {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 32px;
-    padding: 12px 32px;
-    border: 1px solid rgba($neon-cyan, 0.3);
-    background: rgba($neon-cyan, 0.02);
+    justify-content: center;
+    gap: 16px;
+    background: rgba($void, 0.88);
+
+    &.fogged {
+      background: rgba($void, 0.75);
+    }
+    &.dimmed {
+      background: rgba($void, 0.7);
+    }
   }
 
-  .score-label {
-    color: rgba($neon-cyan, 0.5);
-    font-size: 0.9rem;
-    letter-spacing: 2px;
+  .title {
+    margin: 0;
+    font-size: 2.8rem;
+    color: $white;
+    letter-spacing: 8px;
+    text-shadow:
+      0 0 30px $violet-dim,
+      0 0 60px rgba($violet, 0.25);
+    z-index: 1;
   }
 
-  .score-number {
-    color: #ffffff;
-    font-size: 2.2rem;
-    letter-spacing: 2px;
-    text-shadow: 0 0 8px $neon-cyan;
+  .hint {
+    color: $violet-dim;
+    font-size: 1.1rem;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    z-index: 1;
+
+    &.pulse {
+      animation: pulse 2s ease-in-out infinite;
+    }
   }
 
-  .credit-text {
-    color: rgba($neon-cyan, 0.4);
-    font-size: 0.85rem;
-    letter-spacing: 2px;
-    margin-top: 20px;
-  }
-
-  .credit-text.blink {
-    animation: vectorPulse 1.5s infinite steps(2);
-  }
-
-  @keyframes vectorPulse {
+  @keyframes pulse {
     0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.85;
+    }
+  }
+
+  .score-display {
+    color: $white;
+    font-size: 2.4rem;
+    letter-spacing: 4px;
+    text-shadow: 0 0 18px $violet-dim;
+    z-index: 1;
+  }
+
+  .big-number {
+    color: $white;
+    font-size: 3.5rem;
+    letter-spacing: 8px;
+    text-shadow: 0 0 28px $violet-dim;
+    z-index: 1;
+  }
+
+  .faint-text {
+    color: $violet-dim;
+    font-size: 1.1rem;
+    letter-spacing: 6px;
+  }
+
+  .stasis-text {
+    color: $white;
+    font-size: 2.6rem;
+    letter-spacing: 8px;
+    text-shadow: 0 0 18px $violet-dim;
+    animation: flicker 0.2s ease-in-out infinite alternate;
+  }
+
+  @keyframes flicker {
+    0% {
+      opacity: 0.8;
+    }
     100% {
       opacity: 1;
     }
-    50% {
-      opacity: 0.3;
-    }
   }
 
-  // --- Attract Mode Layouts ---
-  .attract-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 28px;
-  }
-
-  .attract-title {
-    font-size: 2.2rem;
-    color: #ffffff;
-    letter-spacing: 4px;
-    margin: 0;
-    text-shadow: 0 0 10px $neon-cyan;
-  }
-
-  .character-row {
-    display: flex;
-    gap: 16px;
-  }
-
-  .vector-node {
-    width: 10px;
-    height: 10px;
-    border: 1px solid $neon-cyan;
+  .btn {
     background: transparent;
-    box-shadow: 0 0 4px rgba($neon-cyan, 0.3);
-  }
-
-  // --- Monochromatic Wireframe Command Buttons ---
-  .cabinet-button {
-    background: transparent;
-    border: 1px solid $neon-cyan;
-    padding: 12px 32px;
-    color: #ffffff;
+    border: 1px solid $violet-dim;
+    padding: 10px 30px;
+    color: $white;
     font-family: "Jersey-Regular", monospace;
-    font-size: 1.3rem;
-    letter-spacing: 3px;
+    font-size: 1.55rem;
+    letter-spacing: 4px;
     cursor: pointer;
+    z-index: 1;
     transition:
-      background 0.15s ease,
-      text-shadow 0.15s ease;
-    box-shadow: 0 0 15px rgba($neon-cyan, 0.05);
+      background 0.2s,
+      border-color 0.2s;
 
     &:hover {
-      background: rgba($neon-cyan, 0.15);
-      text-shadow: 0 0 6px #ffffff;
+      background: $violet-faint;
+      border-color: $violet;
     }
 
-    &:active {
-      background: rgba($neon-cyan, 0.3);
+    &:focus-visible {
+      outline: 1px solid $violet;
+      outline-offset: 2px;
     }
   }
 
-  .start-btn {
-    font-size: 1.4rem;
-    padding: 14px 40px;
-    animation: buttonGlowSync 2s infinite ease-in-out;
+  .transmission-ripples {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
   }
 
-  @keyframes buttonGlowSync {
-    0%,
+  .ripple {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid $violet-faint;
+    animation: ripple-out 3s ease-out infinite;
+
+    &.r1 {
+      width: 100px;
+      height: 100px;
+      animation-delay: 0s;
+    }
+    &.r2 {
+      width: 100px;
+      height: 100px;
+      animation-delay: 1s;
+    }
+    &.r3 {
+      width: 100px;
+      height: 100px;
+      animation-delay: 2s;
+    }
+  }
+
+  @keyframes ripple-out {
+    0% {
+      transform: scale(1);
+      opacity: 0.45;
+    }
     100% {
-      box-shadow: 0 0 10px rgba($neon-cyan, 0.1);
-    }
-    50% {
-      box-shadow: 0 0 20px rgba($neon-cyan, 0.3);
-      border-color: #ffffff;
+      transform: scale(5);
+      opacity: 0;
     }
   }
 
-  // --- Minimalist Integrated HUD Layout ---
-  .game-hud {
+  .fracture-cracks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .crack {
+    position: absolute;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, $violet-dim, transparent);
+
+    &.c1 {
+      top: 38%;
+      left: 18%;
+      width: 64%;
+      transform: rotate(-12deg);
+    }
+    &.c2 {
+      top: 52%;
+      left: 22%;
+      width: 56%;
+      transform: rotate(6deg);
+    }
+    &.c3 {
+      top: 44%;
+      left: 28%;
+      width: 44%;
+      transform: rotate(-28deg);
+    }
+    &.c4 {
+      top: 56%;
+      left: 32%;
+      width: 38%;
+      transform: rotate(18deg);
+    }
+    &.c5 {
+      top: 49%;
+      left: 25%;
+      width: 50%;
+      transform: rotate(-3deg);
+    }
+  }
+
+  .sonar-rings {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .sonar {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid $violet-faint;
+    animation: sonar-out 1.8s ease-out infinite;
+
+    &.s1 {
+      width: 50px;
+      height: 50px;
+      animation-delay: 0s;
+    }
+    &.s2 {
+      width: 50px;
+      height: 50px;
+      animation-delay: 0.6s;
+    }
+    &.s3 {
+      width: 50px;
+      height: 50px;
+      animation-delay: 1.2s;
+    }
+  }
+
+  @keyframes sonar-out {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    100% {
+      transform: scale(6);
+      opacity: 0;
+    }
+  }
+
+  .hud {
+    flex: 1;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    width: 100%;
-    padding: 0 4px;
-  }
-
-  .hud-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .hud-label {
-    color: rgba($neon-cyan, 0.5);
-    font-size: 1.1rem;
+    padding: 0 6px;
+    font-size: 1.35rem;
     letter-spacing: 2px;
   }
 
-  .hud-value {
-    color: #ffffff;
-    font-size: 1.2rem;
-    letter-spacing: 1.5px;
-    text-shadow: 0 0 6px rgba($neon-cyan, 0.4);
+  .hud-score {
+    color: rgba($white, 0.8);
+  }
+  .hud-lives {
+    color: rgba($white, 0.8);
   }
 </style>

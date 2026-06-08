@@ -1,144 +1,155 @@
 import type { TileType } from "../shared/types.js";
 
-export function debugMaze(map: TileType[][]): () => void {
-  // 1. Create a full-screen top-layer canvas
-  const canvas = document.createElement("canvas");
-  canvas.style.position = "fixed";
-  canvas.style.top = "0";
-  canvas.style.left = "0";
-  canvas.style.width = "100vw";
-  canvas.style.height = "100vh";
-  canvas.style.zIndex = "99999"; // Sit on top of absolutely everything
-  canvas.style.pointerEvents = "none"; // Clicks pass right through it
-
-  // Handle high-DPI screens properly
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = window.innerWidth * dpr;
-  canvas.height = window.innerHeight * dpr;
-
-  document.body.appendChild(canvas);
-
-  const ctx = canvas.getContext("2d");
+const debugMaze = (maze: TileType[][]): HTMLCanvasElement => {
+  const rows: number = maze.length;
+  const cols: number = maze[0].length;
+  
+  const canvas: HTMLCanvasElement = document.createElement('canvas');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  
+  canvas.style.position = 'fixed';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.zIndex = '999999';
+  canvas.style.backgroundColor = '#060618'; // Cosmic void
+  
+  const ctx: CanvasRenderingContext2D | null = canvas.getContext('2d');
   if (!ctx) {
-    console.error("Failed to get Canvas context");
-    return () => {};
+    throw new Error('Could not get canvas context');
   }
-  ctx.scale(dpr, dpr);
-
-  // 2. Clear to a solid pitch-black background
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-
-  // 3. Grid sizing calculations
-  const rows = map.length;
-  const cols = map[0].length;
   
-  // Find largest tile size that fits without cropping
-  const tileSize = Math.min(
-    window.innerWidth / cols,
-    window.innerHeight / rows
-  );
+  const maxTileWidth: number = (canvas.width * 0.8) / cols;
+  const maxTileHeight: number = (canvas.height * 0.8) / rows;
+  const tileSize: number = Math.min(maxTileWidth, maxTileHeight, 100);
   
-  // Center the maze perfectly on the screen
-  const offsetX = (window.innerWidth - cols * tileSize) / 2;
-  const offsetY = (window.innerHeight - rows * tileSize) / 2;
-
-  // 4. Style setups
-  const mazeColor = "#3B5266"; // Calm slate-steel
-  ctx.lineWidth = 2;
-
-  // Draw a single tile at grid coordinates
-  const drawTile = (r: number, c: number, type: TileType) => {
-    const x = offsetX + c * tileSize;
-    const y = offsetY + r * tileSize;
-    const center = tileSize / 2;
-
-    ctx.strokeStyle = mazeColor;
-    ctx.globalAlpha = 0.7; // Softened opacity so it's not harsh
-
-    switch (type) {
-      case "WH": // Wall Horizontal
-        ctx.beginPath();
-        ctx.moveTo(x, y + center);
-        ctx.lineTo(x + tileSize, y + center);
-        ctx.stroke();
-        break;
-
-      case "WV": // Wall Vertical
-        ctx.beginPath();
-        ctx.moveTo(x + center, y);
-        ctx.lineTo(x + center, y + tileSize);
-        ctx.stroke();
-        break;
-
-      case "TL": // Top Left Corner
-        ctx.beginPath();
-        ctx.arc(x + tileSize, y + tileSize, center, Math.PI, (3 * Math.PI) / 2);
-        ctx.stroke();
-        break;
-
-      case "TR": // Top Right Corner
-        ctx.beginPath();
-        ctx.arc(x, y + tileSize, center, (3 * Math.PI) / 2, 0);
-        ctx.stroke();
-        break;
-
-      case "BL": // Bottom Left Corner
-        ctx.beginPath();
-        ctx.arc(x + tileSize, y, center, Math.PI / 2, Math.PI);
-        ctx.stroke();
-        break;
-
-      case "BR": // Bottom Right Corner
-        ctx.beginPath();
-        ctx.arc(x, y, center, 0, Math.PI / 2);
-        ctx.stroke();
-        break;
-
-      case "FD": // Standard Food Pellet
-        ctx.globalAlpha = 1.0;
-        ctx.fillStyle = "#FFB8AE"; // Soft peach
-        ctx.beginPath();
-        ctx.arc(x + center, y + center, tileSize * 0.1, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-
-      case "PP": // Power Pellet
-        ctx.globalAlpha = 1.0;
-        ctx.fillStyle = "#FFB8AE";
-        ctx.beginPath();
-        ctx.arc(x + center, y + center, tileSize * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-
-      case "GL": // Ghost Lair Door
-        ctx.strokeStyle = "#FF809B"; // Subtle pink door
-        ctx.beginPath();
-        ctx.moveTo(x, y + center);
-        ctx.lineTo(x + tileSize, y + center);
-        ctx.stroke();
-        break;
-        
-      case "PM": // Pac-man Spawn
-        ctx.globalAlpha = 1.0;
-        ctx.fillStyle = "#FFEA00"; // Signature yellow
-        ctx.beginPath();
-        ctx.arc(x + center, y + center, tileSize * 0.4, 0.2 * Math.PI, 1.8 * Math.PI);
-        ctx.lineTo(x + center, y + center);
-        ctx.fill();
-        break;
+  const offsetX: number = (canvas.width - cols * tileSize) / 2;
+  const offsetY: number = (canvas.height - rows * tileSize) / 2;
+  
+  // Fill background
+  ctx.fillStyle = '#060618';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw subtle dot grid (matching PixiGrid stars)
+  for (let r = 0; r <= rows; r++) {
+    for (let c = 0; c <= cols; c++) {
+      const x = offsetX + c * tileSize;
+      const y = offsetY + r * tileSize;
+      const bright = Math.random() > 0.85;
+      ctx.fillStyle = bright ? '#444488' : '#222250';
+      ctx.beginPath();
+      ctx.arc(x, y, bright ? 1.5 : 1, 0, Math.PI * 2);
+      ctx.fill();
     }
+  }
+  
+  // Helper: is this a wall tile?
+  const isWall = (r: number, c: number): boolean => {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
+    const tile = maze[r][c];
+    return tile === "WL" || tile === "LE";
   };
-
-  // Run the render loop
+  
+  // Helper: is this a lair interior tile? (open inside, no borders)
+  const isLairInterior = (r: number, c: number): boolean => {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
+    const tile = maze[r][c];
+    return (
+      tile === "LT" ||
+      tile === "BY" ||
+      tile === "PY" ||
+      tile === "IY" ||
+      tile === "CE"
+    );
+  };
+  
+  // Helper: should we draw a border from this wall toward this neighbor?
+  const shouldDrawBorder = (
+    _wallR: number,
+    _wallC: number,
+    neighborR: number,
+    neighborC: number,
+  ): boolean => {
+    // Boundary of maze always draws border
+    if (neighborR < 0 || neighborR >= rows || neighborC < 0 || neighborC >= cols) {
+      return true;
+    }
+    // If neighbor is a wall, no border between walls
+    if (isWall(neighborR, neighborC)) return false;
+    // If neighbor is lair interior, no border (open inside)
+    if (isLairInterior(neighborR, neighborC)) return false;
+    // Everything else (DT, PP, ES, PM, teleports) — draw border
+    return true;
+  };
+  
+  // Draw wall borders (cosmic wireframe)
+  ctx.strokeStyle = '#6655aa';
+  ctx.lineWidth = 2;
+  
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      drawTile(r, c, map[r][c]);
+      if (!isWall(r, c)) continue;
+      
+      const x = offsetX + c * tileSize;
+      const y = offsetY + r * tileSize;
+      
+      if (shouldDrawBorder(r, c, r - 1, c)) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + tileSize, y);
+        ctx.stroke();
+      }
+      if (shouldDrawBorder(r, c, r + 1, c)) {
+        ctx.beginPath();
+        ctx.moveTo(x, y + tileSize);
+        ctx.lineTo(x + tileSize, y + tileSize);
+        ctx.stroke();
+      }
+      if (shouldDrawBorder(r, c, r, c - 1)) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + tileSize);
+        ctx.stroke();
+      }
+      if (shouldDrawBorder(r, c, r, c + 1)) {
+        ctx.beginPath();
+        ctx.moveTo(x + tileSize, y);
+        ctx.lineTo(x + tileSize, y + tileSize);
+        ctx.stroke();
+      }
     }
   }
-
-  // Return a cleanup function so you can remove it on command
-  return () => {
-    canvas.remove();
+  
+  // Optionally label spawn tiles for debugging
+  ctx.font = `${Math.max(10, tileSize / 4)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  const spawnLabels: Record<string, { label: string; color: string }> = {
+    "PM": { label: "P", color: "#ffff00" },
+    "BY": { label: "B", color: "#ff0000" },
+    "PY": { label: "P", color: "#ffb8ff" },
+    "IY": { label: "I", color: "#00ffff" },
+    "CE": { label: "C", color: "#ffb852" },
   };
-}
+  
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = maze[r][c];
+      const info = spawnLabels[tile];
+      if (info) {
+        const x = offsetX + c * tileSize + tileSize / 2;
+        const y = offsetY + r * tileSize + tileSize / 2;
+        ctx.fillStyle = info.color;
+        ctx.fillText(info.label, x, y);
+      }
+    }
+  }
+  
+  document.body.appendChild(canvas);
+  return canvas;
+};
+
+export { debugMaze };

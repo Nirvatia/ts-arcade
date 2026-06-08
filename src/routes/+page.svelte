@@ -1,227 +1,411 @@
 <script lang="ts">
-  const routes = [
-    { id: "01", path: "/games/pacman", name: "Pac-Man", available: true },
-    { id: "02", path: "#", name: "Snake", available: false },
-    { id: "03", path: "#", name: "Tetris", available: false },
+  import { onMount } from "svelte";
+
+  interface GameRoute {
+    id: string;
+    path: string;
+    name: string;
+    color: string;
+    available: boolean;
+  }
+
+  const routes: GameRoute[] = [
+    {
+      id: "01",
+      path: "/games/pacman",
+      name: "PAC-MAN",
+      color: "#ddaa44",
+      available: true,
+    },
+    { id: "02", path: "#", name: "SNAKE", color: "#44aa44", available: false },
+    { id: "03", path: "#", name: "TETRIS", color: "#aa4444", available: false },
+    { id: "04", path: "#", name: "PONG", color: "#aaaa44", available: false },
+    {
+      id: "05",
+      path: "#",
+      name: "BREAKOUT",
+      color: "#aa44aa",
+      available: false,
+    },
+    {
+      id: "06",
+      path: "#",
+      name: "SPACE INVADERS",
+      color: "#44aaaa",
+      available: false,
+    },
+    {
+      id: "07",
+      path: "#",
+      name: "FROGGER",
+      color: "#88aa44",
+      available: false,
+    },
+    {
+      id: "08",
+      path: "#",
+      name: "DIG DUG",
+      color: "#aa8844",
+      available: false,
+    },
+    { id: "09", path: "#", name: "GALAGA", color: "#4488aa", available: false },
+    {
+      id: "10",
+      path: "#",
+      name: "ASTEROIDS",
+      color: "#884488",
+      available: false,
+    },
   ];
+
+  let selectedIndex = $state(0);
+  let transitioning = $state(false);
+
+  const availableIndices = routes
+    .map((r, i) => (r.available ? i : -1))
+    .filter((i) => i >= 0);
+
+  function selectNext() {
+    if (availableIndices.length === 0) return;
+    const pos = availableIndices.indexOf(selectedIndex);
+    selectedIndex = availableIndices[(pos + 1) % availableIndices.length];
+  }
+
+  function selectPrev() {
+    if (availableIndices.length === 0) return;
+    const pos = availableIndices.indexOf(selectedIndex);
+    selectedIndex =
+      availableIndices[
+        (pos - 1 + availableIndices.length) % availableIndices.length
+      ];
+  }
+
+  function activate() {
+    const route = routes[selectedIndex];
+    if (route?.available && !transitioning) {
+      window.location.href = route.path;
+    }
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectNext();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectPrev();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      activate();
+    }
+  }
+
+  onMount(() => {
+    if (availableIndices.length > 0) selectedIndex = availableIndices[0];
+  });
 </script>
 
-<main class="neon-axis">
-  <!-- 1. Centralized Hero Branding Header -->
-  <header class="axis-header">
-    <span class="system-tag">// CH_DIRECT_ACCESS_SYSTEM</span>
-    <h1 class="main-title">JS_ARCADE</h1>
-    <div class="horizon-beam"></div>
+<svelte:window onkeydown={onKeydown} />
+
+<main class="void-library">
+  <div class="starfield"></div>
+
+  <header class="library-header">
+    <span class="archive-label">ARCHIVE</span>
   </header>
 
-  <!-- 2. Dead-Center Zero-Jank Scrollable Menu -->
-  <section class="axis-viewport">
-    <div class="axis-list">
-      {#each routes as route}
-        <div 
-          class="axis-row" 
-          class:axis-row--active={route.available}
-          class:axis-row--locked={!route.available}
-        >
-          {#if route.available}
-            <a class="axis-link" href={route.path}>
-              <!-- Symmetrical center-out laser explosion backdrop -->
-              <div class="laser-burst"></div>
-              
-              <div class="link-wrap">
-                <span class="item-id">{route.id}</span>
-                <h2 class="item-name">{route.name}</h2>
-                <span class="item-status">READY</span>
-              </div>
-            </a>
-          {:else}
-            <div class="axis-link">
-              <div class="laser-burst"></div>
-              
-              <div class="link-wrap">
-                <span class="item-id">{route.id}</span>
-                <h2 class="item-name">{route.name}</h2>
-                <span class="item-status">LOCKED</span>
-              </div>
-            </div>
-          {/if}
-        </div>
-      {/each}
-    </div>
-  </section>
+  <div class="transmissions">
+    {#each routes as route, i}
+      {@const isAvailable = route.available}
+      {@const isSelected = i === selectedIndex}
+
+      <button
+        class="transmission"
+        class:available={isAvailable}
+        class:locked={!isAvailable}
+        class:selected={isSelected}
+        style="--sig-color: {route.color};"
+        disabled={!isAvailable}
+        onclick={activate}
+        onmouseenter={() => {
+          if (isAvailable) selectedIndex = i;
+        }}
+        onfocus={() => {
+          if (isAvailable) selectedIndex = i;
+        }}
+        onkeydown={(e) => {
+          if (e.key === "Enter") activate();
+        }}
+        aria-label={`${route.name}${isAvailable ? "" : " — dormant"}`}
+      >
+        <span class="transmission-name">{route.name}</span>
+        {#if !isAvailable}
+          <span class="transmission-status">DORMANT</span>
+        {/if}
+        {#if isSelected && isAvailable}
+          <span class="focus-stars">
+            <span class="fstar f1"></span>
+            <span class="fstar f2"></span>
+            <span class="fstar f3"></span>
+            <span class="fstar f4"></span>
+          </span>
+        {/if}
+      </button>
+    {/each}
+  </div>
 </main>
 
 <style lang="scss">
-  $font-arcade: "Jersey-Regular", monospace;
-  
-  $cyan: #00f3ff;
-  $orange: #ff5500;
-  $void: #000000;
+  $void: #040410;
+  $violet: #6655aa;
+  $violet-dim: rgba(120, 100, 180, 0.45);
+  $white: #eeeedd;
+  $white-dim: #8888aa;
 
-  .neon-axis {
-    font-family: $font-arcade;
-    text-transform: uppercase;
+  :global(body) {
+    margin: 0;
     background: $void;
-    width: 100vw;
-    height: 100vh;
+    overflow: hidden;
+  }
+
+  .void-library {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    width: 100vw;
+    background: radial-gradient(ellipse at center, #0c0c24 0%, $void 55%);
+    font-family: "Jersey-Regular", "Courier New", monospace;
+    position: relative;
     overflow: hidden;
-    box-sizing: border-box;
+  }
 
-    /* --- HERO TOP BRANDING --- */
-    .axis-header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 4rem 2rem 2rem 2rem;
-      background: linear-gradient(to bottom, #010612 0%, $void 100%);
-      z-index: 10;
+  // ── Starfield ───────────────────────────────────────────
+  .starfield {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(
+        1px 1px at 8% 12%,
+        rgba(150, 120, 220, 0.5),
+        transparent
+      ),
+      radial-gradient(1px 1px at 18% 50%, rgba(150, 120, 220, 0.3), transparent),
+      radial-gradient(
+        1.2px 1.2px at 30% 8%,
+        rgba(180, 150, 240, 0.55),
+        transparent
+      ),
+      radial-gradient(
+        1px 1px at 44% 60%,
+        rgba(150, 120, 220, 0.35),
+        transparent
+      ),
+      radial-gradient(
+        1.5px 1.5px at 55% 18%,
+        rgba(200, 170, 255, 0.5),
+        transparent
+      ),
+      radial-gradient(1px 1px at 62% 72%, rgba(150, 120, 220, 0.3), transparent),
+      radial-gradient(1px 1px at 72% 38%, rgba(150, 120, 220, 0.4), transparent),
+      radial-gradient(
+        1.3px 1.3px at 82% 10%,
+        rgba(180, 150, 240, 0.5),
+        transparent
+      ),
+      radial-gradient(1px 1px at 90% 55%, rgba(150, 120, 220, 0.3), transparent),
+      radial-gradient(1px 1px at 4% 78%, rgba(150, 120, 220, 0.35), transparent),
+      radial-gradient(
+        1.2px 1.2px at 25% 32%,
+        rgba(180, 150, 240, 0.45),
+        transparent
+      ),
+      radial-gradient(1px 1px at 40% 80%, rgba(150, 120, 220, 0.3), transparent),
+      radial-gradient(
+        1.4px 1.4px at 52% 45%,
+        rgba(200, 170, 255, 0.4),
+        transparent
+      ),
+      radial-gradient(1px 1px at 68% 6%, rgba(150, 120, 220, 0.45), transparent),
+      radial-gradient(1px 1px at 85% 68%, rgba(150, 120, 220, 0.3), transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-      .system-tag {
-        font-size: 1rem;
-        letter-spacing: 3px;
-        color: rgba(0, 243, 255, 0.4);
-        margin-bottom: 0.5rem;
+  // ── Header ──────────────────────────────────────────────
+  .library-header {
+    position: relative;
+    z-index: 1;
+    padding: 3.5rem 1rem 3rem;
+  }
+
+  .archive-label {
+    font-size: 0.65rem;
+    color: rgba($violet, 0.35);
+    letter-spacing: 8px;
+    text-transform: uppercase;
+  }
+
+  // ── Transmissions ───────────────────────────────────────
+  .transmissions {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2.2rem;
+    padding: 1rem 2rem 6rem;
+    width: 100%;
+    max-width: 500px;
+    overflow-y: auto;
+    flex: 1;
+
+    &::-webkit-scrollbar {
+      width: 3px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba($violet, 0.15);
+      border-radius: 2px;
+    }
+  }
+
+  .transmission {
+    background: none;
+    border: none;
+    cursor: default;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 1rem 1.5rem;
+    position: relative;
+    font-family: inherit;
+    width: 100%;
+    transition: transform 0.3s ease;
+    outline-offset: 4px;
+
+    &.available {
+      cursor: pointer;
+
+      &:hover .transmission-name,
+      &:focus-visible .transmission-name {
+        color: $white;
+        text-shadow:
+          0 0 12px var(--sig-color),
+          0 0 30px var(--sig-color),
+          0 0 50px rgba(0, 0, 0, 0);
+        letter-spacing: 10px;
+        transition:
+          letter-spacing 0.3s ease,
+          text-shadow 0.3s ease;
       }
 
-      .main-title {
-        font-size: 4.5rem;
-        font-weight: 900;
-        margin: 0;
-        color: #ffffff;
-        letter-spacing: 8px;
-        text-shadow: 0 0 20px rgba(0, 243, 255, 0.6);
+      &:hover,
+      &:focus-visible {
+        transform: scale(1.06);
       }
 
-      /* Clean structural visual accent splitting the view */
-      .horizon-beam {
-        width: 100%;
-        max-width: 700px;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, $cyan, transparent);
-        box-shadow: 0 0 10px $cyan;
-        margin-top: 1.5rem;
+      &:hover .focus-stars .fstar,
+      &:focus-visible .focus-stars .fstar {
+        opacity: 1;
+        animation-duration: 0.8s;
       }
     }
 
-    /* --- VERTICALLY ALIGNED VIEWPORT --- */
-    .axis-viewport {
-      flex-grow: 1;
-      overflow-y: auto;
-      padding: 0 2rem 4rem 2rem;
-      display: flex;
-      justify-content: center;
-
-      &::-webkit-scrollbar { width: 4px; }
-      &::-webkit-scrollbar-track { background: transparent; }
-      &::-webkit-scrollbar-thumb { background: rgba(0, 243, 255, 0.1); }
+    &.selected {
+      transform: scale(1.08);
     }
 
-    .axis-list {
-      display: flex;
-      flex-direction: column;
-      gap: 4px; // Dense mechanical stacking
-      width: 100%;
-      max-width: 700px;
+    &.available:focus-visible {
+      box-shadow: 0 0 0 2px $violet-dim;
+      border-radius: 3px;
     }
+  }
 
-    .axis-row {
-      position: relative;
-      overflow: hidden;
-      background: rgba(255, 255, 255, 0.01);
+  .transmission-name {
+    font-size: 2rem;
+    letter-spacing: 6px;
+    color: #1a1a2e;
+    transition:
+      color 0.4s ease,
+      text-shadow 0.4s ease,
+      letter-spacing 0.3s ease;
+  }
 
-      .axis-link {
-        display: block;
-        text-decoration: none;
-        width: 100%;
-        box-sizing: border-box;
-        position: relative;
-        z-index: 5;
-      }
+  .available .transmission-name {
+    color: $white-dim;
+  }
 
-      /* Symmetrical, clean inner row flexbox alignment */
-      .link-wrap {
-        display: grid;
-        grid-template-columns: 60px 1fr 100px;
-        align-items: center;
-        padding: 1.2rem 2rem;
-      }
+  .selected.available .transmission-name {
+    color: $white;
+    text-shadow:
+      0 0 18px var(--sig-color),
+      0 0 40px var(--sig-color);
+  }
 
-      .item-id {
-        font-size: 1.1rem;
-        font-weight: bold;
-        transition: color 0.15s ease;
-      }
+  .locked .transmission-name {
+    color: #141428;
+  }
 
-      .item-name {
-        font-size: 2.5rem;
-        font-weight: 900;
-        margin: 0;
-        letter-spacing: 2px;
-        text-align: left;
-        transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
-      }
+  .transmission-status {
+    font-size: 0.55rem;
+    letter-spacing: 4px;
+    color: #1a1a2e;
+  }
 
-      .item-status {
-        font-size: 1.1rem;
-        font-weight: bold;
-        letter-spacing: 1px;
-        text-align: right;
-        transition: color 0.15s ease;
-      }
+  // ── Focus stars ─────────────────────────────────────────
+  .focus-stars {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-      /* Hardware-accelerated symmetrical scaling background layer */
-      .laser-burst {
-        position: absolute;
-        inset: 0;
-        transform: scaleX(0);
-        transform-origin: center; /* Animates smoothly inside-out! */
-        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        z-index: -1;
-      }
+  .fstar {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: $white;
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--sig-color);
+    opacity: 0.3;
+    animation: star-twinkle 1.5s ease-in-out infinite;
+  }
 
-      /* --- ACTIVE CYAN SPECIFICATION --- */
-      &--active {
-        .item-id { color: rgba(0, 243, 255, 0.3); }
-        .item-name { color: #ffffff; }
-        .item-status { color: rgba(0, 243, 255, 0.5); }
-        .laser-burst { background: radial-gradient(circle, rgba(0, 243, 255, 0.18) 0%, transparent 85%); }
+  .f1 {
+    top: 8%;
+    left: 12%;
+    animation-delay: 0s;
+  }
+  .f2 {
+    top: 10%;
+    right: 15%;
+    animation-delay: 0.4s;
+  }
+  .f3 {
+    bottom: 10%;
+    left: 20%;
+    animation-delay: 0.8s;
+  }
+  .f4 {
+    bottom: 12%;
+    right: 15%;
+    animation-delay: 1.2s;
+  }
 
-        &:hover {
-          .laser-burst { transform: scaleX(1); }
-          
-          .item-name {
-            color: $cyan;
-            text-shadow: 0 0 15px $cyan, 0 0 30px rgba(0, 243, 255, 0.5);
-            transform: translateX(6px);
-          }
-          
-          .item-id { color: #ffffff; text-shadow: 0 0 8px $cyan; }
-          .item-status { color: #ffffff; text-shadow: 0 0 8px $cyan; }
-        }
-      }
-
-      /* --- LOCKED ORANGE SPECIFICATION --- */
-      &--locked {
-        .item-id { color: #161616; }
-        .item-name { color: #161616; }
-        .item-status { color: #161616; }
-        .laser-burst { background: radial-gradient(circle, rgba(255, 85, 0, 0.15) 0%, transparent 85%); }
-
-        &:hover {
-          .laser-burst { transform: scaleX(1); }
-
-          .item-name {
-            color: $orange;
-            text-shadow: 0 0 15px $orange;
-            transform: translateX(6px);
-          }
-
-          .item-id { color: $orange; }
-          .item-status { color: #ffffff; text-shadow: 0 0 8px $orange; }
-        }
-      }
+  @keyframes star-twinkle {
+    0%,
+    100% {
+      opacity: 0.2;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.8);
     }
   }
 </style>

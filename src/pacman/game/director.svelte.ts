@@ -1,277 +1,240 @@
+// director/Director.svelte.ts
 import { Clock } from "../core/Clock.svelte.js";
 import { eventBus } from "../core/EventBus.js";
-import { GameRegistry } from "./GameRegistry.js";
-import { GameState } from "./GameState.svelte.js";
-import { Tally } from "./Tally.svelte.js";
-import { SceneRegistry } from "../scenes/SceneRegistry.js";
-import { GameRenderer } from "../render/GameRenderer.js";
-import { Renderer } from "../render/Renderer.js";
-import { GameLoop } from "../core/GameLoop.js";
-import { SceneRenderer } from "../render/SceneRenderer.js";
 import { Sequence } from "../core/Sequence.js";
-import { trackClockLifespan } from "../debug/trackClockLifespan.js";
+import type { GameRegistry } from "./GameRegistry.js";
+import type { GameState } from "./GameState.svelte.js";
+import type { Tally } from "./Tally.svelte.js";
+import type { Renderer } from "../render/Renderer.js";
+import type { GameLoop } from "../core/GameLoop.js";
+import { CFG_PIXI_GRID } from "../config/pixiGrid.config.js";
 
-// Constants
-const TRANSITION_DURATION = 5;
-const INTERMISSION_DURATION = 10;
-const FLASH_COUNT = 4;
-const FLASH_INTERVAL_MS = 400;
-const GHOST_EAT_PAUSE_DURATION = 1;
+const COUNTDOWN_SECONDS = 5;
+const INTERMISSION_SECONDS = 10;
 
 export class Director {
-  private static instance: Director;
-  private gameState: GameState;
-  private registry: GameRegistry;
-  private tally: Tally;
-  private sceneRegistry: SceneRegistry;
-  private gameLoop: GameLoop;
-  private renderer: Renderer;
-  private sceneRenderer: SceneRenderer;
-  private gameRenderer: GameRenderer;
+  private readonly gameState: GameState;
+  private readonly gameRegistry: GameRegistry;
+  private readonly tally: Tally;
+  private readonly gameLoop: GameLoop;
+  private readonly renderer: Renderer;
 
-  private _currentClock: Clock | null = null;
-  private activeSequence: Sequence = new Sequence();
+  private clock = $state<{ current: Clock | null }>({ current: null });
+  private readonly sequence = new Sequence();
 
-  private constructor() {
-    this.gameState = GameState.getInstance();
-    this.registry = GameRegistry.getInstance();
-    this.tally = Tally.getInstance();
-    this.sceneRegistry = SceneRegistry.getInstance();
-    this.gameLoop = GameLoop.getInstance();
-    this.renderer = Renderer.getInstance();
-    this.gameRenderer = GameRenderer.getInstance();
-    this.sceneRenderer = SceneRenderer.getInstance();
-    this.initEventListeners();
+  constructor(
+    gameState: GameState,
+    gameRegistry: GameRegistry,
+    tally: Tally,
+    gameLoop: GameLoop,
+    renderer: Renderer,
+  ) {
+    this.gameState = gameState;
+    this.gameRegistry = gameRegistry;
+    this.tally = tally;
+    this.gameLoop = gameLoop;
+    this.renderer = renderer;
+    this.wireEvents();
   }
 
-  public get currentClock(): Clock | null {
-    return this._currentClock;
+  get currentClock(): Clock | null {
+    return this.clock.current;
   }
 
-  static getInstance(): Director {
-    if (!Director.instance) Director.instance = new Director();
-    return Director.instance;
+  // ── Event wiring ──────────────────────────────────────────────
+  private wireEvents(): void {
+    eventBus.on("game:start", () => this.beginCountdown());
+    eventBus.on("game:restart", () => this.restartGame());
+    eventBus.on("level:complete", (p) => this.playLevelCompleteSequence(p));
+    eventBus.on("pacman:death_animation_start", () => this.playDeathSequence());
   }
 
-  private resetTickingState(): void {
-    if (this._currentClock) {
-      this._currentClock.stop();
-      this._currentClock = null;
+  // ── Clocks & sequences ────────────────────────────────────────
+  private cancelAll(): void {
+    if (this.clock.current) {
+      this.clock.current.stop();
+      this.clock.current = null;
     }
-    this.activeSequence.clear();
+    this.sequence.clear();
   }
 
-  private createClock(name: string): Clock {
-    const clock = new Clock();
-    trackClockLifespan(clock, name);
-    this._currentClock = clock;
-    return clock;
+  private startClock(name: string): Clock {
+    const c = new Clock();
+    this.clock.current = c;
+    return c;
   }
 
-  private handleGameOver(): void {
-    this.resetTickingState();
+  private bindLevelToLoop(): void {
+    const level = this.gameRegistry.getActiveLevel();
+    if (!level) return;
+    this.gameLoop.setUpdatables(level.getAllUpdatable());
+    this.renderer.setDrawables(level.getAllDrawable());
+  }
 
+  // ── Death ─────────────────────────────────────────────────────
+  private playDeathSequence(): void {
+    this.gameState.mode = "PACMAN_DEAD";
+    this.cancelAll();
+
+    const level = this.gameRegistry.getActiveLevel();
+    const pacman = level?.pacman;
+    const grid = level?.pixiGrid;
+    if (!grid || !pacman) return;
+
+    grid.startDeathAnimation(pacman.x, pacman.y);
+
+    const seconds = CFG_PIXI_GRID.deathDuration;
+    const clock = this.startClock("death");
+
+    clock.start(
+      seconds * 10,
+      100,
+      (remaining) => {
+        const progress = 1 - remaining / (seconds * 10);
+        this.gameState.deathProgress = progress;
+        grid.setDeathProgress(progress);
+      },
+      () => {
+        grid.endDeathAnimation();
+        this.gameState.deathProgress = 0;
+        this.handleLifeLost();
+      },
+    );
+  }
+
+  private handleLifeLost(): void {
+    this.cancelAll();
+    if (this.gameState.lives - 1 < 0) {
+      this.endGame();
+    } else {
+      this.gameState.lives--;
+      this.respawnAfterDeath();
+    }
+  }
+
+  // ── Game flow ─────────────────────────────────────────────────
+  public async loadGame(): Promise<void> {
+    await this.gameRegistry.createLevelAsync();
+    this.setupLevel();
+    this.bindLevelToLoop();
+  }
+
+  public beginCountdown(): void {
+    this.cancelAll();
+    this.gameLoop.start();
+    this.gameState.mode = "LEVEL_TRANSITION";
+
+    eventBus.emit("level:countdown_start");
+
+    const clock = this.startClock("countdown");
+    clock.start(
+      COUNTDOWN_SECONDS,
+      1000,
+      () => {},
+      () => {
+        this.gameState.mode = "PLAYING";
+        this.gameRegistry.getActiveLevel()?.exitLairAll();
+        this.clock.current = null;
+        eventBus.emit("game:resume");
+      },
+    );
+  }
+
+  public async restartGame(): Promise<void> {
+    this.cancelAll();
+    this.gameRegistry.getActiveLevel()?.pixiGrid.destroy();
+    this.gameState.reset();
+    await this.gameRegistry.createLevelAsync();
+    this.setupLevel();
+    this.bindLevelToLoop();
+    this.beginCountdown();
+  }
+
+  private setupLevel(): void {
+    const level = this.gameRegistry.getActiveLevel();
+    if (!level) return;
+    this.gameState.initializeCollectibles(this.gameState.levelData.map);
+    level.clearAllCanvases();
+    level.spawnAll();
+    eventBus.emit("level:start", {
+      level: this.gameState.currentLevel,
+      totalDots: this.gameState.totalDots,
+    });
+  }
+
+  private async respawnAfterDeath(): Promise<void> {
+    this.cancelAll();
+    await this.gameRegistry.recreateEntitiesAsync();
+
+    const level = this.gameRegistry.getActiveLevel();
+    if (!level) return;
+
+    level.clearAllCanvases();
+    level.spawnAll();
+    this.bindLevelToLoop();
+
+    eventBus.emit("level:countdown_start");
+
+    this.gameState.mode = "LEVEL_TRANSITION";
+    level.pixiGrid.needsRedraw = true;
+    this.renderer.render();
+
+    const clock = this.startClock("respawn");
+    clock.start(
+      COUNTDOWN_SECONDS,
+      1000,
+      () => {},
+      () => {
+        this.gameState.mode = "PLAYING";
+        this.gameRegistry.getActiveLevel()?.exitLairAll();
+        this.clock.current = null;
+      },
+    );
+  }
+
+  private endGame(): void {
+    this.cancelAll();
     this.gameLoop.stop();
-
+    this.gameState.mode = "GAME_OVER";
     eventBus.emit("ui:game_over_show", {
       score: this.tally.score,
       level: this.gameState.currentLevel,
     });
   }
 
-  private initEventListeners(): void {
-    eventBus.on("game:load", () => this.loadGame());
-    eventBus.on("game:start", () => this.startGame());
-    eventBus.on("game:restart", () => this.restartGame());
-    eventBus.on("game:over", () => this.handleGameOver());
-    eventBus.on("level:complete", (payload) =>
-      this.triggerIntermission(payload),
-    );
-    eventBus.on("pacman:death_triggered", () => this.handlePacmanDeath());
-    eventBus.on("pacman:death_animation_end", () => this.evaluateLifeLoss());
-    eventBus.on("command:ghost_eaten", () => this.triggerGhostEatenSequence());
+  // ── Level complete → intermission → next level ────────────────
+  private async playLevelCompleteSequence(payload: {
+    level: number;
+    score: number;
+  }): Promise<void> {
+    this.cancelAll();
+    this.gameState.mode = "LEVEL_COMPLETE";
+    this.renderer.clear();
+
+    const level = this.gameRegistry.getActiveLevel();
+    const grid = level?.pixiGrid;
+    if (!grid) return;
+
+    grid.isFlashing = true;
+
+    setTimeout(() => this.startIntermission(payload), 4800);
   }
 
-  loadGame(): void {
-    eventBus.emit("command:create_all");
-    this.loadLevel();
+  private startIntermission(payload: { level: number; score: number }): void {
+    const grid = this.gameRegistry.getActiveLevel()?.pixiGrid;
+    if (!grid) return;
 
-    const updatables = this.registry.getAllUpdatable();
-    const drawables = this.registry.getAllDrawable();
+    eventBus.emit("level:intermission_start", { nextLevel: payload.level + 1 });
+    this.renderer.clear();
 
-    this.gameLoop.setUpdatables(updatables);
-    this.gameRenderer.setDrawables(drawables);
-  }
-
-  startGame(): void {
-    this.resetTickingState();
-
-    this.gameLoop.start();
-
-    eventBus.emit("level:transition_start", { duration: TRANSITION_DURATION });
-
-    const clock = this.createClock(
-      `Clock_Level_${this.gameState.currentLevel}`,
-    );
-
-    clock.start(
-      TRANSITION_DURATION,
-      1000,
-      () => {},
-      () => {
-        eventBus.emit("level:transition_end");
-        eventBus.emit("game:started");
-        eventBus.emit("command:init_all");
-        eventBus.emit("command:exit_lair_all");
-        this._currentClock = null;
-      },
-    );
-  }
-
-  restartGame(): void {
-    this.loadLevel();
-
-    const updatables = this.registry.getAllUpdatable();
-    const drawables = this.registry.getAllDrawable();
-    this.gameLoop.setUpdatables(updatables);
-    this.gameRenderer.setDrawables(drawables);
-
-    this.gameLoop.start();
-    this.startGame();
-  }
-
-  loadLevel(): void {
-    eventBus.emit("command:reset_all");
-    eventBus.emit("command:setup_environment");
-    eventBus.emit("command:create_path_graph");
-    eventBus.emit("command:spawn_actors");
-  }
-
-  triggerGhostEatenSequence(): void {
-    this.resetTickingState();
-
-    const clock = this.createClock("GhostEatPause");
-
-    clock.start(
-      GHOST_EAT_PAUSE_DURATION,
-      1000,
-      () => {},
-      () => {
-        eventBus.emit("game:resumed");
-      },
-    );
-  }
-
-  handlePacmanDeath(): void {
-    this.resetTickingState();
-  }
-
-  private evaluateLifeLoss(): void {
-    this.resetTickingState();
-
-    // Deduct the life inside GameState
-    eventBus.emit("command:execute_life_loss", {
-      currentScore: this.tally.score,
+    grid.playIntermission(INTERMISSION_SECONDS, async () => {
+      this.gameState.mode = "LEVEL_TRANSITION";
+      const level = this.gameRegistry.getActiveLevel();
+      if (level?.pixiGrid) level.pixiGrid.reset();
+      await this.gameRegistry.recreateEntitiesAsync();
+      this.setupLevel();
+      this.bindLevelToLoop();
+      this.beginCountdown();
     });
-
-    // Clean, explicit branching. No hidden conditional checks down the line.
-    if (this.gameState.mode === "GAME_OVER") {
-      // GameState has already emitted "game:over", which triggers handleGameOver()
-      return;
-    }
-
-    // If we survived, explicitly move to the next logical phase
-    this.startRespawnCountdown();
-  }
-
-  startRespawnCountdown(): void {
-    this.resetTickingState();
-
-    eventBus.emit("command:reset_actors");
-    eventBus.emit("command:spawn_actors");
-    eventBus.emit("level:transition_start", { duration: TRANSITION_DURATION });
-
-    const clock = this.createClock(
-      `Respawn_Clock_Level_${this.gameState.currentLevel}`,
-    );
-
-    clock.start(
-      TRANSITION_DURATION,
-      1000,
-      () => {},
-      () => {
-        eventBus.emit("level:transition_end");
-        eventBus.emit("game:resumed");
-        eventBus.emit("command:exit_lair_all");
-        this._currentClock = null;
-      },
-    );
-  }
-
-  triggerIntermission(payload: { level: number; score: number }): void {
-    this.resetTickingState();
-
-    const maze = this.registry.getMaze();
-
-    for (let i = 0; i < FLASH_COUNT; i++) {
-      this.activeSequence
-        .addCallback(() => {
-          maze.isFlashing = true;
-          maze.requestRedraw();
-        })
-        .addWait(FLASH_INTERVAL_MS)
-        .addCallback(() => {
-          maze.isFlashing = false;
-          maze.requestRedraw();
-        })
-        .addWait(FLASH_INTERVAL_MS);
-    }
-
-    this.activeSequence.addCallback(() => {
-      eventBus.emit("command:clear_canvases");
-
-      // Step 1: Allocate the scene in memory safely
-      this.sceneRegistry.loadRandomScene();
-      const newScene = this.sceneRegistry.getActiveScene();
-
-      if (!newScene) {
-        throw new Error("[Director] Failed to resolve active scene resource.");
-      }
-
-      // Step 2: Explicitly PUSH the cache pointer to the engine cores.
-      // There is zero guessing games or race conditions here.
-      this.gameLoop.setActiveScene(newScene);
-      this.sceneRenderer.setActiveScene(newScene);
-
-      this.renderer.switchRenderer("INTERMISSION");
-
-      // Step 3: Now it is perfectly safe to broadcast that the phase has started
-      eventBus.emit("level:intermission_start", {
-        nextLevel: payload.level + 1,
-      });
-
-      // Step 4: Fire the scene timeline execution
-      this.sceneRegistry.startActiveScene(INTERMISSION_DURATION, () => {
-        eventBus.emit("command:clear_canvases");
-
-        // Step 5: Clean teardown. Scrub the references explicitly.
-        this.gameLoop.setActiveScene(null);
-        this.sceneRenderer.setActiveScene(null);
-        this.sceneRenderer.clear();
-
-        eventBus.emit("game:mode_change", { mode: "LEVEL_TRANSITION" });
-        this.loadLevel();
-
-        const updatables = this.registry.getAllUpdatable();
-        const drawables = this.registry.getAllDrawable();
-        this.gameLoop.setUpdatables(updatables);
-        this.gameRenderer.setDrawables(drawables);
-        this.renderer.switchRenderer("LEVEL_TRANSITION");
-
-        this.startGame();
-      });
-    });
-
-    this.activeSequence.start();
   }
 }

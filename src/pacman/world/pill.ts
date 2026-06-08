@@ -1,75 +1,39 @@
-import { CFG_CANVAS } from "../config/canvas.config.js";
+// world/Pill.ts
 import { eventBus } from "../core/EventBus.js";
 import { WorldObject } from "./WorldObject.js";
+import type { LevelContext } from "../core/LevelContext.js";
+import type { IUpdatable } from "../shared/types.js";
+import type { CanvasLayer } from "../render/CanvasLayer.js";
 
-import type { Collectible, Updatable } from "../shared/types.js";
+export class Pill extends WorldObject implements IUpdatable {
+  private time = 0;
 
-export class Pill extends WorldObject implements Updatable, Collectible {
-  private animationCounter: number = 0;
-  public positions: Set<string> = new Set<string>();
-
-  constructor() {
-    super(CFG_CANVAS.canvasIds.pills);
+  constructor(canvasLayer: CanvasLayer, levelContext: LevelContext) {
+    super(canvasLayer, levelContext);
     this.initEventListeners();
   }
 
   private initEventListeners(): void {
-    eventBus.on(
-      "power_pill:collect",
-      (data: { position: { i: number; j: number } }) => {
-        this.collect(data.position.i, data.position.j);
-      },
-    );
+    eventBus.on("power_pill:eaten", () => this.requestRedraw());
   }
 
-  spawn(): void {
-    this.positions.clear();
-    const map = this.gameState.levelData.map;
-
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (map[i][j] === "PP") {
-          this.positions.add(`${i},${j}`);
-        }
-      }
-    }
+  public spawn(): void {
+    this.requestRedraw();
   }
 
-  collect(i: number, j: number): void {
-    const key = `${i},${j}`;
-    if (this.positions.delete(key)) {
-      this.requestRedraw();
-      eventBus.emit("power_pill:eaten", { position: { i, j } });
-    }
-  }
-
-  override reset(): void {
-    super.reset();
-    this.positions.clear();
-    this.animationCounter = 0;
-  }
-
-  update(dt: number): void {
+  public update(dt: number): void {
     if (this.gameState.mode !== "PLAYING") return;
-
-    // Smooth time tracking for the wave cycle
-    this.animationCounter += dt;
+    this.time += dt;
     this.needsRedraw = true;
   }
 
-  draw(): void {
-    this.clearCanvas();
-    const ctx = this.ctx;
+  public draw(): void {
+    const ctx = this.layer.ctx;
     const ts = this.tileSize;
-
-    const maxRadius = ts * 0.54;
-    const pulseFactor = 0.5 + 0.5 * Math.sin(this.animationCounter * 8.5);
-    const rotationAngle = this.animationCounter * 1.2;
+    const maxR = ts * 0.52;
 
     ctx.save();
-    ctx.globalCompositeOperation = "screen";
-
-    this.positions.forEach((posKey) => {
+    this.gameState.activePills.forEach((posKey) => {
       const [i, j] = posKey.split(",").map(Number);
       const cx = ts * j + ts / 2;
       const cy = ts * i + ts / 2;
@@ -77,65 +41,91 @@ export class Pill extends WorldObject implements Updatable, Collectible {
       ctx.save();
       ctx.translate(cx, cy);
 
-      // --- PASS 1: SHARP TRON PHOTONIC RINGS ---
-      // Hard, crisp data rings pulsing outward without anti-aliasing wash
-      ctx.lineWidth = 1.5;
-      const waveCount = 2;
-      for (let k = 0; k < waveCount; k++) {
-        const progress = (this.animationCounter * 1.4 + k / waveCount) % 1.0;
-        const currentRadius = maxRadius * (0.35 + progress * 0.65);
-        const alpha = 1.0 - progress;
+      const breathe = 0.5 + 0.5 * Math.sin(this.time * 2.8);
+      const pulseAlpha = 0.7 + breathe * 0.3;
 
-        // Frozen Ice Cyan: High frequency energy signature
-        ctx.strokeStyle = `rgba(0, 255, 213, ${alpha * 0.85})`;
-        ctx.shadowColor = "rgb(0, 255, 213)";
-        ctx.shadowBlur = 4 * alpha;
+      // ── Outer glow — wider, brighter ────────────────────
+      const glowGrad = ctx.createRadialGradient(
+        0,
+        0,
+        maxR * 0.2,
+        0,
+        0,
+        maxR * 1.5,
+      );
+      glowGrad.addColorStop(0, `rgba(180, 140, 230, ${0.5 + breathe * 0.25})`);
+      glowGrad.addColorStop(
+        0.5,
+        `rgba(120, 80, 180, ${0.25 + breathe * 0.12})`,
+      );
+      glowGrad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, maxR * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ── Containment fragments — larger ──────────────────
+      const orbitR = maxR * 0.62;
+      const fragCount = 6;
+      const rotation = this.time * 0.55;
+
+      for (let k = 0; k < fragCount; k++) {
+        const angle = (k / fragCount) * Math.PI * 2 + rotation;
+        const fx = Math.cos(angle) * orbitR;
+        const fy = Math.sin(angle) * orbitR;
+
+        const isWhite = k % 2 === 0;
+        const sz = isWhite ? 2.8 : 2.2;
+        const fragAlpha = isWhite ? pulseAlpha : pulseAlpha * 0.8;
+
+        ctx.fillStyle = isWhite ? "#ffffff" : "rgba(230, 210, 255, 0.9)";
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = isWhite ? 8 : 5;
+        ctx.globalAlpha = fragAlpha;
 
         ctx.beginPath();
-        ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.moveTo(fx, fy - sz);
+        ctx.lineTo(fx + sz * 0.5, fy);
+        ctx.lineTo(fx, fy + sz);
+        ctx.lineTo(fx - sz * 0.5, fy);
+        ctx.closePath();
+        ctx.fill();
       }
+      ctx.globalAlpha = 1;
 
-      // --- PASS 2: ROTATING VECTOR CONFINEMENT MATRIX ---
-      // A hard, cold-white geometric square that traps the inner plasma core
-      ctx.save();
-      ctx.rotate(rotationAngle);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; // Cold stark containment line
-      ctx.shadowColor = "rgb(0, 255, 213)";
-      ctx.shadowBlur = 3;
+      // ── Event horizon core — brighter edge ──────────────
+      const coreR = maxR * 0.38;
+      const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR);
+      coreGrad.addColorStop(0, "#000000");
+      coreGrad.addColorStop(0.3, "rgba(10, 5, 25, 0.9)");
+      coreGrad.addColorStop(
+        0.65,
+        `rgba(190, 150, 240, ${0.6 + breathe * 0.25})`,
+      );
+      coreGrad.addColorStop(1, "rgba(0,0,0,0)");
 
-      const boxSize = maxRadius * 0.42;
+      ctx.fillStyle = coreGrad;
+      ctx.shadowColor = `rgba(200, 160, 250, ${0.7 + breathe * 0.2})`;
+      ctx.shadowBlur = 12 + breathe * 5;
       ctx.beginPath();
-      ctx.rect(-boxSize, -boxSize, boxSize * 2, boxSize * 2);
+      ctx.arc(0, 0, coreR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Core rim — brighter
+      ctx.strokeStyle = `rgba(240, 215, 255, ${0.75 + breathe * 0.2})`;
+      ctx.lineWidth = 1.2;
+      ctx.shadowColor = "rgba(220, 190, 255, 0.6)";
+      ctx.shadowBlur = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, coreR, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.restore();
 
-      // --- PASS 3: THE ANTI-MATTER SINK (THE VOID) ---
-      // Creates a hard visual drop-off before the bright core hits
-      ctx.fillStyle = "#000000";
-      ctx.beginPath();
-      ctx.arc(0, 0, maxRadius * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // --- PASS 4: HIGH-EMISSION INDIUM PLASMA CORE ---
-      // Electric mint/cyan center with deep-blue underlying shadows for mass
-      const coreRadius = maxRadius * (0.28 + pulseFactor * 0.05);
-
-      ctx.fillStyle = "rgb(0, 255, 242)"; // Pure Tron Cyan
-      ctx.shadowColor = "rgb(0, 102, 255)"; // Deep stellar blue falloff bloom
-      ctx.shadowBlur = 12 + pulseFactor * 8;
-
-      ctx.beginPath();
-      ctx.arc(0, 0, coreRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Blinding white hyper-dense focal point
+      // Singularity point — brighter
       ctx.fillStyle = "#ffffff";
       ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 4;
+      ctx.shadowBlur = 10 + breathe * 5;
       ctx.beginPath();
-      ctx.arc(0, 0, coreRadius * 0.5, 0, Math.PI * 2);
+      ctx.arc(0, 0, coreR * 0.32, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();

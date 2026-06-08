@@ -1,80 +1,94 @@
-import { eventBus } from "../core/EventBus.js";
-import { GameRegistry } from "../game/GameRegistry.js";
-import { GameState } from "../game/GameState.svelte.js";
-import { sfx } from "../sfx/SFX.js";
+// controller/Controller.ts
+import type { Pacman } from "../actors/pacman/Pacman.js";
+import type { GameState } from "../game/GameState.svelte.js";
+import type { SFX } from "../sfx/SFX.js";
 
 type Direction = { dx: number; dy: number };
 
 export class Controller {
   private x1: number | null = null;
   private y1: number | null = null;
-  
-  // Use readonly for instances that shouldn't be reassigned
-  private readonly gameState = GameState.getInstance();
-  private readonly registry = GameRegistry.getInstance();
+
+  private readonly gameState: GameState;
+  private readonly sfx: SFX;
+  private readonly getActivePacman: () => Pacman | null;
 
   private readonly KEY_MAP: Record<string, Direction> = {
-    ArrowLeft: { dx: -1, dy: 0 },
-    ArrowUp: { dx: 0, dy: -1 },
+    ArrowLeft:  { dx: -1, dy: 0 },
+    ArrowUp:    { dx: 0, dy: -1 },
     ArrowRight: { dx: 1, dy: 0 },
-    ArrowDown: { dx: 0, dy: 1 },
+    ArrowDown:  { dx: 0, dy: 1 },
   };
 
-  init(): void {
-    const options = { passive: false };
-    window.addEventListener("touchstart", this.touchStart.bind(this), options);
-    window.addEventListener("touchend", this.touchEnd.bind(this), options);
-    window.addEventListener("keydown", this.keyDown.bind(this));
+  constructor(
+    gameState: GameState,
+    sfx: SFX,
+    getActivePacman: () => Pacman | null,
+  ) {
+    this.gameState = gameState;
+    this.sfx = sfx;
+    this.getActivePacman = getActivePacman;
   }
 
-  private keyDown(event: KeyboardEvent): void {
-    const key = event.key;
+  public init(): void {
+    window.addEventListener("touchstart", this.onTouchStart, { passive: false });
+    window.addEventListener("touchend", this.onTouchEnd, { passive: false });
+    window.addEventListener("keydown", this.onKeyDown);
+  }
 
-    // 1. System Controls
-    if (key.toLowerCase() === "m") {
-      sfx.toggleMute();
+  public destroy(): void {
+    window.removeEventListener("touchstart", this.onTouchStart);
+    window.removeEventListener("touchend", this.onTouchEnd);
+    window.removeEventListener("keydown", this.onKeyDown);
+  }
+
+  private onKeyDown = (event: KeyboardEvent): void => {
+    // Mute toggle — works in any mode
+    if (event.key.toLowerCase() === "m") {
+      this.sfx.toggleMute();
       return;
     }
 
-    if (key === "Enter" && this.gameState.mode === "INIT") {
-      event.preventDefault();
-      sfx.unlockAudio().then(() => eventBus.emit("game:start"));
-      return;
-    }
-
-    // 2. Gameplay Controls
+    // Gameplay input — only during active play
     if (this.gameState.mode !== "PLAYING") return;
-    
-    if (this.KEY_MAP[key]) {
-      event.preventDefault();
-      this.registry.getPacman()?.changeDirection(this.KEY_MAP[key]);
-    }
-  }
 
-  private touchStart(event: TouchEvent): void {
+    const dir = this.KEY_MAP[event.key];
+    if (dir) {
+      event.preventDefault();
+      this.getActivePacman()?.changeDirection(dir);
+    }
+  };
+
+  private onTouchStart = (event: TouchEvent): void => {
     this.x1 = event.touches[0].clientX;
     this.y1 = event.touches[0].clientY;
-  }
+  };
 
-  private touchEnd(event: TouchEvent): void {
+  private onTouchEnd = (event: TouchEvent): void => {
     if (this.x1 === null || this.y1 === null) return;
-    
+
+    // Touch input — only during active play
+    if (this.gameState.mode !== "PLAYING") {
+      this.x1 = this.y1 = null;
+      return;
+    }
+
     const x2 = event.changedTouches[0].clientX;
     const y2 = event.changedTouches[0].clientY;
-    
-    // Threshold to prevent accidental tiny swipes
-    const threshold = 10; 
+
+    const threshold = 10;
     const dx = x2 - this.x1;
     const dy = y2 - this.y1;
 
     if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
-      const direction: Direction = Math.abs(dx) > Math.abs(dy)
-        ? { dx: dx > 0 ? 1 : -1, dy: 0 }
-        : { dx: 0, dy: dy > 0 ? 1 : -1 };
-        
-      this.registry.getPacman()?.changeDirection(direction);
+      const direction: Direction =
+        Math.abs(dx) > Math.abs(dy)
+          ? { dx: dx > 0 ? 1 : -1, dy: 0 }
+          : { dx: 0, dy: dy > 0 ? 1 : -1 };
+
+      this.getActivePacman()?.changeDirection(direction);
     }
-    
+
     this.x1 = this.y1 = null;
-  }
+  };
 }

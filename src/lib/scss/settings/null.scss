@@ -19,19 +19,17 @@ body {
 }
 
 body {
-  line-height: 1.5; /* Good default for reading legibility */
+  line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  
-  /* CRITICAL FOR PACMAN: Prevents tapping/double-clicking on 
-     mobile screens from doing a tiny zoom or showing a blue highlight box */
   -webkit-tap-highlight-color: transparent;
 }
 
 /* 3. Media & Canvas defaults */
-img, canvas {
-  display: block; /* Removes weird inline-spacing at the bottom of elements */
+img,
+canvas {
+  display: block;
   max-width: 100%;
 }
 
@@ -48,7 +46,7 @@ select {
 }
 
 textarea {
-  resize: vertical; /* Prevents users from breaking grid layouts horizontally */
+  resize: vertical;
 }
 
 button,
@@ -66,7 +64,12 @@ ul li {
 }
 
 /* 5. Typography normalization */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: inherit;
   font-size: inherit;
 }

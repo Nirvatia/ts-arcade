@@ -1,6 +1,7 @@
-import { Collision } from "../core/Collision.js";
-import { GameRegistry } from "../game/GameRegistry.js";
-
+// ai/ghostAI.ts
+import type { Pacman } from "../actors/pacman/Pacman.js";
+import type { Ghost } from "../actors/ghost/Ghost.js";
+import type { GridContext } from "../core/GridContext.js";
 import type { TileType } from "../shared/types.js";
 
 export interface TargetCoords {
@@ -35,49 +36,68 @@ export function getScatterTarget(
 /**
  * Blinky: Targets Pac-Man's exact tile directly.
  */
-export function getBlinkyTarget(): TargetCoords {
-  const pacman = GameRegistry.getInstance().getPacman();
-  const { tileX, tileY } = Collision.getTile(pacman.x, pacman.y);
-  return { tileX, tileY };
+export function getBlinkyTarget(
+  pacman: Pacman,
+  gridContext: GridContext,
+): TargetCoords {
+  return gridContext.getTile(pacman.x, pacman.y);
 }
 
 /**
  * Pinky: Targets 4 tiles ahead of Pac-Man's current orientation.
  */
-export function getPinkyTarget(): TargetCoords {
-  const pacman = GameRegistry.getInstance().getPacman();
-  const { tileX, tileY } = Collision.getTile(pacman.x, pacman.y);
+export function getPinkyTarget(
+  pacman: Pacman,
+  gridContext: GridContext,
+): TargetCoords {
+  const pacTile = gridContext.getTile(pacman.x, pacman.y);
 
   let moveDx = pacman.direction.dx;
   let moveDy = pacman.direction.dy;
 
+  // Handle game-start idle state
   if (moveDx === 0 && moveDy === 0) {
     moveDx = -1;
-    moveDy = 0;
+  }
+
+  // Classic Arcade emulation: If looking UP, offset goes 4 up AND 4 left due to overflow code
+  if (moveDy === -1) {
+    return {
+      tileX: pacTile.tileX - 4,
+      tileY: pacTile.tileY - 4,
+    };
   }
 
   return {
-    tileX: tileX + moveDx * 4,
-    tileY: tileY + moveDy * 4,
+    tileX: pacTile.tileX + moveDx * 4,
+    tileY: pacTile.tileY + moveDy * 4,
   };
 }
 
 /**
  * Inky: Triangulates target using Pac-Man's forward vector offset mirrored against Blinky.
  */
-export function getInkyTarget(): TargetCoords {
-  const registry = GameRegistry.getInstance();
-  const pacman = registry.getPacman();
-  const ghosts = registry.getGhosts();
+export function getInkyTarget(
+  blinky: Ghost | undefined,
+  pacman: Pacman,
+  gridContext: GridContext,
+): TargetCoords {
+  // Fallback to Blinky chase strategy if Blinky hasn't spawned or was destroyed
+  if (!blinky) return getBlinkyTarget(pacman, gridContext);
 
-  const blinky = ghosts.find((g) => g.name === "blinky");
-  if (!blinky) return getBlinkyTarget(); // Fallback if missing
+  const pacTile = gridContext.getTile(pacman.x, pacman.y);
+  const blinkyTile = gridContext.getTile(blinky.x, blinky.y);
 
-  const pacTile = Collision.getTile(pacman.x, pacman.y);
-  const blinkyTile = Collision.getTile(blinky.x, blinky.y);
+  // Pivot tile is 2 tiles ahead of Pacman
+  let moveDx = pacman.direction.dx;
+  let moveDy = pacman.direction.dy;
 
-  const pivotX = pacTile.tileX + pacman.direction.dx * 2;
-  const pivotY = pacTile.tileY + pacman.direction.dy * 2;
+  // Replicate classic Up overflow for consistency inside Inky's vector calculations
+  let pivotX = pacTile.tileX + moveDx * 2;
+  let pivotY = pacTile.tileY + moveDy * 2;
+  if (moveDy === -1) {
+    pivotX -= 2;
+  }
 
   const vecX = pivotX - blinkyTile.tileX;
   const vecY = pivotY - blinkyTile.tileY;
@@ -95,11 +115,12 @@ export function getInkyTarget(): TargetCoords {
 export function getClydeTarget(
   clydeX: number,
   clydeY: number,
-  map: TileType[][],
+  grid: TileType[][],
+  pacman: Pacman,
+  gridContext: GridContext,
 ): TargetCoords {
-  const pacman = GameRegistry.getInstance().getPacman();
-  const clydeTile = Collision.getTile(clydeX, clydeY);
-  const pacTile = Collision.getTile(pacman.x, pacman.y);
+  const clydeTile = gridContext.getTile(clydeX, clydeY);
+  const pacTile = gridContext.getTile(pacman.x, pacman.y);
 
   const dx = clydeTile.tileX - pacTile.tileX;
   const dy = clydeTile.tileY - pacTile.tileY;
@@ -108,6 +129,6 @@ export function getClydeTarget(
   if (distance > 8) {
     return { tileX: pacTile.tileX, tileY: pacTile.tileY };
   } else {
-    return getScatterTarget("clyde", map);
+    return getScatterTarget("clyde", grid);
   }
 }

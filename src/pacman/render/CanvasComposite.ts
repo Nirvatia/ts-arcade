@@ -1,22 +1,24 @@
-import type { Drawable } from "../shared/types.js";
+import type { IDrawable, TileType } from "../shared/types.js";
 import { CanvasLayer } from "./CanvasLayer.js";
 
-export class CanvasComposite implements Drawable {
-  public readonly canvasId: string;
+export class CanvasComposite implements IDrawable {
   private canvasLayer: CanvasLayer;
-  private children: Drawable[] = [];
+  private children: IDrawable[] = [];
 
-  constructor(canvasId: string) {
-    this.canvasId = canvasId;
-    this.canvasLayer = new CanvasLayer(canvasId);
+  constructor(canvasLayer: CanvasLayer) {
+    this.canvasLayer = canvasLayer;
   }
 
-  public add(child: Drawable): void {
+  public get layer(): CanvasLayer {
+    return this.canvasLayer;
+  }
+
+  public get canvasId(): string {
+    return this.canvasLayer.id;
+  }
+
+  public add(child: IDrawable): void {
     this.children.push(child);
-  }
-
-  get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
   }
 
   get needsRedraw(): boolean {
@@ -31,24 +33,20 @@ export class CanvasComposite implements Drawable {
     this.needsRedraw = true;
   }
 
+  public resize(tileSize: number, grid: TileType[][]): void {
+    this.canvasLayer.resize(tileSize, grid);
+  }
+
   public clearCanvas(): void {
     this.canvasLayer.clear();
   }
 
-  public init(): void {
-    this.children.forEach((child) => child.init?.());
-  }
-
-  public reset(): void {
-    this.clearCanvas();
-    this.canvasLayer.resize();
-    this.children.forEach((child) => child.reset?.());
-  }
-
   public draw(): void {
     this.children.forEach((child) => {
-      child.draw();
-      child.needsRedraw = false;
+      if (child.needsRedraw) {
+        child.draw();
+        child.needsRedraw = false;
+      }
     });
   }
 }

@@ -14,15 +14,15 @@ export function createPathGraph(map: TileType[][]): GraphType {
 
   // Статические проходимые тайлы (без телепортов)
   const staticWalkable: Set<string> = new Set([
-    "FD",
+    "DT",
     "PP",
-    "ES",
     "PM",
     "BY",
     "PY",
     "IY",
     "CE",
-    "GL",
+    "LE",
+    "LT"
   ]);
 
   const rows = map.length;

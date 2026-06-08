@@ -1,42 +1,35 @@
 import { Clock } from "../core/Clock.svelte.js";
 import { eventBus } from "../core/EventBus.js";
-import { createPathGraph } from "../pathfinding/graph.js";
 import { generateLevelConfig } from "../shared/utils.js";
 
 import type { GameMode } from "../shared/gameModes.js";
-import type { GraphType, LevelConfigType } from "../shared/types.js";
+import type { GraphType, LevelConfigType, TileType } from "../shared/types.js";
 
 export class GameState {
-  private static instance: GameState;
-
   private _state = $state({
     mode: "INIT" as GameMode,
     lives: 3,
     currentLevel: 1,
   });
 
+  public deathProgress = $state(0);
+
   public pathGraph: GraphType | null = null;
   public levelData: LevelConfigType;
+
+  public activeDots = new Set<string>();
+  public activePills = new Set<string>();
+
   public totalDots: number = 0;
-  public dotsEaten: number = 0;
   public isBuffed: boolean = false;
   public isProcessingLevelTransition: boolean = false;
 
   private buffClock: Clock = new Clock();
 
-  private constructor() {
+  constructor() {
     this.levelData = generateLevelConfig(this.currentLevel);
     this.initEventListeners();
   }
-
-  public static getInstance(): GameState {
-    if (!GameState.instance) {
-      GameState.instance = new GameState();
-    }
-    return GameState.instance;
-  }
-
-  // --- Getters & Setters hooked directly to the proxy ---
 
   public get mode(): GameMode {
     return this._state.mode;
@@ -55,9 +48,12 @@ export class GameState {
     this._state.lives = value;
 
     if (previousLives !== this._state.lives) {
-      eventBus.emit("lives:changed", { lives: this._state.lives });
-      eventBus.emit("ui:lives_display_update", { lives: this._state.lives });
+      this.decrementLivesNotification();
     }
+  }
+
+  private decrementLivesNotification(): void {
+    eventBus.emit("ui:lives_display_update", { lives: this._state.lives });
   }
 
   public get currentLevel(): number {
@@ -68,69 +64,82 @@ export class GameState {
     this._state.currentLevel = value;
   }
 
-  private reset(): void {
+  public reset(): void {
     this._state.currentLevel = 1;
-    this.dotsEaten = 0;
     this.lives = 3;
+    this.activeDots.clear();
+    this.activePills.clear();
+    this.totalDots = 0;
+  }
+
+  /**
+   * Performs an absolute layout parse. Only run this during intermissions/true level resets.
+   */
+  public initializeCollectibles(grid: TileType[][]): void {
+    this.activeDots.clear();
+    this.activePills.clear();
+
+    let dotCount = 0;
+
+    for (let i = 0; i < grid.length; i++) {
+      for (let j = 0; j < grid[i].length; j++) {
+        const tile = grid[i][j];
+
+        if (tile === "DT") {
+          this.activeDots.add(`${i},${j}`);
+          dotCount++;
+        } else if (tile === "PP") {
+          this.activePills.add(`${i},${j}`);
+        }
+      }
+    }
+
+    this.totalDots = dotCount;
+    this.isProcessingLevelTransition = false;
+
+    eventBus.emit("dot:spawned", { count: this.totalDots });
+  }
+
+  public eatDot(i: number, j: number): number {
+    this.activeDots.delete(`${i},${j}`);
+
+    if (this.activeDots.size === 0 && !this.isProcessingLevelTransition) {
+      this.isProcessingLevelTransition = true;
+      eventBus.emit("level:complete", {
+        level: this.currentLevel,
+        score: 0,
+      });
+    }
+
+    return this.activeDots.size;
+  }
+
+  public eatPill(i: number, j: number): boolean {
+    return this.activePills.delete(`${i},${j}`);
   }
 
   private initEventListeners(): void {
-    eventBus.on(
-      "command:create_path_graph",
-      () => (this.pathGraph = createPathGraph(this.levelData.map)),
-    );
-
-    eventBus.on("level:transition_start", () => {
-      this.mode = "LEVEL_TRANSITION";
-    });
-
-    eventBus.on("game:started", () => {
-      this.mode = "PLAYING";
-    });
-
-    eventBus.on("game:mode_change", (data) => (this.mode = data.mode));
-
-    eventBus.on("game:restart", () => {
-      this.reset();
-      this.levelData = generateLevelConfig(this.currentLevel);
-      eventBus.emit("ui:level_display_update", { level: this.currentLevel });
-    });
-
-    eventBus.on("level:complete", () => {
-      this.mode = "LEVEL_COMPLETE";
-    });
-
     eventBus.on("level:intermission_start", (data) => {
       this.mode = "INTERMISSION";
       this.currentLevel = data.nextLevel;
-      this.dotsEaten = 0;
       this.isProcessingLevelTransition = false;
       this.levelData = generateLevelConfig(this.currentLevel);
     });
 
-    eventBus.on("pacman:death_triggered", () => {
-      this.mode = "PACMAN_DEAD";
+    eventBus.on("dot:collect", (data) => {
+      const remainingCount = this.eatDot(data.position.i, data.position.j);
+
+      eventBus.emit("dot:eaten", {
+        position: data.position,
+        dotsRemaining: remainingCount,
+      });
     });
 
-    eventBus.on("command:ghost_eaten", () => {
-      this.mode = "GHOST_EATEN";
-    });
+    eventBus.on("power_pill:collect", (data) => {
+      const wasEaten = this.eatPill(data.position.i, data.position.j);
 
-    eventBus.on("game:resumed", () => {
-      this.mode = "PLAYING";
-    });
-
-    eventBus.on("dot:eaten", () => {
-      if (this.isProcessingLevelTransition) return;
-
-      this.dotsEaten++;
-
-      if (this.dotsEaten >= this.totalDots && this.totalDots > 0) {
-        this.isProcessingLevelTransition = true;
-        eventBus.emit("level:complete", {
-          level: this.currentLevel,
-          score: 0,
-        });
+      if (wasEaten) {
+        eventBus.emit("power_pill:eaten", { position: data.position });
       }
     });
 
@@ -155,30 +164,9 @@ export class GameState {
       });
     });
 
-    eventBus.on("bonus_life:earned", () => {
-      this.lives++;
-      eventBus.emit("bonus_life:acquired", { lives: this.lives });
-    });
-
-    eventBus.on(
-      "command:execute_life_loss",
-      (data: { currentScore: number }) => {
-        if (this.lives - 1 < 0) {
-          this.mode = "GAME_OVER";
-          eventBus.emit("game:over", {
-            finalScore: data.currentScore,
-            level: this.currentLevel,
-          });
-        } else {
-          this.lives--;
-        }
-      },
-    );
-
-    eventBus.on("dot:spawned", (data) => {
-      this.totalDots = data.count;
-      this.dotsEaten = 0;
-      this.isProcessingLevelTransition = false;
+    eventBus.on("bonus_life:acquired", (data) => {
+      this._state.lives += 1;
+      eventBus.emit("ui:lives_display_update", { lives: this._state.lives });
     });
   }
 }

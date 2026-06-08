@@ -1,42 +1,30 @@
-import type { IRenderer } from "../shared/types.js";
-import { GameRenderer } from "./GameRenderer.js";
-import { SceneRenderer } from "./SceneRenderer.js";
+import { EngineMetrics } from "../debug/EngineMetrics.js";
+
+import type { IDrawable } from "../shared/types.js";
 
 export class Renderer {
-  private static instance: Renderer | null = null;
-  private gameRenderer: GameRenderer;
-  private sceneRenderer: SceneRenderer;
-  private currentRenderer: IRenderer | null = null;
+  private drawables: IDrawable[] = [];
 
-  private constructor() {
-    this.gameRenderer = GameRenderer.getInstance();
-    this.sceneRenderer = SceneRenderer.getInstance();
-    this.currentRenderer = this.gameRenderer;
-  }
-
-  static getInstance(): Renderer {
-    if (!Renderer.instance) {
-      Renderer.instance = new Renderer();
-    }
-    return Renderer.instance;
-  }
-
-  public switchRenderer(mode: string): void {
-    switch (mode) {
-      case "INTERMISSION":
-        this.currentRenderer = this.sceneRenderer;
-        break;
-      case "LEVEL_TRANSITION":
-        this.currentRenderer = this.gameRenderer;
-        break;
-      case "GAME_OVER":
-      default:
-        this.currentRenderer = null;
-        break;
-    }
+  public setDrawables(drawables: IDrawable[]): void {
+    this.drawables = drawables;
   }
 
   public render(): void {
-    this.currentRenderer?.render();
+    if (this.drawables.length === 0) return;
+
+    this.drawables.forEach((entity) => {
+      if (entity.needsRedraw) {
+        entity.clearCanvas();
+        entity.draw();
+        entity.needsRedraw = false;
+
+        const key = entity.layer?.id || entity.constructor.name;
+        EngineMetrics.recordLayerDraw(key);
+      }
+    });
+  }
+
+  public clear(): void {
+    this.drawables.forEach((entity) => entity.clearCanvas());
   }
 }

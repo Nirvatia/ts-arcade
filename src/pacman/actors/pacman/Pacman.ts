@@ -1,84 +1,108 @@
-import { CFG_CANVAS } from "../../config/canvas.config.js";
-import { GameRegistry } from "../../game/GameRegistry.js";
 import { Actor } from "../Actor.js";
 import { eventBus } from "../../core/EventBus.js";
-import { Collision } from "../../core/Collision.js";
-
 import type { Ghost } from "../ghost/Ghost.js";
 import type { PacmanConfig } from "../../config/pacman.config.js";
+import type { LevelContext } from "../../core/LevelContext.js";
+import type { CanvasLayer } from "../../render/CanvasLayer.js";
 
-interface EatParticle {
+// ── Types ───────────────────────────────────────────────────────
+interface StellarParticle {
   x: number;
   y: number;
   vx: number;
   vy: number;
   life: number;
   maxLife: number;
-  color: string;
-  type:
-    | "SHARD"
-    | "RING"
-    | "LINE"
-    | "GLITCH"
-    | "GATEWAY"
-    | "SCANLINE"
-    | "THERMAL_BAR";
+  size: number;
+  type: "DIAMOND" | "SPARK" | "RING";
+  rotation: number;
+  rotSpeed: number;
+}
+
+interface TrailPoint {
+  x: number;
+  y: number;
+  alpha: number;
+}
+
+interface SurfaceFlare {
+  angle: number;
+  life: number;
+  maxLife: number;
   size: number;
 }
 
-export class Pacman extends Actor {
-  private registry: GameRegistry;
-  private config: PacmanConfig;
+// ── Palette ─────────────────────────────────────────────────────
+const BODY_NORMAL = "#2a2a7e";
+const BODY_BUFFED = "#ddaa44";
+const BODY_CORE_N = "#5555cc";
+const BODY_CORE_B = "#ffeebb";
+const BODY_EDGE_N = "rgba(120,160,255,0.8)";
+const BODY_EDGE_B = "rgba(255,255,255,0.95)";
+const MOUTH_INNER = "#ffffff";
+const MOUTH_GRAD_N = "rgba(180,210,255,0.5)";
+const MOUTH_GRAD_B = "rgba(255,245,210,0.7)";
+const MOUTH_RIM_N = "rgba(200,225,255,0.85)";
+const MOUTH_RIM_B = "#ffffff";
+const TRAIL_CLR_N = "rgba(140,160,240,0.7)";
+const TRAIL_CLR_B = "rgba(255,220,160,0.85)";
+const TRAIL_SPARK_N = "rgba(180,210,255,0.8)";
+const TRAIL_SPARK_B = "#ffffff";
+const HEART_N = "rgba(200,220,255,0.7)";
+const HEART_B = "rgba(255,245,210,0.95)";
 
+export class Pacman extends Actor {
+  private config: PacmanConfig;
   public state: "ALIVE" | "EATEN" | "DYING" = "ALIVE";
   public nextDirection: { dx: number; dy: number } | null = null;
-
-  private deathTimer: number = 0;
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
+  private time = 0;
 
-  // VFX state
-  private trailHistory: { x: number; y: number; alpha: number }[] = [];
-  private eatParticles: EatParticle[] = [];
-  private ghostEatFlash: number = 0;
+  private trail: TrailPoint[] = [];
+  private particles: StellarParticle[] = [];
+  private flares: SurfaceFlare[] = [];
+  private ghostEatFlash = 0;
+  private mouthStars: {
+    angle: number;
+    radius: number;
+    phase: number;
+    size: number;
+  }[] = [];
 
   private normalSpeed: number;
   private buffedSpeed: number;
 
-  constructor(config: PacmanConfig) {
-    super(CFG_CANVAS.canvasIds.pacman);
-    this.registry = GameRegistry.getInstance();
+  constructor(
+    canvasLayer: CanvasLayer,
+    levelContext: LevelContext,
+    config: PacmanConfig,
+  ) {
+    super(canvasLayer, levelContext);
     this.config = config;
-
-    const tileSize = CFG_CANVAS.tile.size;
-    this.normalSpeed = tileSize * config.normalSpeedMultiplier;
-    this.buffedSpeed = tileSize * config.buffedSpeedMultiplier;
-
+    this.normalSpeed = this.tileSize * config.normalSpeedMultiplier;
+    this.buffedSpeed = this.tileSize * config.buffedSpeedMultiplier;
     this.speed = this.normalSpeed;
-    this.r = tileSize * config.radiusMultiplier;
+    this.r = this.tileSize * config.radiusMultiplier;
+
+    for (let i = 0; i < 28; i++) {
+      this.mouthStars.push({
+        angle: Math.random() * Math.PI * 0.5 - Math.PI * 0.25,
+        radius: 0.1 + Math.random() * 0.65,
+        phase: Math.random() * Math.PI * 2,
+        size: 0.25 + Math.random() * 0.7,
+      });
+    }
   }
 
   private get isBuffed(): boolean {
     return this.gameState.isBuffed;
   }
 
-  public init(): void {}
-
-  public reset(): void {
-    this.state = "ALIVE";
-    this.direction = { dx: 0, dy: 0 };
-    this.nextDirection = null;
-    this.lastDirection = { dx: 1, dy: 0 };
-    this.speed = this.normalSpeed;
-    this.trailHistory = [];
-    this.eatParticles = [];
-    this.ghostEatFlash = 0;
-    this.needsRedraw = true;
-  }
-
+  // ── Lifecycle ────────────────────────────────────────────────
   public spawn(): void {
     const map = this.gameState.levelData.map;
     for (let y = 0; y < map.length; y++) {
-      const x = map[y].findIndex((tile: string) => tile === "PM");
+      const x = map[y].findIndex((t: string) => t === "PM");
       if (x !== -1) {
         this.x = x * this.tileSize + this.tileSize / 2;
         this.y = y * this.tileSize + this.tileSize / 2;
@@ -86,94 +110,108 @@ export class Pacman extends Actor {
         return;
       }
     }
-    console.warn("Pac-Man spawn point (PM) not found on the current map!");
   }
 
   public update(dt: number): void {
+    this.time += dt;
     if (this.state === "DYING") {
-      this.deathTimer += dt;
-      this.updateEatParticles(dt);
-      if (this.deathTimer >= this.config.deathAnimationDuration) {
-        eventBus.emit("pacman:death_animation_end");
-      }
+      this.updateParticles(dt);
+      this.updateFlares(dt);
       this.needsRedraw = true;
       return;
     }
 
-    this.updateTrail(dt);
-    this.updateEatParticles(dt);
-    if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
-
     if (this.gameState.mode !== "PLAYING") return;
+
+    this.updateTrail(dt);
+    this.updateParticles(dt);
+    this.updateFlares(dt);
+
+    if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
 
     this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
 
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
-      this.spawnTrailParticle();
+      this.trail.push({ x: this.x, y: this.y, alpha: 1 });
+      const trailMax = this.isBuffed ? 22 : 14;
+      if (this.trail.length > trailMax) this.trail.shift();
 
-      // OVERCLOCKED EMISSIONS: Spawn intense heat leaks when buffed
-      const particleChance = this.isBuffed ? 0.6 : 0.15;
-      if (Math.random() < particleChance) {
-        const tX = this.x - this.direction.dx * this.r * 0.8;
-        const tY = this.y - this.direction.dy * this.r * 0.8;
-
-        this.eatParticles.push({
-          x: tX + (Math.random() - 0.5) * (this.r * 0.5),
-          y: tY + (Math.random() - 0.5) * (this.r * 0.5),
-          // Eject fast breaking shards if buffed
+      // Diamond stream trail particles
+      const rate = this.isBuffed ? 4 : 2;
+      for (let i = 0; i < rate; i++) {
+        const sx =
+          this.x -
+          this.direction.dx * this.r * 0.6 +
+          (Math.random() - 0.5) * this.r * 0.35;
+        const sy =
+          this.y -
+          this.direction.dy * this.r * 0.6 +
+          (Math.random() - 0.5) * this.r * 0.35;
+        this.particles.push({
+          x: sx,
+          y: sy,
           vx:
-            -this.direction.dx * (this.isBuffed ? 140 : 40) +
+            -this.direction.dx * (this.isBuffed ? 160 : 55) +
             (Math.random() - 0.5) * 30,
           vy:
-            -this.direction.dy * (this.isBuffed ? 140 : 40) +
+            -this.direction.dy * (this.isBuffed ? 160 : 55) +
             (Math.random() - 0.5) * 30,
-          life: this.isBuffed ? 0.4 : 0.25,
-          maxLife: this.isBuffed ? 0.4 : 0.25,
-          color: this.isBuffed
-            ? Math.random() > 0.4
-              ? "#ff3300"
-              : "#ffaa00"
-            : "#ffea00",
-          type: this.isBuffed ? "GLITCH" : "SHARD",
-          size: this.isBuffed ? 3 + Math.random() * 4 : 1.5,
+          life: this.isBuffed ? 0.45 : 0.3,
+          maxLife: this.isBuffed ? 0.45 : 0.3,
+          size: this.isBuffed
+            ? 1.5 + Math.random() * 3.5
+            : 0.8 + Math.random() * 2,
+          type: Math.random() > 0.3 ? "DIAMOND" : "SPARK",
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 10,
+        });
+      }
+
+      if (this.isBuffed && Math.random() < 0.4) {
+        this.flares.push({
+          angle: Math.random() * Math.PI * 2,
+          life: 0.15 + Math.random() * 0.2,
+          maxLife: 0.35,
+          size: 1.5 + Math.random() * 4,
         });
       }
     }
 
-    const prevX = this.x;
-    const prevY = this.y;
-
+    const px = this.x,
+      py = this.y;
     this.updateMovement(dt);
     this.teleport();
-
-    // Re-verify portal crossing and execute visual snap
     if (
-      Math.abs(this.x - prevX) > this.tileSize * 2 ||
-      Math.abs(this.y - prevY) > this.tileSize * 2
+      Math.abs(this.x - px) > this.tileSize * 2 ||
+      Math.abs(this.y - py) > this.tileSize * 2
     ) {
-      this.trailHistory = [];
-      this.spawnTeleportVFX(prevX, prevY);
-      this.spawnTeleportVFX(this.x, this.y);
+      this.trail = [];
+      this.spawnWarpVFX(px, py, true);
+      this.spawnWarpVFX(this.x, this.y, false);
     }
 
-    const collidedGhost = this.getCollidedGhost();
-    if (collidedGhost) {
-      if (this.isBuffed && collidedGhost.state === "FRIGHTENED") {
-        this.spawnGhostEatVFX(collidedGhost.x, collidedGhost.y);
+    const g = this.getCollidedGhost();
+    if (g) {
+      if (this.isBuffed && g.state === "FRIGHTENED") {
+        this.spawnGhostConsume(g.x, g.y);
         this.ghostEatFlash = 1;
-        eventBus.emit("command:ghost_eaten", { ghostName: collidedGhost.name });
+        eventBus.emit("ghost:eaten", {
+          ghostName: g.name,
+          points: 0,
+          ghostIndex: 0,
+        });
       } else if (
         !this.isBuffed &&
-        collidedGhost.state !== "FRIGHTENED" &&
-        collidedGhost.state !== "EATEN"
+        g.state !== "FRIGHTENED" &&
+        g.state !== "EATEN"
       ) {
         this.triggerDeath();
       }
     }
-
     this.needsRedraw = true;
   }
 
+  // ── Movement ──────────────────────────────────────────────────
   private updateMovement(dt: number): void {
     if (
       this.direction.dx === 0 &&
@@ -183,38 +221,25 @@ export class Pacman extends Actor {
       this.direction = this.nextDirection;
       this.nextDirection = null;
     }
-
-    if (this.nextDirection) {
-      this.tryExecuteTurn();
-    }
-
-    const isHittingWall = this.willHitWall(dt, this.direction);
-    if (isHittingWall) {
+    if (this.nextDirection) this.tryTurn();
+    if (this.willHitWall(dt, this.direction)) {
       this.snapToTileCenter();
       return;
     }
-
-    const { newX, newY } = this.getNextPosition(dt);
-    this.x = newX;
-    this.y = newY;
-
-    if (this.direction.dx !== 0 || this.direction.dy !== 0) {
+    const n = this.getNextPosition(dt);
+    this.x = n.newX;
+    this.y = n.newY;
+    if (this.direction.dx !== 0 || this.direction.dy !== 0)
       this.lastDirection = { ...this.direction };
-    }
-
-    this.smoothAlignToAxis(dt);
-
-    const { tileX, tileY } = Collision.getTile(this.x, this.y);
-    this.tryEatFood(tileX, tileY);
-    this.tryEatPill(tileX, tileY);
+    this.smoothAlign(dt);
+    const { tileX, tileY } = this.gridContext.getTile(this.x, this.y);
+    this.tryEat(tileX, tileY);
   }
 
-  private tryExecuteTurn(): void {
+  private tryTurn(): void {
     if (!this.nextDirection) return;
-
-    const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    const { tileX, tileY } = Collision.getTile(this.x, this.y);
-
+    const { centerX, centerY } = this.gridContext.getTileCenter(this.x, this.y);
+    const { tileX, tileY } = this.gridContext.getTile(this.x, this.y);
     if (
       this.nextDirection.dx === -this.direction.dx &&
       this.nextDirection.dy === -this.direction.dy
@@ -223,17 +248,13 @@ export class Pacman extends Actor {
       this.nextDirection = null;
       return;
     }
-
-    const targetTileX = tileX + this.nextDirection.dx;
-    const targetTileY = tileY + this.nextDirection.dy;
-    if (Collision.isWall(targetTileX, targetTileY)) return;
-
-    const turnThreshold = this.tileSize * this.config.turnThreshold;
-    const distanceToCenter = Math.sqrt(
-      (this.x - centerX) ** 2 + (this.y - centerY) ** 2,
-    );
-
-    if (distanceToCenter < turnThreshold) {
+    const tx = tileX + this.nextDirection.dx,
+      ty = tileY + this.nextDirection.dy;
+    if (this.gridContext.isWall(tx, ty)) return;
+    if (
+      Math.sqrt((this.x - centerX) ** 2 + (this.y - centerY) ** 2) <
+      this.tileSize * this.config.turnThreshold
+    ) {
       if (this.nextDirection.dx !== 0) this.y = centerY;
       if (this.nextDirection.dy !== 0) this.x = centerX;
       this.direction = this.nextDirection;
@@ -241,604 +262,548 @@ export class Pacman extends Actor {
     }
   }
 
-  private smoothAlignToAxis(dt: number): void {
-    const { centerX, centerY } = Collision.getTileCenter(this.x, this.y);
-    const pullFactor = 1 - Math.exp(-this.config.axisAlignSpeed * dt);
-
-    if (this.direction.dx !== 0) {
-      this.y += (centerY - this.y) * pullFactor;
-    }
-    if (this.direction.dy !== 0) {
-      this.x += (centerX - this.x) * pullFactor;
-    }
+  private smoothAlign(dt: number): void {
+    const { centerX, centerY } = this.gridContext.getTileCenter(this.x, this.y);
+    const f = 1 - Math.exp(-this.config.axisAlignSpeed * dt);
+    if (this.direction.dx !== 0) this.y += (centerY - this.y) * f;
+    if (this.direction.dy !== 0) this.x += (centerX - this.x) * f;
   }
 
-  public changeDirection(dir: { dx: number; dy: number }): void {
-    this.nextDirection = dir;
+  public changeDirection(d: { dx: number; dy: number }): void {
+    this.nextDirection = d;
   }
-
   private getCollidedGhost(): Ghost | null {
-    const ghosts = this.registry.getGhosts();
-    for (const g of ghosts) {
-      const distance = Math.sqrt((this.x - g.x) ** 2 + (this.y - g.y) ** 2);
-      if (distance < this.r + g.r) return g;
+    for (const g of this.levelContext.ghosts) {
+      if (Math.sqrt((this.x - g.x) ** 2 + (this.y - g.y) ** 2) < this.r + g.r)
+        return g;
     }
     return null;
   }
 
-  private tryEatFood(tileX: number, tileY: number): void {
-    const dot = this.registry.getDots();
-    if (dot.positions.has(`${tileY},${tileX}`)) {
-      this.spawnDotEatVFX(tileX, tileY);
-      eventBus.emit("dot:collect", { position: { i: tileY, j: tileX } });
+  private tryEat(tx: number, ty: number): void {
+    if (this.gameState.activeDots.has(`${ty},${tx}`)) {
+      this.spawnDotEat(tx, ty);
+      eventBus.emit("dot:collect", { position: { i: ty, j: tx } });
+    }
+    if (this.gameState.activePills.has(`${ty},${tx}`)) {
+      this.spawnPillEat(tx, ty);
+      eventBus.emit("power_pill:collect", { position: { i: ty, j: tx } });
     }
   }
 
-  private tryEatPill(tileX: number, tileY: number): void {
-    const pill = this.registry.getPills();
-    const key = `${tileY},${tileX}`;
-
-    if (pill.positions.has(key)) {
-      this.spawnPillEatVFX(tileX, tileY);
-      eventBus.emit("power_pill:collect", { position: { i: tileY, j: tileX } });
-    }
-  }
-
-  // --- VFX Engine ---
-
-  private spawnTrailParticle(): void {
-    this.trailHistory.push({ x: this.x, y: this.y, alpha: 1.0 });
-    if (this.trailHistory.length > (this.isBuffed ? 14 : 8)) {
-      this.trailHistory.shift();
-    }
-  }
-
-  private updateTrail(dt: number): void {
-    const decaySpeed = this.isBuffed ? 1.8 : 2.5;
-    for (let i = 0; i < this.trailHistory.length; i++) {
-      this.trailHistory[i].alpha -= dt * decaySpeed;
-    }
-  }
-
-  private spawnTeleportVFX(x: number, y: number): void {
-    const isLeftPortal = x < this.tileSize * 3;
-    const blastDirection = isLeftPortal ? 1 : -1;
+  private spawnWarpVFX(x: number, y: number, isExit: boolean): void {
     this.ghostEatFlash = 0.8;
 
-    // 1. Gateway Rings
-    for (let i = 0; i < 3; i++) {
-      this.eatParticles.push({
+    // ── Gravitational lens ring ────────────────────────────
+    // Exit: starts tiny, expands violently. Entry: starts large, contracts.
+    this.particles.push({
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      life: 0.25,
+      maxLife: 0.25,
+      size: isExit ? this.r * 0.15 : this.r * 3.5,
+      type: "RING",
+      rotation: 0,
+      rotSpeed: 0,
+    });
+
+    // ── Diamond shard explosion ────────────────────────────
+    const shardCount = 30;
+    for (let i = 0; i < shardCount; i++) {
+      const a = (i / shardCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+      const speed = isExit
+        ? 180 + Math.random() * 280
+        : 30 + Math.random() * 60;
+      const vx = Math.cos(a) * speed;
+      const vy = Math.sin(a) * speed;
+      this.particles.push({
         x,
         y,
-        vx: blastDirection,
-        vy: 0,
-        life: 0.15 + i * 0.08,
-        maxLife: 0.4,
-        color: i === 1 ? "#ffaa00" : "#ffffff",
-        type: "GATEWAY",
-        size: this.r * 0.5,
+        vx,
+        vy,
+        life: 0.15 + Math.random() * 0.2,
+        maxLife: 0.35,
+        size: 2 + Math.random() * 3.5,
+        type: "DIAMOND",
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 14,
       });
     }
 
-    // 2. Scanline Streaks
-    for (let i = 0; i < 6; i++) {
-      this.eatParticles.push({
-        x: x + (Math.random() * 10 - 5),
-        y: y + (Math.random() * this.r * 2 - this.r),
-        vx: blastDirection * (350 + Math.random() * 200),
-        vy: 0,
-        life: 0.2 + Math.random() * 0.2,
-        maxLife: 0.4,
-        color: "#ffaa00",
-        type: "SCANLINE",
-        size: 15 + Math.random() * 25,
-      });
-    }
-
-    // 3. Complete Portal Particle Explosion Burst (Restored)
-    for (let i = 0; i < 15; i++) {
-      const angle =
-        (Math.random() - 0.5) * (Math.PI * 0.6) + (isLeftPortal ? 0 : Math.PI);
-      const speed = 180 + Math.random() * 220;
-
-      this.eatParticles.push({
+    // ── Star distortion — fake lensed starlight ────────────
+    const starCount = 14;
+    for (let i = 0; i < starCount; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = isExit
+        ? 200 + Math.random() * 320
+        : 25 + Math.random() * 55;
+      this.particles.push({
         x,
         y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.25 + Math.random() * 0.25,
-        maxLife: 0.5,
-        color: Math.random() > 0.4 ? "#ffea00" : "#ffffff",
-        type: "GLITCH",
-        size: 3 + Math.random() * 4,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        life: 0.1 + Math.random() * 0.12,
+        maxLife: 0.22,
+        size: 1.5 + Math.random() * 2.5,
+        type: "SPARK",
+        rotation: 0,
+        rotSpeed: 0,
       });
     }
   }
 
-  private spawnDotEatVFX(tileX: number, tileY: number): void {
-    const cx = tileX * this.tileSize + this.tileSize / 2;
-    const cy = tileY * this.tileSize + this.tileSize / 2;
-
-    for (let i = 0; i < 6; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 60 + Math.random() * 50;
-      this.eatParticles.push({
+  private spawnDotEat(tx: number, ty: number): void {
+    const cx = tx * this.tileSize + this.tileSize / 2;
+    const cy = ty * this.tileSize + this.tileSize / 2;
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 35 + Math.random() * 50;
+      this.particles.push({
         x: cx,
         y: cy,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.2 + Math.random() * 0.15,
-        maxLife: 0.3,
-        color: this.isBuffed ? "#ff5500" : "#ffea00",
-        type: "SHARD",
-        size: 2 + Math.random() * 2,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: 0.12 + Math.random() * 0.1,
+        maxLife: 0.22,
+        size: 0.8 + Math.random() * 1.5,
+        type: "DIAMOND",
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 6,
       });
     }
   }
 
-  private spawnPillEatVFX(tileX: number, tileY: number): void {
-    const cx = tileX * this.tileSize + this.tileSize / 2;
-    const cy = tileY * this.tileSize + this.tileSize / 2;
-    const col = "#ffaa00";
-
-    this.eatParticles.push({
+  private spawnPillEat(tx: number, ty: number): void {
+    const cx = tx * this.tileSize + this.tileSize / 2;
+    const cy = ty * this.tileSize + this.tileSize / 2;
+    this.particles.push({
       x: cx,
       y: cy,
       vx: 0,
       vy: 0,
-      life: 0.45,
-      maxLife: 0.45,
-      color: col,
+      life: 0.5,
+      maxLife: 0.5,
+      size: this.r * 0.3,
       type: "RING",
-      size: this.r * 0.5,
+      rotation: 0,
+      rotSpeed: 0,
     });
-
-    for (let i = 0; i < 14; i++) {
-      const speed = 180 + Math.random() * 260;
-      const directionalSign = Math.random() > 0.5 ? 1 : -1;
-      this.eatParticles.push({
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 90 + Math.random() * 180;
+      this.particles.push({
         x: cx,
-        y: cy + (Math.random() - 0.5) * this.r,
-        vx: speed * directionalSign,
-        vy: 0,
-        life: 0.3 + Math.random() * 0.3,
-        maxLife: 0.6,
-        color: col,
-        type: "THERMAL_BAR",
-        size: 12 + Math.random() * 15,
+        y: cy,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: 0.18 + Math.random() * 0.3,
+        maxLife: 0.48,
+        size: 1.5 + Math.random() * 3,
+        type: "SPARK",
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 12,
       });
     }
   }
 
-  private spawnGhostEatVFX(gx: number, gy: number): void {
-    const particleCount = 28;
-    this.eatParticles.push({
+  private spawnGhostConsume(gx: number, gy: number): void {
+    this.particles.push({
       x: gx,
       y: gy,
       vx: 0,
       vy: 0,
       life: 0.45,
       maxLife: 0.45,
-      color: "#ffffff",
-      type: "RING",
       size: 4,
+      type: "RING",
+      rotation: 0,
+      rotSpeed: 0,
     });
-
-    for (let i = 0; i < particleCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 120 + Math.random() * 140;
-      const isLine = Math.random() > 0.55;
-
-      this.eatParticles.push({
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 100 + Math.random() * 180;
+      this.particles.push({
         x: gx,
         y: gy,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0.3 + Math.random() * 0.4,
-        maxLife: 0.7,
-        color: Math.random() > 0.35 ? "#ffffff" : "#ffaa00",
-        type: isLine ? "LINE" : "SHARD",
-        size: isLine ? 4 + Math.random() * 6 : 2.5 + Math.random() * 2.5,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: 0.22 + Math.random() * 0.4,
+        maxLife: 0.62,
+        size: 1.5 + Math.random() * 3.5,
+        type: Math.random() > 0.5 ? "DIAMOND" : "SPARK",
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 14,
       });
     }
   }
 
-  private updateEatParticles(dt: number): void {
-    for (let i = this.eatParticles.length - 1; i >= 0; i--) {
-      const p = this.eatParticles[i];
-      p.life -= dt;
+  // ── Updates ───────────────────────────────────────────────────
+  private updateTrail(dt: number): void {
+    const decay = this.isBuffed ? 1.1 : 1.7;
+    for (const t of this.trail) t.alpha -= dt * decay;
+  }
 
+  private updateParticles(dt: number): void {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
       if (p.life <= 0) {
-        this.eatParticles.splice(i, 1);
+        this.particles.splice(i, 1);
         continue;
       }
-
-      if (p.type === "RING") {
-        p.size += 260 * dt;
-      } else {
+      if (p.type !== "RING") {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        p.vx *= 0.92;
-        p.vy *= 0.92;
+        p.vx *= 0.9;
+        p.vy *= 0.9;
+        p.rotation += p.rotSpeed * dt;
+      } else {
+        p.size += 900 * dt;
       }
     }
   }
 
-  private triggerDeath(): void {
+  private updateFlares(dt: number): void {
+    for (let i = this.flares.length - 1; i >= 0; i--) {
+      this.flares[i].life -= dt;
+      if (this.flares[i].life <= 0) this.flares.splice(i, 1);
+    }
+  }
+
+  public triggerDeath(): void {
     if (this.state === "DYING") return;
     this.state = "DYING";
-    this.deathTimer = 0;
     this.speed = 0;
-    eventBus.emit("pacman:death_triggered");
     eventBus.emit("pacman:death_animation_start");
   }
 
-  // --- Rendering Pipeline ---
-
+  // ── Draw ──────────────────────────────────────────────────────
   public draw(): void {
-    this.drawTrailVFX();
-    if (this.state === "DYING") {
-      this.drawDead();
-    } else {
-      this.drawAlive();
-    }
-    this.drawEatVFX();
+    if (this.r <= 0) return;
+    this.drawTrailRibbon();
+    this.drawParticles();
+    if (this.state === "DYING") this.drawDead();
+    else this.drawAlive();
   }
 
-  private drawTrailVFX(): void {
-    if (this.state === "DYING" || this.trailHistory.length < 2) return;
+  // ── Trail: diamond stream ────────────────────────────────────
+  // In Pacman.ts, replace drawTrailStream with the original ribbon approach:
 
-    const ctx = this.ctx;
-    const color = this.isBuffed ? "#ff5100" : "#ffea00";
-    const width = this.isBuffed ? this.r * 1.2 : this.r * 0.75; // Thicker ribbon when buffed
+  private drawTrailRibbon(): void {
+    if (this.state === "DYING" || this.trail.length < 2) return;
+    const ctx = this.layer.ctx;
+    const w = this.r * 0.35;
+    const gap = this.isBuffed ? this.r * 0.4 : 0;
+    const coreClr = this.isBuffed ? TRAIL_CLR_B : TRAIL_CLR_N;
+    const sparkClr = this.isBuffed ? TRAIL_SPARK_B : TRAIL_SPARK_N;
 
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.shadowColor = color;
+    for (let i = 0; i < this.trail.length - 1; i++) {
+      const a = Math.max(0, this.trail[i + 1].alpha);
+      if (a <= 0.01) continue;
+      const p1 = this.trail[i],
+        p2 = this.trail[i + 1];
 
-    for (let i = 0; i < this.trailHistory.length - 1; i++) {
-      const p1 = this.trailHistory[i];
-      const p2 = this.trailHistory[i + 1];
-      const alpha = Math.max(0, p2.alpha);
+      // Draw one or two ribbons
+      for (let side = -1; side <= 1; side += 2) {
+        const offset = side * gap * 0.5;
+        if (!this.isBuffed && side === 1) continue; // single ribbon when normal
 
-      ctx.globalAlpha = this.isBuffed ? alpha * 0.55 : alpha * 0.35;
-      ctx.shadowBlur = this.isBuffed ? 18 * alpha : 6 * alpha;
-      ctx.lineWidth = this.isBuffed ? 2.5 : 1;
+        ctx.globalAlpha = a * 0.7;
+        ctx.fillStyle = coreClr;
+        ctx.shadowColor = coreClr;
+        ctx.shadowBlur = this.isBuffed ? 6 * a : 3 * a;
 
-      // Draw volumetric vector edges
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y - width / 2);
-      ctx.lineTo(p1.x, p1.y + width / 2);
-      ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y - w + offset);
+        ctx.lineTo(p2.x, p2.y - w + offset);
+        ctx.lineTo(p2.x, p2.y + w + offset);
+        ctx.lineTo(p1.x, p1.y + w + offset);
+        ctx.closePath();
+        ctx.fill();
 
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y - width / 2);
-      ctx.lineTo(p2.x, p2.y - width / 2);
-      ctx.moveTo(p1.x, p1.y + width / 2);
-      ctx.lineTo(p2.x, p2.y + width / 2);
-      ctx.stroke();
+        // Edge highlights
+        ctx.globalAlpha = a * 0.5;
+        ctx.strokeStyle = sparkClr;
+        ctx.shadowColor = sparkClr;
+        ctx.shadowBlur = this.isBuffed ? 8 * a : 5 * a;
+        ctx.lineWidth = this.isBuffed ? 1 : 0.7;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y - w + offset);
+        ctx.lineTo(p2.x, p2.y - w + offset);
+        ctx.moveTo(p1.x, p1.y + w + offset);
+        ctx.lineTo(p2.x, p2.y + w + offset);
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
-
-  private drawEatVFX(): void {
-    const ctx = this.ctx;
-    for (const p of this.eatParticles) {
-      const alpha = Math.max(0, p.life / p.maxLife);
+  private drawParticles(): void {
+    const ctx = this.layer.ctx;
+    for (const p of this.particles) {
+      const a = Math.max(0, p.life / p.maxLife);
+      if (a <= 0.01) continue;
       ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = p.color;
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 12 * alpha;
+      ctx.globalAlpha = a * 0.8;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
 
-      if (p.type === "SHARD") {
-        const s = p.size * alpha;
-        ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
-      } else if (p.type === "LINE") {
-        ctx.lineWidth = 1.5;
+      if (p.type === "RING") {
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 10 * a;
+        ctx.lineWidth = 1.5 * a;
         ctx.beginPath();
-        ctx.moveTo(p.x, p.y - p.size);
-        ctx.lineTo(p.x, p.y + p.size);
+        ctx.arc(0, 0, p.size, 0, Math.PI * 2);
         ctx.stroke();
-      } else if (p.type === "RING") {
-        ctx.lineWidth = 2 * alpha;
+      } else if (p.type === "DIAMOND") {
+        const s = p.size * a;
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 4;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (p.type === "THERMAL_BAR") {
-        ctx.fillRect(p.x - p.size / 2, p.y - 1, p.size, 2);
-      } else if (p.type === "GLITCH") {
-        ctx.fillRect(p.x - p.size, p.y - p.size / 4, p.size * 2, p.size / 2);
-      } else if (p.type === "GATEWAY") {
-        const progress = p.life / p.maxLife;
-        const radius = p.size + (1 - progress) * (this.r * 3);
-        const directionSign = p.vx;
-
-        ctx.lineWidth = 3 * progress;
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.life * 8 * directionSign);
-        ctx.beginPath();
-        for (let side = 0; side < 4; side++) {
-          const angle = (side * Math.PI) / 2;
-          ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
-        }
+        ctx.moveTo(0, -s);
+        ctx.lineTo(s * 0.5, 0);
+        ctx.lineTo(0, s);
+        ctx.lineTo(-s * 0.5, 0);
         ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
-      } else if (p.type === "SCANLINE") {
-        const progress = p.life / p.maxLife;
-        ctx.lineWidth = 2 * progress;
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x - p.vx * 0.08, p.y);
-        ctx.stroke();
+        ctx.fill();
+      } else {
+        const s = p.size * a;
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 8;
+        ctx.fillRect(-s * 0.25, -s, s * 0.5, s * 2);
       }
       ctx.restore();
     }
   }
 
-  private getRotation(): number {
-    const dir =
+  private getAngle(): number {
+    const d =
       this.direction.dx !== 0 || this.direction.dy !== 0
         ? this.direction
         : this.lastDirection;
-    if (dir.dx === -1) return Math.PI;
-    if (dir.dx === 1) return 0;
-    if (dir.dy === -1) return -Math.PI / 2;
-    if (dir.dy === 1) return Math.PI / 2;
+    if (d.dx === -1) return Math.PI;
+    if (d.dx === 1) return 0;
+    if (d.dy === -1) return -Math.PI / 2;
+    if (d.dy === 1) return Math.PI / 2;
     return 0;
   }
 
+  // ── ALIVE ─────────────────────────────────────────────────────
   private drawAlive(): void {
-    const ctx = this.ctx;
-    const cx = this.x;
-    const cy = this.y;
+    const ctx = this.layer.ctx;
     const r = this.r;
-    const rotation = this.getRotation();
-    const isMoving = this.direction.dx !== 0 || this.direction.dy !== 0;
-    const timestamp = Date.now();
+    if (r <= 0) return;
+    const rot = this.getAngle();
+    const moving = this.direction.dx !== 0 || this.direction.dy !== 0;
+    const t = this.time * 1000;
 
-    let mouthAngle: number;
-    if (isMoving) {
-      const speedFactor = this.isBuffed
-        ? this.config.mouthSpeed * 1.65
+    let mouth: number;
+    if (moving) {
+      const sf = this.isBuffed
+        ? this.config.mouthSpeed * 1.55
         : this.config.mouthSpeed;
-      mouthAngle =
-        Math.abs(Math.sin(timestamp * speedFactor)) * this.config.maxMouthAngle;
+      mouth = Math.abs(Math.sin(t * sf)) * this.config.maxMouthAngle;
     } else {
-      mouthAngle = this.config.idleMouthAngle;
+      mouth = this.config.idleMouthAngle;
     }
-
-    const startAngle = mouthAngle;
-    const endAngle = 2 * Math.PI - mouthAngle;
-
-    const primaryColor = this.isBuffed ? "#ff5100" : "#ffea00";
-    const structuralColor = this.isBuffed ? "#ffffff" : "#ffe082";
+    mouth = Math.max(0.08, Math.min(mouth, Math.PI * 0.45));
+    const sa = mouth,
+      ea = Math.PI * 2 - mouth;
+    const innerRim = r * 0.3;
 
     ctx.save();
-
-    // OVERCLOCK AFTERIMAGE JITTER: Apply micro-instability translations when buffed
-    if (this.isBuffed && isMoving && Math.random() > 0.4) {
-      const jitterRange = 1.8;
-      ctx.translate(
-        cx + (Math.random() - 0.5) * jitterRange,
-        cy + (Math.random() - 0.5) * jitterRange,
-      );
-    } else {
-      ctx.translate(cx, cy);
-    }
-
-    ctx.rotate(rotation);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(rot);
 
     if (this.ghostEatFlash > 0) {
       ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 30 * this.ghostEatFlash;
-      ctx.fillStyle = `rgba(255, 255, 255, ${0.15 * this.ghostEatFlash})`;
+      ctx.shadowBlur = 40 * this.ghostEatFlash;
+      ctx.fillStyle = `rgba(255,255,255,${0.2 * this.ghostEatFlash})`;
       ctx.beginPath();
-      ctx.arc(0, 0, r + 15, 0, Math.PI * 2);
+      ctx.arc(0, 0, r + 22, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Outer Arc Vector Chassis
-    ctx.shadowColor = primaryColor;
-    ctx.shadowBlur = this.isBuffed ? 26 : 10;
-    ctx.strokeStyle = primaryColor;
-    ctx.lineWidth = 2.5;
-
+    // Body glow
+    const glowGrad = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 2.2);
+    glowGrad.addColorStop(
+      0,
+      this.isBuffed ? "rgba(255,200,130,0.55)" : "rgba(60,80,200,0.35)",
+    );
+    glowGrad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glowGrad;
     ctx.beginPath();
-    ctx.arc(0, 0, r - 2, startAngle, endAngle);
-
-    const innerCutoff = r * 0.35;
-    ctx.lineTo(
-      Math.cos(2 * Math.PI - mouthAngle) * innerCutoff,
-      Math.sin(2 * Math.PI - mouthAngle) * innerCutoff,
-    );
-    ctx.lineTo(
-      Math.cos(mouthAngle) * innerCutoff,
-      Math.sin(mouthAngle) * innerCutoff,
-    );
-    ctx.closePath();
-
-    const pulseAlpha = 0.04 + Math.sin(timestamp * 0.006) * 0.03;
-    ctx.fillStyle = this.isBuffed
-      ? `rgba(255, 81, 0, ${0.12 + pulseAlpha})`
-      : `rgba(255, 234, 0, ${pulseAlpha})`;
+    ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
     ctx.fill();
+
+    // Surface flares
+    for (const flare of this.flares) {
+      const fa = flare.life / flare.maxLife;
+      const fx = Math.cos(flare.angle) * r * 0.8;
+      const fy = Math.sin(flare.angle) * r * 0.8;
+      const fs = flare.size * fa;
+      const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fs);
+      fg.addColorStop(0, "rgba(255,255,255,0.9)");
+      fg.addColorStop(0.5, "rgba(255,220,160,0.4)");
+      fg.addColorStop(1, "rgba(255,180,80,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(fx, fy, fs, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Body
+    const bodyClr = this.isBuffed ? BODY_BUFFED : BODY_NORMAL;
+    const bodyGrad = ctx.createRadialGradient(0, 0, r * 0.05, 0, 0, r);
+    bodyGrad.addColorStop(0, this.isBuffed ? BODY_CORE_B : BODY_CORE_N);
+    bodyGrad.addColorStop(0.6, bodyClr);
+    bodyGrad.addColorStop(1, this.isBuffed ? "#664422" : "#0a0a35");
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, sa, ea);
+    ctx.lineTo(Math.cos(ea) * innerRim, Math.sin(ea) * innerRim);
+    ctx.lineTo(Math.cos(sa) * innerRim, Math.sin(sa) * innerRim);
+    ctx.closePath();
+    ctx.fill();
+
+    // Edge rim
+    const edgeClr = this.isBuffed ? BODY_EDGE_B : BODY_EDGE_N;
+    ctx.strokeStyle = edgeClr;
+    ctx.lineWidth = this.isBuffed ? 2.2 : 1.6;
+    ctx.shadowColor = edgeClr;
+    ctx.shadowBlur = this.isBuffed ? 14 : 7;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, sa, ea);
     ctx.stroke();
 
-    // Internal Matrix Scanline Overlay Grid
+    // Mouth interior
     ctx.save();
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, sa, ea);
+    ctx.lineTo(Math.cos(ea) * innerRim, Math.sin(ea) * innerRim);
+    ctx.lineTo(Math.cos(sa) * innerRim, Math.sin(sa) * innerRim);
+    ctx.closePath();
     ctx.clip();
-    ctx.strokeStyle = this.isBuffed
-      ? "rgba(255, 81, 0, 0.3)"
-      : "rgba(255, 234, 0, 0.14)";
-    ctx.lineWidth = 1;
-    ctx.shadowBlur = 0;
-    const lineSpacing = 4;
-    const scrollOffset = Math.floor(timestamp * 0.035) % lineSpacing;
-    for (let y = -r; y < r; y += lineSpacing) {
+
+    const mouthGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    mouthGrad.addColorStop(0, MOUTH_INNER);
+    mouthGrad.addColorStop(0.25, this.isBuffed ? MOUTH_GRAD_B : MOUTH_GRAD_N);
+    mouthGrad.addColorStop(
+      0.6,
+      this.isBuffed ? "rgba(180,130,60,0.35)" : "rgba(25,35,100,0.35)",
+    );
+    mouthGrad.addColorStop(1, "rgba(0,0,0,0.85)");
+    ctx.fillStyle = mouthGrad;
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+
+    for (const star of this.mouthStars) {
+      const starR = star.radius * r;
+      if (starR <= 0.4) continue;
+      const sx = Math.cos(star.angle) * starR;
+      const sy = Math.sin(star.angle) * starR;
+      const twinkle = 0.5 + 0.5 * Math.sin(t * 0.005 + star.phase);
+      const ss = Math.max(0.12, star.size * twinkle);
+      ctx.fillStyle = `rgba(255,255,255,${twinkle * 0.75})`;
       ctx.beginPath();
-      ctx.moveTo(-r, y + scrollOffset);
-      ctx.lineTo(r, y + scrollOffset);
-      ctx.stroke();
+      ctx.arc(sx, sy, ss, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
 
-    // --- REFINED ENGINE CORE HOUSING ---
-    ctx.save();
-    const coreRadius = r * 0.35;
-
-    ctx.strokeStyle = this.isBuffed
-      ? "rgba(255,255,255,0.95)"
-      : "rgba(255, 234, 0, 0.45)";
-    ctx.lineWidth = 1.5;
-    ctx.shadowBlur = this.isBuffed ? 14 : 0;
-    ctx.shadowColor = primaryColor;
+    // Mouth rim
+    const rimClr = this.isBuffed ? MOUTH_RIM_B : MOUTH_RIM_N;
+    ctx.strokeStyle = rimClr;
+    ctx.lineWidth = this.isBuffed ? 2.5 : 1.6;
+    ctx.shadowColor = rimClr;
+    ctx.shadowBlur = this.isBuffed ? 14 : 7;
     ctx.beginPath();
-    ctx.arc(0, 0, coreRadius, 0, Math.PI * 2);
+    ctx.arc(0, 0, r - 2, Math.max(0, sa - 0.06), sa + 0.18);
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, ea - 0.18, Math.min(Math.PI * 2, ea + 0.06));
+    ctx.stroke();
+
+    // Heart
+    const heartClr = this.isBuffed ? HEART_B : HEART_N;
+    const pulse = 1 + Math.sin(t * 0.012) * 0.22;
+    const heartR = Math.max(0.4, r * 0.09 * pulse);
+    const heartGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, heartR * 2.5);
+    heartGrad.addColorStop(0, "#ffffff");
+    heartGrad.addColorStop(0.35, heartClr);
+    heartGrad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = heartGrad;
+    ctx.shadowColor = "#ffffff";
+    ctx.shadowBlur = this.isBuffed ? 20 : 10;
+    ctx.beginPath();
+    ctx.arc(0, 0, heartR * 2.5, 0, Math.PI * 2);
+    ctx.fill();
 
     if (this.isBuffed) {
-      const speedMult = timestamp * 0.045; // Sped up core rotation
-      ctx.lineWidth = 2;
-
-      for (let i = 0; i < 2; i++) {
-        ctx.save();
-        ctx.rotate(i === 0 ? speedMult : -speedMult * 1.4);
-        const pulseRadius =
-          coreRadius * (0.72 + Math.sin(timestamp * 0.025 + i) * 0.1);
-        ctx.strokeStyle = i === 0 ? "#ffffff" : "#ff1100";
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(0, 0, pulseRadius, 0, Math.PI * 1.1);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      ctx.fillStyle = "#ffffff";
-      ctx.shadowBlur = 20;
+      const pulseAlpha = 0.06 + Math.sin(t * 0.018) * 0.05;
+      ctx.fillStyle = `rgba(255,255,255,${pulseAlpha})`;
       ctx.beginPath();
-      ctx.arc(0, 0, coreRadius * 0.38, 0, Math.PI * 2);
+      ctx.arc(0, 0, r - 2, sa, ea);
+      ctx.lineTo(Math.cos(ea) * innerRim, Math.sin(ea) * innerRim);
+      ctx.lineTo(Math.cos(sa) * innerRim, Math.sin(sa) * innerRim);
+      ctx.closePath();
       ctx.fill();
-    } else {
-      ctx.save();
-      ctx.rotate(timestamp * 0.002);
-      ctx.strokeStyle = structuralColor;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(0, 0, coreRadius * 0.6, 0, Math.PI * 0.4);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 0, coreRadius * 0.6, Math.PI, Math.PI * 1.4);
-      ctx.stroke();
-      ctx.fillStyle = primaryColor;
-      ctx.fillRect(-1, -1, 2, 2);
-      ctx.restore();
     }
-    ctx.restore();
-
-    // Peripheral Antenna Tracking Arcs
-    ctx.strokeStyle = structuralColor;
-    ctx.lineWidth = 1;
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.68, Math.PI * 0.7, Math.PI * 1.3);
-    ctx.stroke();
-
-    ctx.fillStyle = primaryColor;
-    ctx.fillRect(
-      Math.cos(Math.PI * 0.7) * (r * 0.68) - 1,
-      Math.sin(Math.PI * 0.7) * (r * 0.68) - 1,
-      2,
-      2,
-    );
-    ctx.fillRect(
-      Math.cos(Math.PI * 1.3) * (r * 0.68) - 1,
-      Math.sin(Math.PI * 1.3) * (r * 0.68) - 1,
-      2,
-      2,
-    );
 
     ctx.restore();
   }
 
+  // ── DEAD ──────────────────────────────────────────────────────
   private drawDead(): void {
-    const p = Math.min(1, this.deathTimer / this.config.deathAnimationDuration);
-    const ctx = this.ctx;
-    const cx = this.x;
-    const cy = this.y;
+    const p = Math.min(1, this.gameState.deathProgress);
+    const ctx = this.layer.ctx;
     const r = this.r;
+    if (r <= 0) return;
 
     ctx.save();
-    ctx.translate(cx, cy);
+    ctx.translate(this.x, this.y);
 
-    if (p < 0.3) {
-      const scale = 1.0 - (p / 0.3) * 0.75;
-      const flashAlert = Math.floor(p * 40) % 2 === 0;
-
-      ctx.strokeStyle = flashAlert ? "#ff3300" : "#ffaa00";
+    if (p < 0.2) {
+      const s = 1 - p * 2;
+      const flash = Math.floor(p * 60) % 2 === 0;
+      ctx.strokeStyle = flash ? "#ffffff" : "#ddccaa";
       ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 20 * (1 - p);
-      ctx.lineWidth = 3 * scale;
-
-      ctx.save();
-      ctx.scale(scale, scale);
-      ctx.rotate(p * 15);
+      ctx.shadowBlur = 28 * (1 - p);
+      ctx.lineWidth = 3 * Math.max(0.1, s);
       ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      const blastProgress = (p - 0.3) / 0.7;
-      const alpha = Math.max(0, 1.0 - blastProgress);
-      const blastColor = this.isBuffed ? "#ff5100" : "#ffea00";
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-
-      if (blastProgress < 0.25) {
-        ctx.fillStyle = "#ffffff";
-        ctx.shadowBlur = 30;
-        ctx.shadowColor = blastColor;
-        ctx.beginPath();
-        ctx.arc(0, 0, r * 2.0 * (1.0 - blastProgress * 4), 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.strokeStyle = blastColor;
-      ctx.shadowColor = blastColor;
-      ctx.shadowBlur = 15;
-
-      const railLength = r * 4.5 * blastProgress;
-      ctx.lineWidth = 4 * (1.0 - blastProgress);
-
-      ctx.beginPath();
-      ctx.moveTo(-railLength, 0);
-      ctx.lineTo(railLength, 0);
-      ctx.moveTo(0, -railLength);
-      ctx.lineTo(0, railLength);
+      ctx.arc(0, 0, r * s, 0, Math.PI * 2);
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 10px 'Courier New'";
-      ctx.textAlign = "center";
-      for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
-        const offsetDistance = r * 1.5 * (1.0 + blastProgress * 2);
-        ctx.fillText(
-          Math.random() > 0.5 ? "0" : "1",
-          Math.cos(angle) * offsetDistance,
-          Math.sin(angle) * offsetDistance,
-        );
-      }
-      ctx.restore();
+      ctx.shadowColor = "#ffffff";
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const bp = (p - 0.2) / 0.8;
+      const a = Math.max(0, 1 - bp);
+      const ringR = r * (1 + bp * 4);
+      ctx.strokeStyle = `rgba(220,210,240,${a * 0.7})`;
+      ctx.shadowColor = "rgba(180,160,220,0.5)";
+      ctx.shadowBlur = 20 * a;
+      ctx.lineWidth = 2.5 * a;
+      ctx.beginPath();
+      ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "#ffffff";
+      ctx.shadowBlur = 25 * a;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.05 * a, 0, Math.PI * 2);
+      ctx.fill();
     }
+
     ctx.restore();
   }
 }

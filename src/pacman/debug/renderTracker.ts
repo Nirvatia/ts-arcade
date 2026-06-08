@@ -1,17 +1,9 @@
 export class RenderTracker {
-  private static instance: RenderTracker | null = null;
   private drawCounts: Record<string, number> = {};
   private lastSummaryTime: number = performance.now();
   private readonly intervalMs: number = 3000; // Summary loop interval
 
-  private constructor() {}
-
-  public static getInstance(): RenderTracker {
-    if (!RenderTracker.instance) {
-      RenderTracker.instance = new RenderTracker();
-    }
-    return RenderTracker.instance;
-  }
+  constructor() {}
 
   /**
    * Increments the redraw count for a specific canvas layer.

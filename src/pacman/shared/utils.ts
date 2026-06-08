@@ -1,49 +1,6 @@
-import {
-  CFG_MAZE_0,
-  CFG_MAZE_1,
-  CFG_MAZE_2,
-  CFG_MAZE_3,
-  CFG_MAZE_4,
-} from "../config/maze.config.js";
-import { CFG_SFX } from "../config/sfx.config.js";
-import { sfx } from "../sfx/SFX.js";
+import { CFG_GRID_0 } from "../config/grid.config.js";
 
-import type { LevelConfigType, TileType } from "./types.js";
-
-/**
- * Pre-loads all audio assets via the SFX manager.
- * Should be executed at application bootstrap before the game starts.
- */
-async function initAudio(): Promise<void> {
-  try {
-    // Fetches raw sound bytes safely; avoids strict browser autoplay restriction blocks
-    await Promise.all(
-      CFG_SFX.map((sound) => sfx.loadSound(sound.name, sound.url)),
-    );
-  } catch (err) {
-    console.error("Failed to pre-load audio:", err);
-  }
-}
-
-/**
- * Adjusts the canvas dimensions to match the structural layout of the map grid.
- * @param canvas - The HTML Canvas target element
- * @param BLOCK_SIZE - The size of a single tile coordinate in pixels
- * @param EXTRA_HEIGHT_FACTOR - Additional height padding measured in tile units (allocated for HUD/UI)
- * @param map - A 2D grid matrix mapping out individual tile attributes
- */
-function setCanvasSize(
-  canvas: HTMLCanvasElement,
-  BLOCK_SIZE: number,
-  EXTRA_HEIGHT_FACTOR: number,
-  map: TileType[][],
-): void {
-  const rows = map.length;
-  const cols = map[0]?.length || 0;
-
-  canvas.width = cols * BLOCK_SIZE;
-  canvas.height = rows * BLOCK_SIZE + BLOCK_SIZE * EXTRA_HEIGHT_FACTOR;
-}
+import type { LevelConfigType } from "./types.js";
 
 /**
  * Calculates cubic ease-in-out mathematical interpolation.
@@ -64,10 +21,10 @@ function easeInOutCubic(t: number): number {
  */
 function generateLevelConfig(level: number): LevelConfigType {
   // Loops sequentially through the 5 distinct blueprint layouts available
-  const maps = [CFG_MAZE_0, CFG_MAZE_1, CFG_MAZE_2, CFG_MAZE_3, CFG_MAZE_4];
+  const maps = [CFG_GRID_0];
   const mapIndex = (level - 1) % maps.length;
 
-  const colors = [195, 330, 45, 160, 275];
+  const colors = [200, 205, 220, 190, 210];
   const colorIndex = (level - 1) % colors.length;
 
   return {
@@ -80,4 +37,4 @@ function generateLevelConfig(level: number): LevelConfigType {
   };
 }
 
-export { initAudio, setCanvasSize, easeInOutCubic, generateLevelConfig };
+export { easeInOutCubic, generateLevelConfig };

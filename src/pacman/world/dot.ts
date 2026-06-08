@@ -1,108 +1,91 @@
-import { CFG_CANVAS } from "../config/canvas.config.js";
+// world/Dot.ts
 import { eventBus } from "../core/EventBus.js";
 import { WorldObject } from "./WorldObject.js";
+import type { LevelContext } from "../core/LevelContext.js";
+import type { CanvasLayer } from "../render/CanvasLayer.js";
 
-import type { Collectible } from "../shared/types.js";
-
-export class Dot extends WorldObject implements Collectible {
+export class Dot extends WorldObject {
   private dotSize: number;
-  public positions: Set<string> = new Set<string>();
 
-  constructor() {
-    super(CFG_CANVAS.canvasIds.dots);
-    this.dotSize = this.tileSize * 0.16;
+  constructor(canvasLayer: CanvasLayer, levelContext: LevelContext) {
+    super(canvasLayer, levelContext);
+    this.dotSize = this.tileSize * 0.22;
     this.initEventListeners();
   }
 
+  private seed(i: number, j: number): number {
+    return Math.abs(Math.sin(i * 127.1 + j * 311.7) * 43758.5453) % 1;
+  }
+
   private initEventListeners(): void {
-    eventBus.on(
-      "dot:collect",
-      (data: { position: { i: number; j: number } }) => {
-        this.collect(data.position.i, data.position.j);
-      },
-    );
-  }
-
-  spawn(): void {
-    this.positions.clear();
-    this.clearCanvas();
-
-    const map = this.gameState.levelData.map;
-    let cnt = 0;
-
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (map[i][j] === "FD") {
-          this.positions.add(`${i},${j}`);
-          cnt++;
-        }
+    eventBus.on("dot:eaten", (payload) => {
+      if (payload?.position) {
+        this.eraseDotAt(payload.position.i, payload.position.j);
+      } else {
+        this.requestRedraw();
       }
-    }
-
-    this.needsRedraw = true;
-    eventBus.emit("dot:spawned", { count: cnt });
-  }
-
-  collect(i: number, j: number): void {
-    this.positions.delete(`${i},${j}`);
-    this.clearCanvas(
-      j * this.tileSize - 2,
-      i * this.tileSize - 2,
-      this.tileSize + 4,
-      this.tileSize + 4,
-    );
-    eventBus.emit("dot:eaten", {
-      position: { i, j },
-      dotsRemaining: this.positions.size,
     });
   }
 
-  override reset(): void {
-    super.reset();
-    this.positions.clear();
+  public spawn(): void {
+    this.requestRedraw();
   }
 
-  draw(): void {
-    this.clearCanvas();
-    const ctx = this.ctx;
+  private eraseDotAt(row: number, col: number): void {
+    const ctx = this.layer.ctx;
     const ts = this.tileSize;
+    ctx.clearRect(col * ts, row * ts, ts, ts);
+  }
 
+  public draw(): void {
+    if (!this.needsRedraw) return;
+
+    const ctx = this.layer.ctx;
+    const ts = this.tileSize;
+    const sz = this.dotSize * 0.5;
+
+    ctx.clearRect(0, 0, this.layer.canvas.width, this.layer.canvas.height);
     ctx.save();
-    // Using screen composition so overlapping neon vectors blend cleanly
-    ctx.globalCompositeOperation = "screen";
 
-    this.positions.forEach((pos) => {
-      const [i, j] = pos.split(",").map(Number);
+    this.gameState.activeDots.forEach((posKey) => {
+      const [i, j] = posKey.split(",").map(Number);
       const cx = ts * j + ts / 2;
       const cy = ts * i + ts / 2;
-      const r = this.dotSize * 0.5;
+      const s = this.seed(i, j);
+
+      const size = sz * (0.8 + s * 0.4);
+      const rot = s * Math.PI * 2;
 
       ctx.save();
       ctx.translate(cx, cy);
+      ctx.rotate(rot);
 
-      // --- PASS 1: TRON GRID GLOW MATRIX ---
-      ctx.shadowColor = "rgba(0, 180, 255, 0.85)";
+      // Soft violet glow
+      ctx.shadowColor = "rgba(150, 120, 220, 0.55)";
       ctx.shadowBlur = 4;
-      ctx.strokeStyle = "rgba(0, 210, 255, 0.65)";
-      ctx.lineWidth = 1.0;
 
-      // Draw horizontal and vertical tracking crosses
+      // Diamond body
+      ctx.fillStyle = "rgba(190, 165, 240, 0.8)";
       ctx.beginPath();
-      ctx.moveTo(-r * 1.5, 0);
-      ctx.lineTo(r * 1.5, 0);
-      ctx.moveTo(0, -r * 1.5);
-      ctx.lineTo(0, r * 1.5);
-      ctx.stroke();
+      ctx.moveTo(0, -size);
+      ctx.lineTo(size * 0.5, 0);
+      ctx.lineTo(0, size);
+      ctx.lineTo(-size * 0.5, 0);
+      ctx.closePath();
+      ctx.fill();
 
-      // --- PASS 2: COMPRESSED DATA CORE ---
+      // Bright white core
       ctx.fillStyle = "#ffffff";
       ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 2;
-      ctx.fillRect(-r * 0.5, -r * 0.5, r, r);
+      ctx.shadowBlur = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
 
       ctx.restore();
     });
 
     ctx.restore();
+    this.needsRedraw = false;
   }
 }

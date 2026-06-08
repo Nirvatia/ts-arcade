@@ -1,22 +1,24 @@
+import * as PIXI from "pixi.js";
+
+import type { CanvasLayer } from "../render/CanvasLayer.js";
+
 export type TeleportType = `0${string}`;
 
 export type TileType =
-  | "WH" // Wall Horizontal
-  | "WV" // Wall Vertical
-  | "TL" // Top Left Corner
-  | "TR" // Top Right Corner
-  | "BL" // Bottom Left Corner
-  | "BR" // Bottom Right Corner
-  | "FD" // Dot / Food
+  | "WL" // Wall
+  | "DT" // Dot
   | "PP" // Power Pill
-  | TeleportType // Dynamic Teleport Node
   | "ES" // Empty Space / Clear Corridor
-  | "GL" // Ghost Lair / Spawn House
+  | "LE" // Lair entrance
+  | "LT" // Tile inside ghost lair
   | "PM" // Pac-Man Spawn Location
   | "BY" // Blinky Spawn Location (Red Ghost)
   | "PY" // Pinky Spawn Location (Pink Ghost)
   | "IY" // Inky Spawn Location (Cyan Ghost)
-  | "CE"; // Clyde Spawn Location (Orange Ghost)
+  | "CE" // Clyde Spawn Location (Orange Ghost)
+  | TeleportType; // Dynamic Teleport Node
+
+export type NewTileType = 1 | 0 | 9 | 8 | 6;
 
 export type LevelConfigType = {
   /** The 2D structural layout grid matrix for the level */
@@ -36,40 +38,43 @@ export type GraphType = Record<string, string[]>;
 export type EventHandler = (payload?: any) => void;
 
 /** Common structural type for assets capable of rendering pixels to a canvas context */
-export type Drawable = {
-  readonly canvasId: string;
-  ctx: CanvasRenderingContext2D;
+export type IDrawable = {
+  readonly layer: CanvasLayer;
   needsRedraw: boolean;
   draw(): void;
   requestRedraw(): void;
   clearCanvas(): void;
-  init(): void;
-  reset(): void;
 };
 
 /** Lifecycle type for dynamic assets requiring real-time logical frame updates */
-export type Updatable = Drawable & {
+export type IUpdatable = IDrawable & {
   /** Updates the internal state machine of the entity based on variable frame steps */
   update(dt: number): void;
 };
 
-/** Interface for environmental items interactable by actor entities on the map grid */
-export type Collectible = {
-  spawn(): void;
-  collect(i: number, j: number): void;
-};
+export type PixiScene = (
+  stage: PIXI.Container,
+  width: number,
+  height: number,
+  duration: number,
+  onComplete: () => void,
+) => void;
 
-/** Contract definition for custom scripted cinematics or non-gameplay intermission sequences */
-export type IGameScene = {
-  id: string;
-  start(durationInSeconds: number, onComplete: () => void): void;
-  update(dt: number): void;
-  draw(): void;
-  clear(): void;
-};
-
-/** Target rendering layer manager capable of dispatching rendering loops */
-export type IRenderer = {
-  render(): void;
-  clear(): void;
-};
+// Old types for old grids
+export type TileTypeOLD =
+  | "WH" // Wall Horizontal
+  | "WV" // Wall Vertical
+  | "TL" // Top Left Corner
+  | "TR" // Top Right Corner
+  | "BL" // Bottom Left Corner
+  | "BR" // Bottom Right Corner
+  | "FD" // Dot / Food
+  | "PP" // Power Pill
+  | TeleportType // Dynamic Teleport Node
+  | "ES" // Empty Space / Clear Corridor
+  | "GL" // Ghost Lair / Spawn House
+  | "PM" // Pac-Man Spawn Location
+  | "BY" // Blinky Spawn Location (Red Ghost)
+  | "PY" // Pinky Spawn Location (Pink Ghost)
+  | "IY" // Inky Spawn Location (Cyan Ghost)
+  | "CE"; // Clyde Spawn Location (Orange Ghost)

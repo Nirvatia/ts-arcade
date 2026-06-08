@@ -1,123 +1,147 @@
+// game/GameRegistry.ts
 import { CFG_PACMAN } from "../config/pacman.config.js";
 import { CFG_CANVAS } from "../config/canvas.config.js";
 import { CFG_GHOSTS } from "../config/ghost.config.js";
 
+import { LevelContext } from "../core/LevelContext.js";
+import { GridContext } from "../core/GridContext.js";
+import { CanvasLayer } from "../render/CanvasLayer.js";
 import { CanvasComposite } from "../render/CanvasComposite.js";
-import { eventBus } from "../core/EventBus.js";
 import { Ghost } from "../actors/ghost/Ghost.js";
 import { Pacman } from "../actors/pacman/Pacman.js";
 import { Pill } from "../world/Pill.js";
 import { Dot } from "../world/Dot.js";
-import { Maze } from "../world/Maze.js";
 import { Vignette } from "../vfx/Vignette.js";
+import { PixiGrid } from "../world/PixiGrid.js";
+import { createPathGraph } from "../pathfinding/graph.js";
 
-import type { Drawable, Updatable } from "../shared/types.js";
+import type { GameState } from "../game/GameState.svelte.js";
 
 export class GameRegistry {
-  private static instance: GameRegistry | null = null;
+  private readonly gameState: GameState;
+  private activeLevelContext: LevelContext | null = null;
 
-  private _vignette!: Vignette;
-  private _pacman!: Pacman;
-  private _ghosts: Ghost[] = [];
-  private _ghostLayer!: CanvasComposite;
-  private _maze!: Maze;
-  private _dot!: Dot;
-  private _pill!: Pill;
-
-  private constructor() {
-    this.initEventListeners();
+  constructor(gameState: GameState) {
+    this.gameState = gameState;
   }
 
-  static getInstance(): GameRegistry {
-    if (!GameRegistry.instance) {
-      GameRegistry.instance = new GameRegistry();
-    }
-    return GameRegistry.instance;
-  }
+  public async createLevelAsync(): Promise<LevelContext> {
+    const activeGrid = this.gameState.levelData.map;
+    this.gameState.pathGraph = createPathGraph(activeGrid);
 
-  private initEventListeners(): void {
-    eventBus.on("command:create_all", () => this.createAll());
-    eventBus.on("command:reset_all", () => this.resetAll());
-    eventBus.on("command:spawn_actors", () => this.spawnActors());
-    eventBus.on("command:exit_lair_all", () => this.exitLairAll());
-    eventBus.on("command:init_all", () => this.initAll());
-    eventBus.on("command:reset_actors", () => this.resetActors());
-    eventBus.on("command:clear_canvases", () => this.clearAllCanvases());
-  }
+    const gridContext = new GridContext(activeGrid);
+    const levelContext = new LevelContext(this.gameState, gridContext);
 
-  getVignette(): Vignette {
-    return this._vignette;
-  }
-  getPacman(): Pacman {
-    return this._pacman;
-  }
-  getGhosts(): Ghost[] {
-    return this._ghosts;
-  }
-  getMaze(): Maze {
-    return this._maze;
-  }
-  getDots(): Dot {
-    return this._dot;
-  }
-  getPills(): Pill {
-    return this._pill;
-  }
+    const tileSize = CFG_CANVAS.tile.size;
 
-  getAllUpdatable(): Updatable[] {
-    return [this._vignette, this._pacman, ...this._ghosts, this._pill];
-  }
-
-  getAllDrawable(): Drawable[] {
-    return [
-      this._maze,
-      this._dot,
-      this._pill,
-      this._vignette,
-      this._pacman,
-      this._ghostLayer,
-    ];
-  }
-
-  createAll(): void {
-    this._vignette = new Vignette();
-    this._maze = new Maze();
-    this._dot = new Dot();
-    this._pill = new Pill();
-    this._pacman = new Pacman(CFG_PACMAN);
-
-    this._ghostLayer = new CanvasComposite(CFG_CANVAS.canvasIds.ghosts);
-
-    this._ghosts = Object.values(CFG_GHOSTS).map(
-      (config) => new Ghost(config, this._ghostLayer.ctx),
+    const gridCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.grid);
+    const dotsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
+    const pillsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pills);
+    const pacmanCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pacman);
+    const vignetteCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.vignette);
+    const ghostsSharedCanvasLayer = new CanvasLayer(
+      CFG_CANVAS.canvasIds.ghosts,
     );
 
-    this._ghosts.forEach((ghost) => this._ghostLayer.add(ghost));
+    [
+      gridCanvasLayer,
+      dotsCanvasLayer,
+      pillsCanvasLayer,
+      pacmanCanvasLayer,
+      vignetteCanvasLayer,
+      ghostsSharedCanvasLayer,
+    ].forEach((layer) => layer.resize(tileSize, activeGrid));
+
+    const pacman = new Pacman(pacmanCanvasLayer, levelContext, CFG_PACMAN);
+    levelContext.registerPacman(pacman);
+
+    const dot = new Dot(dotsCanvasLayer, levelContext);
+    const pill = new Pill(pillsCanvasLayer, levelContext);
+    const vignette = new Vignette(vignetteCanvasLayer, levelContext);
+
+    const pixiGrid = new PixiGrid(gridCanvasLayer, levelContext);
+    await pixiGrid.init();
+
+    const ghostLayer = new CanvasComposite(ghostsSharedCanvasLayer);
+    const ghosts = Object.values(CFG_GHOSTS).map(
+      (config) => new Ghost(ghostsSharedCanvasLayer, levelContext, config),
+    );
+    ghosts.forEach((ghost) => ghostLayer.add(ghost));
+
+    levelContext.setEnvironment(
+      ghosts,
+      ghostLayer,
+      pixiGrid,
+      dot,
+      pill,
+      vignette,
+    );
+
+    this.activeLevelContext = levelContext;
+    return levelContext;
   }
 
-  initAll(): void {
-    this.getAllDrawable().forEach((entity) => entity.init?.());
+  public async recreateEntitiesAsync(): Promise<LevelContext> {
+    const activeGrid = this.gameState.levelData.map;
+    this.gameState.pathGraph = createPathGraph(activeGrid);
+
+    const gridContext = new GridContext(activeGrid);
+    const levelContext = new LevelContext(this.gameState, gridContext);
+
+    const tileSize = CFG_CANVAS.tile.size;
+
+    const dotsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
+    const pillsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pills);
+    const pacmanCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pacman);
+    const vignetteCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.vignette);
+    const ghostsSharedCanvasLayer = new CanvasLayer(
+      CFG_CANVAS.canvasIds.ghosts,
+    );
+
+    [
+      dotsCanvasLayer,
+      pillsCanvasLayer,
+      pacmanCanvasLayer,
+      vignetteCanvasLayer,
+      ghostsSharedCanvasLayer,
+    ].forEach((layer) => layer.resize(tileSize, activeGrid));
+
+    const pacman = new Pacman(pacmanCanvasLayer, levelContext, CFG_PACMAN);
+    levelContext.registerPacman(pacman);
+
+    const dot = new Dot(dotsCanvasLayer, levelContext);
+    const pill = new Pill(pillsCanvasLayer, levelContext);
+    const vignette = new Vignette(vignetteCanvasLayer, levelContext);
+
+    const oldLevel = this.activeLevelContext;
+    if (!oldLevel) {
+      throw new Error("No active level to reuse PixiGrid from");
+    }
+
+    const pixiGrid = oldLevel.pixiGrid;
+    pixiGrid.reset();
+    pixiGrid.levelContext = levelContext;
+
+    const ghostLayer = new CanvasComposite(ghostsSharedCanvasLayer);
+    const ghosts = Object.values(CFG_GHOSTS).map(
+      (config) => new Ghost(ghostsSharedCanvasLayer, levelContext, config),
+    );
+    ghosts.forEach((ghost) => ghostLayer.add(ghost));
+
+    levelContext.setEnvironment(
+      ghosts,
+      ghostLayer,
+      pixiGrid,
+      dot,
+      pill,
+      vignette,
+    );
+
+    this.activeLevelContext = levelContext;
+    return levelContext;
   }
 
-  resetAll(): void {
-    this.getAllDrawable().forEach((entity) => entity.reset());
-  }
-
-  spawnActors(): void {
-    this._pacman.spawn();
-    this._ghosts.forEach((g) => g.spawn());
-  }
-
-  exitLairAll(): void {
-    this._ghosts.forEach((g) => g.calculateExitPath());
-  }
-
-  resetActors(): void {
-    this._pacman.reset();
-    this._ghosts.forEach((g) => g.reset());
-  }
-
-  clearAllCanvases(): void {
-    this.getAllDrawable().forEach((entity) => entity.clearCanvas());
+  public getActiveLevel(): LevelContext | null {
+    return this.activeLevelContext;
   }
 }

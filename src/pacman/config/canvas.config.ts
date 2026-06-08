@@ -1,15 +1,14 @@
 export const CFG_CANVAS = {
   tile: {
-    size: 28, // Size of each tile in pixels
+    size: 36, // Size of each tile in pixels
   },
   canvasIds: {
-    maze: "cvs-maze",
-    dots: "cvs-dots",
-    pills: "cvs-pills",
-    pacman: "cvs-pacman",
-    vignette: "cvs-vignette",
-    ghosts: "cvs-ghosts",
-    ui: "cvs-ui",
-    scene: "cvs-scene",
+    grid: "canvas-grid",
+    dots: "canvas-dots",
+    pills: "canvas-pills",
+    pacman: "canvas-pacman",
+    vignette: "canvas-vignette",
+    ghosts: "canvas-ghosts",
+    scene: "canvas-scene",
   },
 };

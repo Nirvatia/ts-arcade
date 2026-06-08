@@ -1,21 +1,8 @@
-import { CFG_CANVAS } from "../config/canvas.config.js";
-import { CFG_MAZE_0 } from "../config/maze.config.js";
-import { GameState } from "../game/GameState.svelte.js";
-import { setCanvasSize } from "../shared/utils.js";
-
-/**
- * Управляет HTML Canvas элементом и его 2D контекстом.
- * Предоставляет методы очистки и изменения размера холста.
- * Используется всеми классами, которым нужна отрисовка.
- */
 export class CanvasLayer {
   private _canvas: HTMLCanvasElement;
-  private _ctx: CanvasRenderingContext2D;
+  private _ctx: CanvasRenderingContext2D | null = null;
   private _id: string;
 
-  /**
-   * @param layerId - HTML id атрибут canvas элемента
-   */
   constructor(layerId: string) {
     this._id = layerId;
 
@@ -24,55 +11,52 @@ export class CanvasLayer {
       throw new Error(`Canvas with id "${layerId}" not found in DOM.`);
     }
     this._canvas = canvas;
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error(`Failed to get 2D context for canvas "${layerId}".`);
-    }
-    this._ctx = context;
-
-    this.resize();
+    // Don't auto-grab the 2D context here anymore!
   }
 
-  /** HTML Canvas элемент */
   get canvas(): HTMLCanvasElement {
     return this._canvas;
   }
 
-  /** 2D контекст рендеринга */
+  /** Lazy-load the 2D context only when accessed by traditional objects */
   get ctx(): CanvasRenderingContext2D {
+    if (!this._ctx) {
+      const context = this._canvas.getContext("2d");
+      if (!context) {
+        throw new Error(`Failed to get 2D context for canvas "${this._id}".`);
+      }
+      this._ctx = context;
+    }
     return this._ctx;
   }
 
-  /** HTML id холста */
   get id(): string {
     return this._id;
   }
 
-  /**
-   * Очищает всю или часть области холста.
-   * @param x - начальная X координата (по умолчанию 0)
-   * @param y - начальная Y координата (по умолчанию 0)
-   * @param width - ширина очищаемой области (по умолчанию вся ширина)
-   * @param height - высота очищаемой области (по умолчанию вся высота)
-   */
   public clear(
     x: number = 0,
     y: number = 0,
     width: number = this._canvas.width,
     height: number = this._canvas.height,
   ): void {
-    this._ctx.clearRect(x, y, width, height);
+    // Only use clearRect if the 2D context was actually instantiated
+    if (this._ctx) {
+      this._ctx.clearRect(x, y, width, height);
+    }
   }
 
-  /**
-   * Подстраивает размер холста под текущую карту уровня.
-   * Вызывается при смене уровня или ресайзе окна.
-   */
-  public resize(): void {
-    const gameState = GameState.getInstance();
-    const currentMap = gameState.levelData?.map || CFG_MAZE_0;
+  public resize(tileSize: number, grid: string[][]): void {
+    const rows = grid.length;
+    const cols = grid[0]?.length || 0;
 
-    setCanvasSize(this._canvas, CFG_CANVAS.tile.size, 0, currentMap);
+    const computedWidth = cols * tileSize;
+    const computedHeight = rows * tileSize;
+
+    this._canvas.width = computedWidth;
+    this._canvas.height = computedHeight;
+
+    this._canvas.style.width = `${computedWidth}px`;
+    this._canvas.style.height = `${computedHeight}px`;
   }
 }

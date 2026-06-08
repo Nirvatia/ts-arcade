@@ -5,258 +5,137 @@
     gameName: string;
     screenWidth: number;
     screenHeight: number;
-    game: Snippet;
+    matrix: Snippet;
     hud?: Snippet;
   }
 
-  let { gameName, screenWidth, screenHeight, game, hud }: Props = $props();
-  let marqueeText = $derived(gameName.toUpperCase());
-
-  let totalHeight = $derived(screenHeight + 52);
+  let { gameName, screenWidth, screenHeight, matrix, hud }: Props = $props();
+  let totalHeight = $derived(screenHeight + 48);
+  const layers = [0, 1, 2];
 </script>
 
-<div class="vector-terminal">
-  <div class="static-grid-overlay"></div>
+<div class="void-expanse">
+  <div class="starfield"></div>
 
-  <div class="chassis-container">
-    
-    <div class="system-marquee">
-      <div class="status-tag">SYS // LINK_01</div>
-      <h1 class="marquee-text">{marqueeText}</h1>
+  <div class="fracture-well">
+    {#each layers as i}
+      <div
+        class="fracture-frame"
+        style="
+          --frame-w: {screenWidth + 40 + i * 36}px;
+          --frame-h: {totalHeight + 40 + i * 36}px;
+          --delay: {i * 1.5}s;
+        "
+      ></div>
+    {/each}
+
+    <div class="viewport" style="width: {screenWidth}px; height: {totalHeight}px;">
+      <div class="game-layer">{@render matrix()}</div>
+      {#if hud}
+        <div class="hud-bar">{@render hud()}</div>
+      {/if}
     </div>
-
-    <div class="crt-frame">
-      <div class="raster-scanlines"></div>
-      <div class="phosphor-glare"></div>
-
-      <div class="game-viewport" style="width: {screenWidth}px; height: {totalHeight}px;">
-        <div class="game-content">{@render game()}</div>
-        {#if hud}
-          <div class="hud-content">{@render hud()}</div>
-        {/if}
-      </div>
-    </div>
-
-    <div class="interface-panel">
-      <div class="control-lane">
-        <div class="vector-node-dot"></div>
-        <span class="panel-tag">P1</span>
-      </div>
-
-      <div class="control-lane">
-        <div class="cross-axis"></div>
-        <span class="panel-tag">MOVE</span>
-      </div>
-
-      <div class="control-lane">
-        <div class="action-gate-group">
-          <div class="gate-switch"></div>
-          <div class="gate-switch"></div>
-        </div>
-        <span class="panel-tag">ACTION</span>
-      </div>
-    </div>
-
   </div>
 </div>
 
 <style lang="scss">
-  // --- Pure Monochromatic Cyan System Archetype ---
-  $void-black: #000205;
-  $matrix-dark: #01070e;
-  $neon-cyan: #00f0ff;
+  $void: #040410;
+  $violet: #6655aa;
+  $white-dim: #9999bb;
 
   :global(body) {
     margin: 0;
-    background: $void-black;
+    background: $void;
     overflow: hidden;
   }
 
-  .vector-terminal {
+  .void-expanse {
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     min-height: 100vh;
     width: 100vw;
-    background: radial-gradient(circle at center, #020914 0%, $void-black 100%);
+    background: radial-gradient(ellipse at center, #0c0c24 0%, $void 55%);
     font-family: "Jersey-Regular", "Courier New", monospace;
     position: relative;
     overflow: hidden;
-    box-sizing: border-box;
   }
 
-  // --- Background Grid Matrix ---
-  .static-grid-overlay {
+  .starfield {
     position: absolute;
     inset: 0;
-    background-image: 
-      linear-gradient(rgba($neon-cyan, 0.015) 1px, transparent 1px),
-      linear-gradient(90deg, rgba($neon-cyan, 0.015) 1px, transparent 1px);
-    background-size: 50px 50px;
-    background-position: center center;
-    mask-image: radial-gradient(circle at center, black 10%, transparent 80%);
+    background-image:
+      radial-gradient(1px 1px at 8% 12%, rgba(150, 120, 220, 0.25), transparent),
+      radial-gradient(1px 1px at 18% 50%, rgba(150, 120, 220, 0.15), transparent),
+      radial-gradient(1.2px 1.2px at 30% 8%, rgba(180, 150, 240, 0.3), transparent),
+      radial-gradient(1px 1px at 44% 60%, rgba(150, 120, 220, 0.18), transparent),
+      radial-gradient(1.5px 1.5px at 55% 18%, rgba(200, 170, 255, 0.25), transparent),
+      radial-gradient(1px 1px at 62% 72%, rgba(150, 120, 220, 0.15), transparent),
+      radial-gradient(1px 1px at 72% 38%, rgba(150, 120, 220, 0.2), transparent),
+      radial-gradient(1px 1px at 82% 10%, rgba(180, 150, 240, 0.25), transparent),
+      radial-gradient(1px 1px at 90% 55%, rgba(150, 120, 220, 0.15), transparent),
+      radial-gradient(1px 1px at 4% 78%, rgba(150, 120, 220, 0.18), transparent),
+      radial-gradient(1px 1px at 25% 32%, rgba(180, 150, 240, 0.2), transparent),
+      radial-gradient(1px 1px at 40% 80%, rgba(150, 120, 220, 0.15), transparent),
+      radial-gradient(1px 1px at 52% 45%, rgba(200, 170, 255, 0.2), transparent),
+      radial-gradient(1px 1px at 68% 6%, rgba(150, 120, 220, 0.2), transparent),
+      radial-gradient(1px 1px at 85% 68%, rgba(150, 120, 220, 0.15), transparent);
     pointer-events: none;
     z-index: 0;
   }
 
-  // --- Single Unified Outer Frame ---
-  .chassis-container {
+  .fracture-well {
     position: relative;
     z-index: 1;
-    display: flex;
-    flex-direction: column;
-    background: $matrix-dark;
-    border: 1px solid rgba($neon-cyan, 0.3);
-    padding: 20px;
-    box-sizing: border-box;
-    box-shadow: 0 0 30px rgba($neon-cyan, 0.05);
-  }
-
-  // --- Frameless Header Marquee ---
-  .system-marquee {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 20px;
-    padding-left: 4px;
-
-    .status-tag {
-      font-size: 0.55rem;
-      color: rgba($neon-cyan, 0.4);
-      letting-spacing: 2px;
-      letter-spacing: 2px;
-    }
-
-    .marquee-text {
-      font-size: 1.6rem;
-      color: #ffffff;
-      margin: 0;
-      letter-spacing: 6px;
-      text-transform: uppercase;
-      font-weight: bold;
-      text-shadow: 0 0 8px rgba($neon-cyan, 0.5);
-    }
-  }
-
-  // --- Screen Viewport Frame ---
-  .crt-frame {
-    position: relative;
-    overflow: hidden;
-    border: 1px solid rgba($neon-cyan, 0.15); // The only screen barrier remaining
-    margin-bottom: 20px;
-  }
-
-  // --- Flat Scanlines Filter ---
-  .raster-scanlines {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      0deg,
-      rgba(0, 0, 0, 0.25) 0px,
-      rgba(0, 0, 0, 0.25) 1px,
-      transparent 2px,
-      transparent 2px
-    );
-  }
-
-  .phosphor-glare {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    pointer-events: none;
-    background: radial-gradient(circle at center, rgba($neon-cyan, 0.02) 0%, transparent 85%);
-  }
-
-  .game-viewport {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    z-index: 1;
-    background: #000000;
-    
-    :global(*) { box-sizing: border-box; }
-  }
-
-  .game-content {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .hud-content {
-    width: 100%;
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 12px;
-    background: #000104;
-    border-top: 1px solid rgba($neon-cyan, 0.1);
-    color: rgba($neon-cyan, 0.8);
   }
 
-  // --- Minimalist Control Strip ---
-  .interface-panel {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 4px;
-    box-sizing: border-box;
+  .fracture-frame {
+    position: absolute;
+    width: var(--frame-w);
+    height: var(--frame-h);
+    border: 1px solid rgba(100, 85, 160, 0.1);
+    pointer-events: none;
+    animation: slow-wave 8s ease-in-out infinite;
+    animation-delay: var(--delay);
   }
 
-  .control-lane {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    .panel-tag {
-      font-size: 0.5rem;
-      color: rgba($neon-cyan, 0.4);
-      letter-spacing: 1.5px;
-      font-weight: bold;
+  @keyframes slow-wave {
+    0%, 100% {
+      border-color: rgba(100, 85, 160, 0.06);
+    }
+    50% {
+      border-color: rgba(130, 110, 190, 0.25);
     }
   }
 
-  // Clean 2D Wire Indicators
-  .vector-node-dot {
-    width: 8px;
-    height: 8px;
-    background: $neon-cyan;
-    box-shadow: 0 0 6px $neon-cyan;
-  }
-
-  .cross-axis {
-    width: 12px;
-    height: 12px;
+  .viewport {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    z-index: 2;
+    background: #000000;
+    border: 1px solid rgba($violet, 0.15);
 
-    &::before, &::after {
-      content: '';
-      position: absolute;
-      background: rgba($neon-cyan, 0.6);
-    }
-    &::before {
-      top: 5px;
-      left: 0;
-      width: 12px;
-      height: 2px;
-    }
-    &::after {
-      left: 5px;
-      top: 0;
-      width: 2px;
-      height: 12px;
-    }
+    :global(*) { box-sizing: border-box; }
   }
 
-  .action-gate-group {
-    display: flex;
-    gap: 4px;
+  .game-layer {
+    position: relative;
+    overflow: hidden;
+    flex: 1;
+  }
 
-    .gate-switch {
-      width: 8px;
-      height: 8px;
-      border: 1px solid rgba($neon-cyan, 0.6);
-    }
+  .hud-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 14px;
+    background: rgba(4, 4, 16, 0.85);
+    border-top: 1px solid rgba($violet, 0.05);
+    color: $white-dim;
   }
 </style>

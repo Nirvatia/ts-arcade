@@ -1,31 +1,28 @@
+// world/WorldObject.ts
 import { CanvasLayer } from "../render/CanvasLayer.js";
-import { GameState } from "../game/GameState.svelte.js";
 import { CFG_CANVAS } from "../config/canvas.config.js";
+import { LevelContext } from "../core/LevelContext.js";
+import type { IDrawable } from "../shared/types.js";
 
-import type { Drawable } from "../shared/types.js";
-
-export abstract class WorldObject implements Drawable {
-  protected gameState: GameState;
+export abstract class WorldObject implements IDrawable {
+  public levelContext: LevelContext;
   protected canvasLayer: CanvasLayer;
   protected tileSize: number;
 
-  public readonly canvasId: string;
   private _needsRedraw: boolean = true;
 
-  constructor(canvasId: string) {
-    this.canvasId = canvasId;
-    this.gameState = GameState.getInstance();
-    this.canvasLayer = new CanvasLayer(canvasId);
+  constructor(canvasLayer: CanvasLayer, levelContext: LevelContext) {
+    this.canvasLayer = canvasLayer;
+    this.levelContext = levelContext;
     this.tileSize = CFG_CANVAS.tile.size;
   }
 
-  // --- Drawable Interface Implementation ---
-  get canvas(): HTMLCanvasElement {
-    return this.canvasLayer.canvas;
+  protected get gameState() {
+    return this.levelContext.gameState;
   }
 
-  get ctx(): CanvasRenderingContext2D {
-    return this.canvasLayer.ctx;
+  protected get gridContext() {
+    return this.levelContext.gridContext;
   }
 
   get needsRedraw(): boolean {
@@ -36,26 +33,18 @@ export abstract class WorldObject implements Drawable {
     this._needsRedraw = value;
   }
 
-  requestRedraw(): void {
+  public get layer(): CanvasLayer {
+    return this.canvasLayer;
+  }
+
+  public requestRedraw(): void {
     this._needsRedraw = true;
   }
 
-  clearCanvas(x?: number, y?: number, w?: number, h?: number): void {
+  public clearCanvas(x?: number, y?: number, w?: number, h?: number): void {
     this.canvasLayer.clear(x, y, w, h);
   }
 
-  // --- Base Lifecycle Methods ---
-  public init(): void {
-    this._needsRedraw = true;
-  }
-
-  public reset(): void {
-    this.clearCanvas();
-    this.canvasLayer.resize();
-    this._needsRedraw = true;
-  }
-
-  // --- Forces child classes to specify layout painting ---
   abstract draw(): void;
 
   public destroy(): void {}
