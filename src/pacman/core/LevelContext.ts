@@ -70,7 +70,6 @@ export class LevelContext {
       this._pacman,
       ...this._ghosts,
       this._pill,
-      this._pixiGrid,
     ];
   }
 

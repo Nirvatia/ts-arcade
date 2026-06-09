@@ -35,7 +35,7 @@ interface SimpleParticle {
   maxLife: number;
 }
 
-export class PixiGrid extends WorldObject implements IUpdatable {
+export class PixiGrid extends WorldObject{
   private time = 0;
   private app: PIXI.Application | null = null;
   private ready = false;
