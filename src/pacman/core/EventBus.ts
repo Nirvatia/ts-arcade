@@ -19,9 +19,7 @@ class EventBus {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);
     }
-    
-    // We cast the specific handler to GenericHandler when saving.
-    // This is safe because our public 'on' and 'emit' methods guard the types.
+
     this.listeners.get(event)!.push(handler as GenericHandler);
   }
 
@@ -37,7 +35,7 @@ class EventBus {
 
     this.listeners.set(
       event,
-      handlers.filter((h) => h !== (handler as GenericHandler))
+      handlers.filter((h) => h !== (handler as GenericHandler)),
     );
   }
 
@@ -53,7 +51,6 @@ class EventBus {
     if (!handlers) return;
 
     const payload = args[0] as AllPayloads;
-    // Direct array iteration—no loops over unrelated events!
     handlers.forEach((handler) => handler(payload));
   }
 
