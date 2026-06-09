@@ -7,6 +7,8 @@ import type { CanvasLayer } from "../render/CanvasLayer.js";
 export class Vignette extends WorldObject implements IUpdatable {
   constructor(canvasLayer: CanvasLayer, levelContext: LevelContext) {
     super(canvasLayer, levelContext);
+    this.shouldUpdate = false;
+    this.shouldRender = false;
   }
 
   /**
@@ -14,6 +16,8 @@ export class Vignette extends WorldObject implements IUpdatable {
    * Since the vignette follows Pacman dynamically, it forces a redraw request.
    */
   public update(dt: number): void {
+    if (!this.shouldUpdate) return;
+
     this.needsRedraw = true;
   }
 
@@ -21,6 +25,8 @@ export class Vignette extends WorldObject implements IUpdatable {
    * Paints the radial gradient spotlight centered directly on Pacman's current coordinates.
    */
   public draw(): void {
+    if (!this.shouldUpdate) return;
+
     const pacman = this.levelContext.pacman;
     const ctx = this.layer.ctx;
     const w = this.layer.canvas.width;
