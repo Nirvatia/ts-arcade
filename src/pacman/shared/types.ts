@@ -60,6 +60,13 @@ export type PixiScene = (
   onComplete: () => void,
 ) => void;
 
+export type TypeDeathScene = {
+  pacman: { x: number; y: number };
+  ghosts: { x: number; y: number; color: string }[];
+  dots: { x: number; y: number }[];
+  pills: { x: number; y: number }[];
+}
+
 // Old types for old grids
 export type TileTypeOLD =
   | "WH" // Wall Horizontal

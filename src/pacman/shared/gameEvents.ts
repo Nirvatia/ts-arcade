@@ -19,6 +19,7 @@ export interface EventPayloads {
   "ghost:collect": { ghostName: string; ghostIndex: number };
 
   // ANNOUNCEMENTS FOR SFX & TALLY MUTATIONS
+  "pacman:death": void;
   "pacman:death_animation_start": void;
   "pacman:death_animation_end": void;
 
