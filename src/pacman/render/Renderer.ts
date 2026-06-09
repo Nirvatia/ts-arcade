@@ -25,6 +25,9 @@ export class Renderer {
   }
 
   public clear(): void {
-    this.drawables.forEach((entity) => entity.clearCanvas());
+    for (const entity of this.drawables) {
+      entity.clearCanvas();
+      entity.needsRedraw = false;
+    }
   }
 }
