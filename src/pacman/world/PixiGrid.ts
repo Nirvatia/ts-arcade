@@ -1,30 +1,30 @@
 // world/PixiGrid.ts
 import * as PIXI from "pixi.js";
 import { WorldObject } from "./WorldObject.js";
-import type { TileType, IUpdatable } from "../shared/types.js";
+import type { TileType, IUpdatable, TypeDeathScene } from "../shared/types.js";
 import type { LevelContext } from "../core/LevelContext.js";
 import type { CanvasLayer } from "../render/CanvasLayer.js";
 import { pixiScenes } from "../scenes/pixiScenes.js";
 
-// ── Palette (simplified) ────────────────────────────────────────
 const VOID = 0x111122;
-const WALL_COLOR = 0x4444aa;
 const WALL_GLOW = 0x6666cc;
 const DOT_COLOR = 0x8899ff;
 const FLASH_COLOR = 0xffffff;
 const PARTICLE_COLOR = 0xaabbff;
 
-// ── Types (simplified) ──────────────────────────────────────────
 interface SimpleBlock {
   c: PIXI.Container;
+  g: PIXI.Graphics;
   ox: number;
   oy: number;
+  seed: number;
 }
 
 interface SimpleDot {
   g: PIXI.Graphics;
   ox: number;
   oy: number;
+  seed: number;
 }
 
 interface SimpleParticle {
@@ -35,7 +35,6 @@ interface SimpleParticle {
   maxLife: number;
 }
 
-// ── Class ───────────────────────────────────────────────────────
 export class PixiGrid extends WorldObject implements IUpdatable {
   private time = 0;
   private app: PIXI.Application | null = null;
@@ -59,6 +58,11 @@ export class PixiGrid extends WorldObject implements IUpdatable {
   private collapseActive = false;
   private collapseStartTime = 0;
 
+  private pulseActive = false;
+  private pulseTimer = 0;
+  private pulseAmplitude = 2.0;
+  private deathEntities: TypeDeathScene | null = null;
+
   constructor(layer: CanvasLayer, lc: LevelContext) {
     super(layer, lc);
   }
@@ -74,7 +78,6 @@ export class PixiGrid extends WorldObject implements IUpdatable {
     }
   }
 
-  // ── Init ──────────────────────────────────────────────────────
   public async init() {
     if (this.ready) return;
     const map = this.gameState.levelData.map as TileType[][];
@@ -85,6 +88,7 @@ export class PixiGrid extends WorldObject implements IUpdatable {
   private async initPixi() {
     if (this.app) await this.nuke();
     this.app = new PIXI.Application();
+
     await this.app.init({
       canvas: this.layer.canvas,
       width: this.layer.canvas.width,
@@ -138,19 +142,22 @@ export class PixiGrid extends WorldObject implements IUpdatable {
     }
   }
 
-  // ── Basic Builders ────────────────────────────────────────────
+  private simpleHash(p: number): number {
+    let s = Math.floor(p * 12345.12345) / 10000;
+    s = Math.abs(Math.sin(s));
+    return s - Math.floor(s);
+  }
+
   private buildBackground() {
     if (!this.bgLayer) return;
     this.bgLayer.removeChildren();
     this.dots = [];
 
-    // Solid background
     const bg = new PIXI.Graphics();
     bg.rect(0, 0, this.layer.canvas.width, this.layer.canvas.height);
     bg.fill({ color: VOID, alpha: 1 });
     this.bgLayer.addChild(bg);
 
-    // Simple dot grid
     const map = this.gameState.levelData.map as TileType[][];
     const ts = this.tileSize;
     for (let r = 0; r <= map.length; r++) {
@@ -159,7 +166,12 @@ export class PixiGrid extends WorldObject implements IUpdatable {
         g.circle(c * ts, r * ts, 1);
         g.fill({ color: DOT_COLOR, alpha: 0.4 });
         this.bgLayer.addChild(g);
-        this.dots.push({ g, ox: c * ts, oy: r * ts });
+        this.dots.push({
+          g,
+          ox: c * ts,
+          oy: r * ts,
+          seed: Math.random() * 100,
+        });
       }
     }
   }
@@ -177,10 +189,8 @@ export class PixiGrid extends WorldObject implements IUpdatable {
     const isWall = (r: number, c: number): boolean => {
       if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
       const tile = map[r][c];
-      return tile === "WL" || tile === "LE";
+      return tile === "WL";
     };
-
-    const g = new PIXI.Graphics();
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -189,51 +199,148 @@ export class PixiGrid extends WorldObject implements IUpdatable {
         const x = c * ts;
         const y = r * ts;
 
-        // Top edge: draw if neighbor above is NOT a wall
-        if (!isWall(r - 1, c)) {
-          g.moveTo(x, y);
-          g.lineTo(x + ts, y);
-        }
-        // Bottom edge
-        if (!isWall(r + 1, c)) {
-          g.moveTo(x, y + ts);
-          g.lineTo(x + ts, y + ts);
-        }
-        // Left edge
-        if (!isWall(r, c - 1)) {
-          g.moveTo(x, y);
-          g.lineTo(x, y + ts);
-        }
-        // Right edge
-        if (!isWall(r, c + 1)) {
-          g.moveTo(x + ts, y);
-          g.lineTo(x + ts, y + ts);
-        }
+        const g = new PIXI.Graphics();
+        const blockContainer = new PIXI.Container();
+
+        blockContainer.position.set(x, y);
+        blockContainer.addChild(g);
+        this.wallLayer.addChild(blockContainer);
+
+        this.blocks.push({
+          c: blockContainer,
+          g: g,
+          ox: x,
+          oy: y,
+          seed: Math.random() * 500,
+        });
       }
     }
 
-    g.stroke({ width: 1.5, color: WALL_GLOW, alpha: 0.8 });
-
-    const container = new PIXI.Container();
-    container.addChild(g);
-    this.wallLayer!.addChild(container);
-    this.blocks.push({ c: container, ox: 0, oy: 0 });
+    this.redrawWaveformWalls(0);
   }
 
-  // ── Death Animation (simplified) ──────────────────────────────
-  public startDeathAnimation(px: number, py: number) {
-    if (!this.ready || !this.fxLayer) return;
+  private redrawWaveformWalls(waveProgress: number) {
+    const map = this.gameState.levelData.map as TileType[][];
+    const ts = this.tileSize;
+    const rows = map.length;
+    const cols = map[0]?.length ?? 0;
+
+    const isWall = (r: number, c: number): boolean => {
+      if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
+      const tile = map[r][c];
+      return tile === "WL" || tile === "LE";
+    };
+
+    const cx = this.layer.canvas.width / 2;
+    const cy = this.layer.canvas.height / 2;
+    const steps = 60;
+
+    this.blocks.forEach((b) => {
+      const r = Math.floor(b.oy / ts);
+      const c = Math.floor(b.ox / ts);
+
+      b.g.clear();
+
+      const drawChaosWaveformLine = (
+        startX: number,
+        startY: number,
+        endX: number,
+        endY: number,
+        isHorizontal: boolean,
+      ) => {
+        b.g.moveTo(startX, startY);
+
+        for (let i = 1; i <= steps; i++) {
+          const t = i / steps;
+          let currX = startX + (endX - startX) * t;
+          let currY = startY + (endY - startY) * t;
+
+          if (this.pulseActive) {
+            const worldX = b.ox + currX;
+            const worldY = b.oy + currY;
+            const dx = worldX - cx;
+            const dy = worldY - cy;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            const waveFront = waveProgress * Math.max(cx, cy) * 1.3;
+            const distanceToWavefront = Math.abs(distance - waveFront);
+            const waveInfluenceWindow = 120;
+
+            if (distanceToWavefront < waveInfluenceWindow) {
+              const attenuation =
+                1.0 - distanceToWavefront / waveInfluenceWindow;
+              const uniquePointSeed = i * 23.17 + b.seed;
+
+              const noisePrimary =
+                (this.simpleHash(uniquePointSeed) * 0.7 +
+                  this.simpleHash(uniquePointSeed * 3.1) * 0.3) *
+                  2.0 -
+                1.0;
+              let spikePerpendicular =
+                noisePrimary * this.pulseAmplitude * attenuation;
+              spikePerpendicular *= Math.sin(
+                this.time * 65.0 + uniquePointSeed * 0.1,
+              );
+
+              const noiseSkew =
+                (this.simpleHash(uniquePointSeed * 5.4) * 0.6 +
+                  this.simpleHash(uniquePointSeed * 7.9) * 0.4) *
+                  2.0 -
+                1.0;
+              let spikeParallel =
+                noiseSkew * (this.pulseAmplitude * 1.2) * attenuation;
+              spikeParallel *= Math.cos(
+                this.time * 50.0 + uniquePointSeed * 0.2,
+              );
+
+              if (isHorizontal) {
+                currY += spikePerpendicular;
+                currX += spikeParallel;
+              } else {
+                currX += spikePerpendicular;
+                currY += spikeParallel;
+              }
+            }
+          }
+          b.g.lineTo(currX, currY);
+        }
+      };
+
+      if (!isWall(r - 1, c)) drawChaosWaveformLine(0, 0, ts, 0, true);
+      if (!isWall(r + 1, c)) drawChaosWaveformLine(0, ts, ts, ts, true);
+      if (!isWall(r, c - 1)) drawChaosWaveformLine(0, 0, 0, ts, false);
+      if (!isWall(r, c + 1)) drawChaosWaveformLine(ts, 0, ts, ts, false);
+
+      b.g.stroke({ width: 1.5, color: WALL_GLOW, alpha: 0.8 });
+    });
+  }
+
+  public startDeathAnimation(px: number, py: number, entities: TypeDeathScene) {
+    if (!this.ready || !this.fxLayer || !this.app) return;
+
+    // Fix: Force explicit size matching with high-DPR screens before reading layout dimensions
+    this.app.renderer.resize(this.layer.canvas.width, this.layer.canvas.height);
+
     this.dying = true;
     this.deathP = 0;
     this.holeX = px;
     this.holeY = py;
     this.particles = [];
+    this.deathEntities = entities;
 
     this.flash = new PIXI.Graphics();
-    this.flash.circle(px, py, 15);
-    this.flash.fill({ color: FLASH_COLOR, alpha: 0.9 });
+    this.flash.circle(0, 0, 8);
+    this.flash.fill({ color: FLASH_COLOR, alpha: 0.3 });
+    this.flash.position.set(px, py);
     this.flashLife = 1.0;
     this.fxLayer.addChild(this.flash);
+
+    this.blocks.forEach((b) => {
+      b.c.position.set(b.ox, b.oy);
+      b.c.rotation = 0;
+      b.c.scale.set(1.0, 1.0);
+      b.c.alpha = 1.0;
+    });
   }
 
   public setDeathProgress(v: number) {
@@ -244,48 +351,90 @@ export class PixiGrid extends WorldObject implements IUpdatable {
     if (!this.dying || !this.app) return;
     const p = this.deathP;
 
-    // Flash shrinks
-    if (this.flash) {
-      this.flashLife -= dt;
-      if (this.flashLife <= 0) {
-        this.flash.alpha = 0;
-      } else {
-        this.flash.alpha = this.flashLife;
-        this.flash.scale.set(1 + (1 - this.flashLife) * 3);
+    if (p <= 0.9) {
+      const stageProgress = p / 0.9;
+      this.pulseActive = true;
+      this.pulseAmplitude = 2.0 + stageProgress * 26.0;
+      this.time += dt * (stageProgress * 120.0);
+
+      this.redrawWaveformWalls(stageProgress);
+
+      this.blocks.forEach((b) => {
+        b.c.alpha = 1.0 + stageProgress * 0.5;
+      });
+
+      if (Math.random() < stageProgress * 15 * dt) {
+        const g = new PIXI.Graphics();
+        g.rect(-1, -1, 2, 2);
+        g.fill({ color: FLASH_COLOR, alpha: 0.8 });
+
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * (120 * (1.0 - stageProgress));
+        g.position.set(
+          this.holeX + Math.cos(angle) * radius,
+          this.holeY + Math.sin(angle) * radius,
+        );
+
+        this.fxLayer!.addChild(g);
+        this.particles.push({
+          g,
+          vx: -Math.cos(angle) * 100,
+          vy: -Math.sin(angle) * 100,
+          life: 0.2 + Math.random() * 0.2,
+          maxLife: 0.4,
+        });
+      }
+    } else {
+      const stageProgress = (p - 0.9) / 0.1;
+      const collapseFactor = Math.pow(stageProgress, 8);
+
+      if (this.flash) {
+        this.flash.alpha = 1.0;
+        this.flash.clear();
+        this.flash.circle(0, 0, (1.0 - collapseFactor) * 45 + 5);
+        this.flash.fill({ color: FLASH_COLOR });
+      }
+
+      this.blocks.forEach((b) => {
+        const bx = b.ox + this.tileSize / 2;
+        const by = b.oy + this.tileSize / 2;
+
+        const targetX = bx + (this.holeX - bx) * collapseFactor;
+        const targetY = by + (this.holeY - by) * collapseFactor;
+
+        b.c.x = targetX - this.tileSize / 2;
+        b.c.y = targetY - this.tileSize / 2;
+
+        const scaleVal = 1.0 - collapseFactor;
+        b.c.scale.set(scaleVal, scaleVal);
+        b.c.alpha = 1.0 - collapseFactor;
+      });
+
+      if (p >= 0.98 && this.particles.length < 50) {
+        if (this.flash) this.flash.alpha = 0;
+
+        const blastParticleCount = 80;
+        for (let k = 0; k < blastParticleCount; k++) {
+          const g = new PIXI.Graphics();
+          g.rect(-2, -2, 4, 4);
+          g.fill({ color: PARTICLE_COLOR, alpha: 1.0 });
+          g.position.set(this.holeX, this.holeY);
+          this.fxLayer!.addChild(g);
+
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 250 + Math.random() * 450;
+
+          this.particles.push({
+            g,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 0.5 + Math.random() * 0.6,
+            maxLife: 1.1,
+          });
+        }
       }
     }
 
-    // Walls fade and move toward hole
-    this.blocks.forEach((b) => {
-      const bx = b.ox + this.tileSize / 2;
-      const by = b.oy + this.tileSize / 2;
-      const dx = bx - this.holeX;
-      const dy = by - this.holeY;
-      const dist = Math.sqrt(dx * dx + dy * dy) + 1;
-      const pull = p * 0.5 * (1 / (dist * 0.01 + 1));
-      b.c.x = b.ox - dx * pull;
-      b.c.y = b.oy - dy * pull;
-      b.c.alpha = 1 - p;
-    });
-
-    // Spawn particles
-    if (Math.random() < p * 5 * dt) {
-      const g = new PIXI.Graphics();
-      g.rect(-2, -2, 4, 4);
-      g.fill({ color: PARTICLE_COLOR, alpha: 0.8 });
-      g.x = this.holeX + (Math.random() - 0.5) * 20;
-      g.y = this.holeY + (Math.random() - 0.5) * 20;
-      this.fxLayer!.addChild(g);
-      this.particles.push({
-        g,
-        vx: (Math.random() - 0.5) * 40,
-        vy: (Math.random() - 0.5) * 40,
-        life: 1.5 + Math.random(),
-        maxLife: 1.5 + Math.random(),
-      });
-    }
-
-    // Update particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const pt = this.particles[i];
       pt.life -= dt;
@@ -297,26 +446,32 @@ export class PixiGrid extends WorldObject implements IUpdatable {
       pt.g.x += pt.vx * dt;
       pt.g.y += pt.vy * dt;
       pt.g.alpha = pt.life / pt.maxLife;
+      pt.vx *= 0.96;
+      pt.vy *= 0.96;
     }
   }
 
   public endDeathAnimation() {
     this.dying = false;
     this.deathP = 0;
+    this.pulseActive = false;
+    this.pulseAmplitude = 2.0;
+
     this.fxLayer?.removeChildren();
     this.particles = [];
     this.flash = null;
 
-    // Reset all walls
     this.blocks.forEach((b) => {
-      b.c.x = b.ox;
-      b.c.y = b.oy;
-      b.c.alpha = 1;
+      b.c.position.set(b.ox, b.oy);
+      b.c.rotation = 0;
+      b.c.scale.set(1.0, 1.0);
+      b.c.alpha = 1.0;
     });
+
+    this.redrawWaveformWalls(0);
     this.app?.render();
   }
 
-  // ── Level Complete Collapse (simplified) ──────────────────────
   private updateCollapseAnimation(dt: number) {
     const elapsed = this.time - this.collapseStartTime;
     const totalDuration = 4.0;
@@ -336,26 +491,17 @@ export class PixiGrid extends WorldObject implements IUpdatable {
       const bx = b.ox + this.tileSize / 2;
       const by = b.oy + this.tileSize / 2;
       const dist = Math.sqrt((bx - cx) ** 2 + (by - cy) ** 2);
-      if (dist > ringRadius) {
-        b.c.alpha = 0.1;
-      } else {
-        b.c.alpha = 1;
-      }
+      b.c.alpha = dist > ringRadius ? 0.1 : 1;
     });
 
     this.dots.forEach((d) => {
       const dist = Math.sqrt((d.ox - cx) ** 2 + (d.oy - cy) ** 2);
-      if (dist > ringRadius) {
-        d.g.alpha = 0.05;
-      } else {
-        d.g.alpha = 0.4;
-      }
+      d.g.alpha = dist > ringRadius ? 0.05 : 0.4;
     });
 
     this.needsRedraw = true;
   }
 
-  // ── Update / Draw ─────────────────────────────────────────────
   public update(dt: number) {
     if (!this.ready || !this.app) return;
     const fs = Math.min(
@@ -374,7 +520,26 @@ export class PixiGrid extends WorldObject implements IUpdatable {
       return;
     }
 
-    // Subtle dot twinkle
+    if (!this.pulseActive && !this.collapseActive) {
+      this.pulseTimer += fs;
+      if (this.pulseTimer >= 5.0) {
+        this.pulseActive = true;
+        this.pulseTimer = 0;
+      }
+    }
+
+    if (this.pulseActive) {
+      this.pulseTimer += fs;
+      const duration = 1.5;
+      if (this.pulseTimer >= duration) {
+        this.pulseActive = false;
+        this.pulseTimer = 0;
+        this.redrawWaveformWalls(0);
+      } else {
+        this.redrawWaveformWalls(this.pulseTimer / duration);
+      }
+    }
+
     this.dots.forEach((d, i) => {
       d.g.alpha = 0.3 + Math.sin(this.time * 2 + i * 0.1) * 0.1;
     });

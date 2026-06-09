@@ -17,12 +17,14 @@ interface StellarParticle {
   type: "DIAMOND" | "SPARK" | "RING";
   rotation: number;
   rotSpeed: number;
+  active: boolean; // For allocation-free memory pools
 }
 
 interface TrailPoint {
   x: number;
   y: number;
   alpha: number;
+  active: boolean;
 }
 
 interface SurfaceFlare {
@@ -30,8 +32,10 @@ interface SurfaceFlare {
   life: number;
   maxLife: number;
   size: number;
+  active: boolean;
 }
 
+// ── Palette (Unchanged to lock in your aesthetics) ───────────────
 // ── Palette ─────────────────────────────────────────────────────
 const BODY_NORMAL = "#2a2a7e";
 const BODY_BUFFED = "#ddaa44";
@@ -42,8 +46,8 @@ const BODY_EDGE_B = "rgba(255,255,255,0.95)";
 const MOUTH_INNER = "#ffffff";
 const MOUTH_GRAD_N = "rgba(180,210,255,0.5)";
 const MOUTH_GRAD_B = "rgba(255,245,210,0.7)";
-const MOUTH_RIM_N = "rgba(200,225,255,0.85)";
-const MOUTH_RIM_B = "#ffffff";
+const MOUTH_RIM_N = "rgba(200,225,255,0.85)"; // <--- Restored
+const MOUTH_RIM_B = "#ffffff"; // <--- Restored
 const TRAIL_CLR_N = "rgba(140,160,240,0.7)";
 const TRAIL_CLR_B = "rgba(255,220,160,0.85)";
 const TRAIL_SPARK_N = "rgba(180,210,255,0.8)";
@@ -58,6 +62,7 @@ export class Pacman extends Actor {
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
   private time = 0;
 
+  // Optimized Object Reuse Pools
   private trail: TrailPoint[] = [];
   private particles: StellarParticle[] = [];
   private flares: SurfaceFlare[] = [];
@@ -72,6 +77,11 @@ export class Pacman extends Actor {
   private normalSpeed: number;
   private buffedSpeed: number;
 
+  // Offscreen Caching Layer
+  private cacheCanvas!: HTMLCanvasElement;
+  private cacheCtx!: CanvasRenderingContext2D;
+  private cacheSize = 0;
+
   constructor(
     canvasLayer: CanvasLayer,
     levelContext: LevelContext,
@@ -84,6 +94,35 @@ export class Pacman extends Actor {
     this.speed = this.normalSpeed;
     this.r = this.tileSize * config.radiusMultiplier;
 
+    // Preallocate pools to cap memory limits
+    for (let i = 0; i < 200; i++) {
+      this.particles.push({
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        life: 0,
+        maxLife: 1,
+        size: 0,
+        type: "SPARK",
+        rotation: 0,
+        rotSpeed: 0,
+        active: false,
+      });
+    }
+    for (let i = 0; i < 14; i++) {
+      this.trail.push({ x: 0, y: 0, alpha: 0, active: false });
+    }
+    for (let i = 0; i < 20; i++) {
+      this.flares.push({
+        angle: 0,
+        life: 0,
+        maxLife: 1,
+        size: 0,
+        active: false,
+      });
+    }
+
     for (let i = 0; i < 28; i++) {
       this.mouthStars.push({
         angle: Math.random() * Math.PI * 0.5 - Math.PI * 0.25,
@@ -92,13 +131,124 @@ export class Pacman extends Actor {
         size: 0.25 + Math.random() * 0.7,
       });
     }
+
+    this.initCache();
   }
 
   private get isBuffed(): boolean {
     return this.gameState.isBuffed;
   }
 
-  // ── Lifecycle ────────────────────────────────────────────────
+  // ── Pre-Render Static Assets ──────────────────────────────────
+  private initCache(): void {
+    this.cacheSize = Math.ceil(this.r * 5); // Ensure headroom for glow leaks
+    this.cacheCanvas = document.createElement("canvas");
+    this.cacheCanvas.width = this.cacheSize * 2;
+    this.cacheCanvas.height = this.cacheSize * 2;
+    this.cacheCtx = this.cacheCanvas.getContext("2d")!;
+    this.preRenderGradients();
+  }
+
+  private preRenderGradients(): void {
+    const ctx = this.cacheCtx;
+    const size = this.cacheSize;
+    const r = this.r;
+
+    ctx.clearRect(0, 0, this.cacheCanvas.width, this.cacheCanvas.height);
+
+    // Cache [0]: Normal Ambient Glow
+    ctx.save();
+    ctx.translate(size * 0.5, size * 0.5);
+    const glowGradN = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 2.2);
+    glowGradN.addColorStop(0, "rgba(60,80,200,0.35)");
+    glowGradN.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glowGradN;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Cache [1]: Buffed Ambient Glow
+    ctx.save();
+    ctx.translate(size * 1.5, size * 0.5);
+    const glowGradB = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 2.2);
+    glowGradB.addColorStop(0, "rgba(255,200,130,0.55)");
+    glowGradB.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glowGradB;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Cache [2]: Normal Body
+    ctx.save();
+    ctx.translate(size * 0.5, size * 1.5);
+    const bodyGradN = ctx.createRadialGradient(0, 0, r * 0.05, 0, 0, r);
+    bodyGradN.addColorStop(0, BODY_CORE_N);
+    bodyGradN.addColorStop(0.6, BODY_NORMAL);
+    bodyGradN.addColorStop(1, "#0a0a35");
+    ctx.fillStyle = bodyGradN;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Cache [3]: Buffed Body
+    ctx.save();
+    ctx.translate(size * 1.5, size * 1.5);
+    const bodyGradB = ctx.createRadialGradient(0, 0, r * 0.05, 0, 0, r);
+    bodyGradB.addColorStop(0, BODY_CORE_B);
+    bodyGradB.addColorStop(0.6, BODY_BUFFED);
+    bodyGradB.addColorStop(1, "#664422");
+    ctx.fillStyle = bodyGradB;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Pool Fetch Allocators ──────────────────────────────────────
+  private spawnParticle(config: Partial<StellarParticle>): void {
+    const p = this.particles.find((item) => !item.active);
+    if (p) {
+      Object.assign(p, config, { active: true });
+    }
+  }
+
+  private addTrailPoint(x: number, y: number): void {
+    const t = this.trail.find((item) => !item.active);
+    if (t) {
+      t.x = x;
+      t.y = y;
+      t.alpha = 1;
+      t.active = true;
+    } else {
+      // If pool full, cycle oldest
+      const oldest = this.trail[0];
+      oldest.x = x;
+      oldest.y = y;
+      oldest.alpha = 1;
+      oldest.active = true;
+      this.trail.push(this.trail.shift()!);
+    }
+  }
+
+  private spawnFlare(
+    angle: number,
+    life: number,
+    maxLife: number,
+    size: number,
+  ): void {
+    const f = this.flares.find((item) => !item.active);
+    if (f) {
+      f.angle = angle;
+      f.life = life;
+      f.maxLife = maxLife;
+      f.size = size;
+      f.active = true;
+    }
+  }
+
   public spawn(): void {
     const map = this.gameState.levelData.map;
     for (let y = 0; y < map.length; y++) {
@@ -132,11 +282,8 @@ export class Pacman extends Actor {
     this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
 
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
-      this.trail.push({ x: this.x, y: this.y, alpha: 1 });
-      const trailMax = this.isBuffed ? 22 : 14;
-      if (this.trail.length > trailMax) this.trail.shift();
+      this.addTrailPoint(this.x, this.y);
 
-      // Diamond stream trail particles
       const rate = this.isBuffed ? 4 : 2;
       for (let i = 0; i < rate; i++) {
         const sx =
@@ -147,7 +294,8 @@ export class Pacman extends Actor {
           this.y -
           this.direction.dy * this.r * 0.6 +
           (Math.random() - 0.5) * this.r * 0.35;
-        this.particles.push({
+
+        this.spawnParticle({
           x: sx,
           y: sy,
           vx:
@@ -168,12 +316,12 @@ export class Pacman extends Actor {
       }
 
       if (this.isBuffed && Math.random() < 0.4) {
-        this.flares.push({
-          angle: Math.random() * Math.PI * 2,
-          life: 0.15 + Math.random() * 0.2,
-          maxLife: 0.35,
-          size: 1.5 + Math.random() * 4,
-        });
+        this.spawnFlare(
+          Math.random() * Math.PI * 2,
+          0.15 + Math.random() * 0.2,
+          0.35,
+          1.5 + Math.random() * 4,
+        );
       }
     }
 
@@ -181,11 +329,12 @@ export class Pacman extends Actor {
       py = this.y;
     this.updateMovement(dt);
     this.teleport();
+
     if (
       Math.abs(this.x - px) > this.tileSize * 2 ||
       Math.abs(this.y - py) > this.tileSize * 2
     ) {
-      this.trail = [];
+      this.trail.forEach((t) => (t.active = false));
       this.spawnWarpVFX(px, py, true);
       this.spawnWarpVFX(this.x, this.y, false);
     }
@@ -211,7 +360,6 @@ export class Pacman extends Actor {
     this.needsRedraw = true;
   }
 
-  // ── Movement ──────────────────────────────────────────────────
   private updateMovement(dt: number): void {
     if (
       this.direction.dx === 0 &&
@@ -272,6 +420,7 @@ export class Pacman extends Actor {
   public changeDirection(d: { dx: number; dy: number }): void {
     this.nextDirection = d;
   }
+
   private getCollidedGhost(): Ghost | null {
     for (const g of this.levelContext.ghosts) {
       if (Math.sqrt((this.x - g.x) ** 2 + (this.y - g.y) ** 2) < this.r + g.r)
@@ -291,12 +440,11 @@ export class Pacman extends Actor {
     }
   }
 
+  // ── Spawn Handlers (Converted to write to Object Recycler Pools) ──
   private spawnWarpVFX(x: number, y: number, isExit: boolean): void {
     this.ghostEatFlash = 0.8;
 
-    // ── Gravitational lens ring ────────────────────────────
-    // Exit: starts tiny, expands violently. Entry: starts large, contracts.
-    this.particles.push({
+    this.spawnParticle({
       x,
       y,
       vx: 0,
@@ -309,20 +457,17 @@ export class Pacman extends Actor {
       rotSpeed: 0,
     });
 
-    // ── Diamond shard explosion ────────────────────────────
     const shardCount = 30;
     for (let i = 0; i < shardCount; i++) {
       const a = (i / shardCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
       const speed = isExit
         ? 180 + Math.random() * 280
         : 30 + Math.random() * 60;
-      const vx = Math.cos(a) * speed;
-      const vy = Math.sin(a) * speed;
-      this.particles.push({
+      this.spawnParticle({
         x,
         y,
-        vx,
-        vy,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
         life: 0.15 + Math.random() * 0.2,
         maxLife: 0.35,
         size: 2 + Math.random() * 3.5,
@@ -332,14 +477,13 @@ export class Pacman extends Actor {
       });
     }
 
-    // ── Star distortion — fake lensed starlight ────────────
     const starCount = 14;
     for (let i = 0; i < starCount; i++) {
       const a = Math.random() * Math.PI * 2;
       const speed = isExit
         ? 200 + Math.random() * 320
         : 25 + Math.random() * 55;
-      this.particles.push({
+      this.spawnParticle({
         x,
         y,
         vx: Math.cos(a) * speed,
@@ -360,7 +504,7 @@ export class Pacman extends Actor {
     for (let i = 0; i < 5; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 35 + Math.random() * 50;
-      this.particles.push({
+      this.spawnParticle({
         x: cx,
         y: cy,
         vx: Math.cos(a) * s,
@@ -378,7 +522,7 @@ export class Pacman extends Actor {
   private spawnPillEat(tx: number, ty: number): void {
     const cx = tx * this.tileSize + this.tileSize / 2;
     const cy = ty * this.tileSize + this.tileSize / 2;
-    this.particles.push({
+    this.spawnParticle({
       x: cx,
       y: cy,
       vx: 0,
@@ -390,10 +534,11 @@ export class Pacman extends Actor {
       rotation: 0,
       rotSpeed: 0,
     });
+
     for (let i = 0; i < 18; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 90 + Math.random() * 180;
-      this.particles.push({
+      this.spawnParticle({
         x: cx,
         y: cy,
         vx: Math.cos(a) * s,
@@ -409,7 +554,7 @@ export class Pacman extends Actor {
   }
 
   private spawnGhostConsume(gx: number, gy: number): void {
-    this.particles.push({
+    this.spawnParticle({
       x: gx,
       y: gy,
       vx: 0,
@@ -424,7 +569,7 @@ export class Pacman extends Actor {
     for (let i = 0; i < 30; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = 100 + Math.random() * 180;
-      this.particles.push({
+      this.spawnParticle({
         x: gx,
         y: gy,
         vx: Math.cos(a) * s,
@@ -439,18 +584,23 @@ export class Pacman extends Actor {
     }
   }
 
-  // ── Updates ───────────────────────────────────────────────────
+  // ── Array Pool Modifiers (Replaces Splice Trash Operations) ────
   private updateTrail(dt: number): void {
-    const decay = this.isBuffed ? 1.1 : 1.7;
-    for (const t of this.trail) t.alpha -= dt * decay;
+    // Raised decay from 1.1/1.7 to 4.5/6.5 for an instant power-burst snap
+    const decay = this.isBuffed ? 4.5 : 6.5;
+    for (const t of this.trail) {
+      if (!t.active) continue;
+      t.alpha -= dt * decay;
+      if (t.alpha <= 0) t.active = false;
+    }
   }
 
   private updateParticles(dt: number): void {
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
+    for (const p of this.particles) {
+      if (!p.active) continue;
       p.life -= dt;
       if (p.life <= 0) {
-        this.particles.splice(i, 1);
+        p.active = false;
         continue;
       }
       if (p.type !== "RING") {
@@ -466,9 +616,10 @@ export class Pacman extends Actor {
   }
 
   private updateFlares(dt: number): void {
-    for (let i = this.flares.length - 1; i >= 0; i--) {
-      this.flares[i].life -= dt;
-      if (this.flares[i].life <= 0) this.flares.splice(i, 1);
+    for (const f of this.flares) {
+      if (!f.active) continue;
+      f.life -= dt;
+      if (f.life <= 0) f.active = false;
     }
   }
 
@@ -476,10 +627,10 @@ export class Pacman extends Actor {
     if (this.state === "DYING") return;
     this.state = "DYING";
     this.speed = 0;
-    eventBus.emit("pacman:death_animation_start");
+    eventBus.emit("pacman:death");
   }
 
-  // ── Draw ──────────────────────────────────────────────────────
+  // ── Render Processing Pipeline ─────────────────────────────────
   public draw(): void {
     if (this.r <= 0) return;
     this.drawTrailRibbon();
@@ -488,81 +639,102 @@ export class Pacman extends Actor {
     else this.drawAlive();
   }
 
-  // ── Trail: diamond stream ────────────────────────────────────
-  // In Pacman.ts, replace drawTrailStream with the original ribbon approach:
-
   private drawTrailRibbon(): void {
-    if (this.state === "DYING" || this.trail.length < 2) return;
+    if (this.state === "DYING") return;
     const ctx = this.layer.ctx;
+
     const w = this.r * 0.35;
-    const gap = this.isBuffed ? this.r * 0.4 : 0;
+    const gap = this.isBuffed ? this.r * 0.5 : 0; // Distinct dual spacing
     const coreClr = this.isBuffed ? TRAIL_CLR_B : TRAIL_CLR_N;
     const sparkClr = this.isBuffed ? TRAIL_SPARK_B : TRAIL_SPARK_N;
 
+    const activePoints = this.trail.filter((t) => t.active);
+    if (activePoints.length < 2) return;
+
     ctx.save();
-    for (let i = 0; i < this.trail.length - 1; i++) {
-      const a = Math.max(0, this.trail[i + 1].alpha);
+    ctx.lineCap = "butt"; // Sharp, blocky beam cuts
+    ctx.lineJoin = "miter"; // Boxy alignment when cornering
+    ctx.miterLimit = 2;
+
+    const sides = this.isBuffed ? [-1, 1] : [0];
+
+    for (const side of sides) {
+      const offset = side * gap * 0.5;
+
+      // Continuous execution path
+      ctx.beginPath();
+      let first = true;
+      for (const p of activePoints) {
+        const dx = this.lastDirection.dy * offset;
+        const dy = -this.lastDirection.dx * offset;
+
+        if (first) {
+          ctx.moveTo(p.x + dx, p.y + dy);
+          first = false;
+        } else {
+          ctx.lineTo(p.x + dx, p.y + dy);
+        }
+      }
+
+      // Neon Flare Pass
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = w * (this.isBuffed ? 2.5 : 1.8);
+      ctx.strokeStyle = coreClr;
+      ctx.stroke();
+
+      // Sharp Core Filament Pass
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = this.isBuffed ? 3.5 : 1.5;
+      ctx.strokeStyle = sparkClr;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  private drawParticles(): void {
+    const ctx = this.layer.ctx;
+
+    // Batch operations state wrapper saved once outside individual updates
+    ctx.save();
+    for (const p of this.particles) {
+      if (!p.active) continue;
+      const a = Math.max(0, p.life / p.maxLife);
       if (a <= 0.01) continue;
-      const p1 = this.trail[i],
-        p2 = this.trail[i + 1];
 
-      // Draw one or two ribbons
-      for (let side = -1; side <= 1; side += 2) {
-        const offset = side * gap * 0.5;
-        if (!this.isBuffed && side === 1) continue; // single ribbon when normal
+      ctx.globalAlpha = a * 0.8;
 
-        ctx.globalAlpha = a * 0.7;
-        ctx.fillStyle = coreClr;
-        ctx.shadowColor = coreClr;
-        ctx.shadowBlur = this.isBuffed ? 6 * a : 3 * a;
-
+      // Ring handler
+      if (p.type === "RING") {
+        ctx.strokeStyle = "rgba(255,255,255,0.15)";
+        ctx.lineWidth = 6 * a; // Double stroke mimic bloom layer
         ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y - w + offset);
-        ctx.lineTo(p2.x, p2.y - w + offset);
-        ctx.lineTo(p2.x, p2.y + w + offset);
-        ctx.lineTo(p1.x, p1.y + w + offset);
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(255,255,255,0.8)";
+        ctx.lineWidth = 1.5 * a;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Diamond handler
+      else if (p.type === "DIAMOND") {
+        const s = p.size * a;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+
+        ctx.fillStyle = "rgba(255,255,255,0.3)"; // Fake bloom substrate
+        ctx.beginPath();
+        ctx.moveTo(0, -s * 1.4);
+        ctx.lineTo(s * 0.7, 0);
+        ctx.lineTo(0, s * 1.4);
+        ctx.lineTo(-s * 0.7, 0);
         ctx.closePath();
         ctx.fill();
 
-        // Edge highlights
-        ctx.globalAlpha = a * 0.5;
-        ctx.strokeStyle = sparkClr;
-        ctx.shadowColor = sparkClr;
-        ctx.shadowBlur = this.isBuffed ? 8 * a : 5 * a;
-        ctx.lineWidth = this.isBuffed ? 1 : 0.7;
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y - w + offset);
-        ctx.lineTo(p2.x, p2.y - w + offset);
-        ctx.moveTo(p1.x, p1.y + w + offset);
-        ctx.lineTo(p2.x, p2.y + w + offset);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-  private drawParticles(): void {
-    const ctx = this.layer.ctx;
-    for (const p of this.particles) {
-      const a = Math.max(0, p.life / p.maxLife);
-      if (a <= 0.01) continue;
-      ctx.save();
-      ctx.globalAlpha = a * 0.8;
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rotation);
-
-      if (p.type === "RING") {
-        ctx.strokeStyle = "rgba(255,255,255,0.6)";
-        ctx.shadowColor = "#ffffff";
-        ctx.shadowBlur = 10 * a;
-        ctx.lineWidth = 1.5 * a;
-        ctx.beginPath();
-        ctx.arc(0, 0, p.size, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (p.type === "DIAMOND") {
-        const s = p.size * a;
         ctx.fillStyle = "#ffffff";
-        ctx.shadowColor = "#ffffff";
-        ctx.shadowBlur = 4;
         ctx.beginPath();
         ctx.moveTo(0, -s);
         ctx.lineTo(s * 0.5, 0);
@@ -570,15 +742,22 @@ export class Pacman extends Actor {
         ctx.lineTo(-s * 0.5, 0);
         ctx.closePath();
         ctx.fill();
-      } else {
-        const s = p.size * a;
-        ctx.fillStyle = "#ffffff";
-        ctx.shadowColor = "#ffffff";
-        ctx.shadowBlur = 8;
-        ctx.fillRect(-s * 0.25, -s, s * 0.5, s * 2);
+        ctx.restore();
       }
-      ctx.restore();
+      // Spark block tracker
+      else {
+        const s = p.size * a;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = "rgba(255,255,255,0.25)";
+        ctx.fillRect(-s * 0.6, -s * 1.3, s * 1.2, s * 2.6);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(-s * 0.25, -s, s * 0.5, s * 2);
+        ctx.restore();
+      }
     }
+    ctx.restore();
   }
 
   private getAngle(): number {
@@ -593,11 +772,9 @@ export class Pacman extends Actor {
     return 0;
   }
 
-  // ── ALIVE ─────────────────────────────────────────────────────
   private drawAlive(): void {
     const ctx = this.layer.ctx;
     const r = this.r;
-    if (r <= 0) return;
     const rot = this.getAngle();
     const moving = this.direction.dx !== 0 || this.direction.dy !== 0;
     const t = this.time * 1000;
@@ -618,70 +795,97 @@ export class Pacman extends Actor {
 
     ctx.save();
     ctx.translate(this.x, this.y);
-    ctx.rotate(rot);
 
+    // 1. Ghost Eat Flash Layer Mimic
     if (this.ghostEatFlash > 0) {
-      ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 40 * this.ghostEatFlash;
-      ctx.fillStyle = `rgba(255,255,255,${0.2 * this.ghostEatFlash})`;
+      ctx.fillStyle = `rgba(255,255,255,${0.12 * this.ghostEatFlash})`;
       ctx.beginPath();
-      ctx.arc(0, 0, r + 22, 0, Math.PI * 2);
+      ctx.arc(0, 0, r + 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${0.25 * this.ghostEatFlash})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 10, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Body glow
-    const glowGrad = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 2.2);
-    glowGrad.addColorStop(
-      0,
-      this.isBuffed ? "rgba(255,200,130,0.55)" : "rgba(60,80,200,0.35)",
+    // 2. High-Performance Copy From Pre-Rendered Ambient Glow Buffer
+    const glowX = this.isBuffed ? this.cacheSize * 1.5 : this.cacheSize * 0.5;
+    ctx.drawImage(
+      this.cacheCanvas,
+      glowX - this.cacheSize * 0.5,
+      this.cacheSize * 0.5 - this.cacheSize * 0.5,
+      this.cacheSize,
+      this.cacheSize,
+      -this.cacheSize * 0.5,
+      -this.cacheSize * 0.5,
+      this.cacheSize,
+      this.cacheSize,
     );
-    glowGrad.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
-    ctx.fill();
 
-    // Surface flares
+    ctx.rotate(rot);
+
+    // 3. Dynamic Surface Flares Vector Layering
     for (const flare of this.flares) {
+      if (!flare.active) continue;
       const fa = flare.life / flare.maxLife;
       const fx = Math.cos(flare.angle) * r * 0.8;
       const fy = Math.sin(flare.angle) * r * 0.8;
       const fs = flare.size * fa;
-      const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fs);
-      fg.addColorStop(0, "rgba(255,255,255,0.9)");
-      fg.addColorStop(0.5, "rgba(255,220,160,0.4)");
-      fg.addColorStop(1, "rgba(255,180,80,0)");
-      ctx.fillStyle = fg;
+
+      ctx.fillStyle = "rgba(255,180,80,0.15)";
       ctx.beginPath();
-      ctx.arc(fx, fy, fs, 0, Math.PI * 2);
+      ctx.arc(fx, fy, fs * 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,220,160,0.4)";
+      ctx.beginPath();
+      ctx.arc(fx, fy, fs * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath();
+      ctx.arc(fx, fy, fs * 0.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Body
-    const bodyClr = this.isBuffed ? BODY_BUFFED : BODY_NORMAL;
-    const bodyGrad = ctx.createRadialGradient(0, 0, r * 0.05, 0, 0, r);
-    bodyGrad.addColorStop(0, this.isBuffed ? BODY_CORE_B : BODY_CORE_N);
-    bodyGrad.addColorStop(0.6, bodyClr);
-    bodyGrad.addColorStop(1, this.isBuffed ? "#664422" : "#0a0a35");
-    ctx.fillStyle = bodyGrad;
+    // 4. Copied Pre-rendered Gradient Body Core Base Slice
+    ctx.save();
     ctx.beginPath();
     ctx.arc(0, 0, r - 2, sa, ea);
     ctx.lineTo(Math.cos(ea) * innerRim, Math.sin(ea) * innerRim);
     ctx.lineTo(Math.cos(sa) * innerRim, Math.sin(sa) * innerRim);
     ctx.closePath();
-    ctx.fill();
+    ctx.clip();
 
-    // Edge rim
+    const bodyX = this.isBuffed ? this.cacheSize * 1.5 : this.cacheSize * 0.5;
+    ctx.drawImage(
+      this.cacheCanvas,
+      bodyX - r,
+      this.cacheSize * 1.5 - r,
+      r * 2,
+      r * 2,
+      -r,
+      -r,
+      r * 2,
+      r * 2,
+    );
+    ctx.restore();
+
+    // 5. Outer Edge Wireframe Rim Layering
     const edgeClr = this.isBuffed ? BODY_EDGE_B : BODY_EDGE_N;
-    ctx.strokeStyle = edgeClr;
-    ctx.lineWidth = this.isBuffed ? 2.2 : 1.6;
-    ctx.shadowColor = edgeClr;
-    ctx.shadowBlur = this.isBuffed ? 14 : 7;
+    ctx.strokeStyle = this.isBuffed
+      ? "rgba(255,255,255,0.15)"
+      : "rgba(120,160,255,0.2)";
+    ctx.lineWidth = this.isBuffed ? 7 : 4;
     ctx.beginPath();
     ctx.arc(0, 0, r - 2, sa, ea);
-    ctx.stroke();
+    ctx.stroke(); // Faux Bloom Rim
 
-    // Mouth interior
+    ctx.strokeStyle = edgeClr;
+    ctx.lineWidth = this.isBuffed ? 2.2 : 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 2, sa, ea);
+    ctx.stroke(); // Core Crisp Rim
+
+    // 6. Mouth Interior Clips & Star Twinkles
     ctx.save();
     ctx.beginPath();
     ctx.arc(0, 0, r - 2, sa, ea);
@@ -715,12 +919,10 @@ export class Pacman extends Actor {
     }
     ctx.restore();
 
-    // Mouth rim
+    // 7. Mouth Edge Flare Highlights
     const rimClr = this.isBuffed ? MOUTH_RIM_B : MOUTH_RIM_N;
     ctx.strokeStyle = rimClr;
     ctx.lineWidth = this.isBuffed ? 2.5 : 1.6;
-    ctx.shadowColor = rimClr;
-    ctx.shadowBlur = this.isBuffed ? 14 : 7;
     ctx.beginPath();
     ctx.arc(0, 0, r - 2, Math.max(0, sa - 0.06), sa + 0.18);
     ctx.stroke();
@@ -728,19 +930,24 @@ export class Pacman extends Actor {
     ctx.arc(0, 0, r - 2, ea - 0.18, Math.min(Math.PI * 2, ea + 0.06));
     ctx.stroke();
 
-    // Heart
+    // 8. Core Auriferous Pulsing Vector Heart
     const heartClr = this.isBuffed ? HEART_B : HEART_N;
     const pulse = 1 + Math.sin(t * 0.012) * 0.22;
     const heartR = Math.max(0.4, r * 0.09 * pulse);
-    const heartGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, heartR * 2.5);
-    heartGrad.addColorStop(0, "#ffffff");
-    heartGrad.addColorStop(0.35, heartClr);
-    heartGrad.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = heartGrad;
-    ctx.shadowColor = "#ffffff";
-    ctx.shadowBlur = this.isBuffed ? 20 : 10;
+
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
     ctx.beginPath();
-    ctx.arc(0, 0, heartR * 2.5, 0, Math.PI * 2);
+    ctx.arc(0, 0, heartR * 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = heartClr;
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.arc(0, 0, heartR * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(0, 0, heartR, 0, Math.PI * 2);
     ctx.fill();
 
     if (this.isBuffed) {
@@ -757,12 +964,10 @@ export class Pacman extends Actor {
     ctx.restore();
   }
 
-  // ── DEAD ──────────────────────────────────────────────────────
   private drawDead(): void {
     const p = Math.min(1, this.gameState.deathProgress);
     const ctx = this.layer.ctx;
     const r = this.r;
-    if (r <= 0) return;
 
     ctx.save();
     ctx.translate(this.x, this.y);
@@ -770,17 +975,21 @@ export class Pacman extends Actor {
     if (p < 0.2) {
       const s = 1 - p * 2;
       const flash = Math.floor(p * 60) % 2 === 0;
-      ctx.strokeStyle = flash ? "#ffffff" : "#ddccaa";
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 28 * (1 - p);
+      const clr = flash ? "#ffffff" : "#ddccaa";
+
+      ctx.strokeStyle = "rgba(221,204,170,0.2)";
+      ctx.lineWidth = 8 * Math.max(0.1, s);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * s, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = clr;
       ctx.lineWidth = 3 * Math.max(0.1, s);
       ctx.beginPath();
       ctx.arc(0, 0, r * s, 0, Math.PI * 2);
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 20;
       ctx.beginPath();
       ctx.arc(0, 0, r * 0.12, 0, Math.PI * 2);
       ctx.fill();
@@ -788,17 +997,20 @@ export class Pacman extends Actor {
       const bp = (p - 0.2) / 0.8;
       const a = Math.max(0, 1 - bp);
       const ringR = r * (1 + bp * 4);
+
+      ctx.strokeStyle = `rgba(180,160,220,${a * 0.25})`;
+      ctx.lineWidth = 6 * a;
+      ctx.beginPath();
+      ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+
       ctx.strokeStyle = `rgba(220,210,240,${a * 0.7})`;
-      ctx.shadowColor = "rgba(180,160,220,0.5)";
-      ctx.shadowBlur = 20 * a;
       ctx.lineWidth = 2.5 * a;
       ctx.beginPath();
       ctx.arc(0, 0, ringR, 0, Math.PI * 2);
       ctx.stroke();
 
       ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 25 * a;
       ctx.beginPath();
       ctx.arc(0, 0, r * 0.05 * a, 0, Math.PI * 2);
       ctx.fill();

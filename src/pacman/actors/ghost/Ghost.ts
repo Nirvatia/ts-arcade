@@ -25,7 +25,16 @@ interface TrailParticle {
   maxLife: number;
   size: number;
   color: string;
+  active: boolean; // Tracking property for Object Pooling
 }
+
+interface PathNode {
+  ty: number;
+  tx: number;
+}
+
+const MAX_PARTICLES = 60;
+const TIME_STEP = 1 / 60;
 
 export class Ghost extends Actor {
   public name: string;
@@ -35,7 +44,7 @@ export class Ghost extends Actor {
   public state: "CHASE" | "SCATTER" | "FRIGHTENED" | "EATEN" = "CHASE";
   public personality: "shadow" | "ambush" | "wild" | "shy";
 
-  private path: string[] = [];
+  private path: PathNode[] = [];
   private currentPathTarget: { x: number; y: number } | null = null;
   private lastEvaluatedGrid: { x: number; y: number } = { x: -1, y: -1 };
   private spawnGridX: number = 0;
@@ -58,6 +67,10 @@ export class Ghost extends Actor {
   private time = 0;
   private heading = 0;
 
+  // Cached strings for rendering optimizations
+  private cachedLensAlphaColor: string = "";
+  private lastCachedColorBase: string = "";
+
   constructor(
     canvasLayer: CanvasLayer,
     levelContext: LevelContext,
@@ -74,6 +87,20 @@ export class Ghost extends Actor {
     this.frightenedSpeed = this.tileSize * config.frightenedSpeedMultiplier;
     this.eatenSpeed = this.tileSize * config.eatenSpeedMultiplier;
     this.direction = { dx: 0, dy: 0 };
+
+    // Initialize Particle Object Pool
+    this.trail = Array.from({ length: MAX_PARTICLES }, () => ({
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      life: 0,
+      maxLife: 0,
+      size: 0,
+      color: "",
+      active: false,
+    }));
+
     this.initEventListeners();
   }
 
@@ -100,28 +127,29 @@ export class Ghost extends Actor {
       themeColor = "#9988cc";
     }
 
-    // Heading
+    // Performance Update: Fast Squared Magnitude check instead of Math.sqrt
     const spd = this.speed / (this.defaultSpeed || 1);
     const rawDx = this.direction.dx * spd;
     const rawDy = this.direction.dy * spd;
-    const moveMag = Math.sqrt(rawDx ** 2 + rawDy ** 2);
+    const moveMagSq = rawDx * rawDx + rawDy * rawDy;
 
-    let targetHeading = this.heading;
-    if (moveMag > 0.05) {
-      targetHeading = Math.atan2(rawDy, rawDx);
+    if (moveMagSq > 0.0025) {
+      // 0.05 squared is 0.0025
+      const targetHeading = Math.atan2(rawDy, rawDx);
+      let diff = targetHeading - this.heading;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this.heading += diff * 0.12;
     }
-    let diff = targetHeading - this.heading;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    this.heading += diff * 0.12;
 
-    // Emit trail — eaten state gets faint trailing particles too
-    if (moveMag > 0.02) {
-      this.emitTrail(r, themeColor, isFrightened, isEaten, moveMag);
+    // Emit trail
+    if (moveMagSq > 0.0004) {
+      // 0.02 squared is 0.0004
+      this.emitTrail(r, themeColor, isFrightened, isEaten, moveMagSq);
     }
     this.updateTrail();
 
-    // Render
+    // Render Character
     ctx.save();
     ctx.translate(this.x, this.y);
 
@@ -129,7 +157,8 @@ export class Ghost extends Actor {
       this.drawLens(ctx, r, themeColor, isFrightened);
       this.drawCore(ctx, r, themeColor, isFrightened);
     } else {
-      this.drawRemnant(ctx, r, themeColor, t, moveMag);
+      // Pass square root down only here where calculations require vector translation scaling
+      this.drawRemnant(ctx, r, themeColor, t, Math.sqrt(moveMagSq));
     }
 
     ctx.restore();
@@ -146,13 +175,17 @@ export class Ghost extends Actor {
   ): void {
     const outerR = r * 1.5;
     const grad = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, outerR);
-    const alpha = frenzied ? 0.12 : 0.06;
-    grad.addColorStop(
-      0,
-      `${color}${Math.floor(alpha * 255)
+
+    // Performance Update: Dynamic color allocation caching mechanics
+    if (this.lastCachedColorBase !== color) {
+      this.lastCachedColorBase = color;
+      const alpha = frenzied ? 0.12 : 0.06;
+      this.cachedLensAlphaColor = `${color}${Math.floor(alpha * 255)
         .toString(16)
-        .padStart(2, "0")}`,
-    );
+        .padStart(2, "0")}`;
+    }
+
+    grad.addColorStop(0, this.cachedLensAlphaColor);
     grad.addColorStop(0.5, `${color}03`);
     grad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = grad;
@@ -172,11 +205,13 @@ export class Ghost extends Actor {
     ctx.save();
     ctx.rotate(this.heading);
 
-    // Main diamond body
+    // Context changes minimized by structuring alpha rules sequentially
+    ctx.globalAlpha = 0.9;
     ctx.fillStyle = color;
     ctx.shadowColor = color;
     ctx.shadowBlur = frenzied ? 16 : 10;
-    ctx.globalAlpha = 0.9;
+
+    // Main diamond body
     ctx.beginPath();
     ctx.moveTo(sz, 0);
     ctx.lineTo(sz * 0.2, -sz * 0.65);
@@ -185,7 +220,20 @@ export class Ghost extends Actor {
     ctx.closePath();
     ctx.fill();
 
-    // White-hot inner core
+    // Side shards
+    ctx.globalAlpha = 0.7;
+    ctx.shadowBlur = 5;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(sz * 0.25, side * sz * 0.6);
+      ctx.lineTo(-sz * 0.15, side * sz * 0.28);
+      ctx.lineTo(-sz * 0.55, side * sz * 0.55);
+      ctx.lineTo(sz * 0.05, side * sz * 0.8);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // White-hot inner core (drawn last to avoid toggling shadow styling variants back and forth)
     ctx.fillStyle = "#ffffff";
     ctx.shadowColor = "#ffffff";
     ctx.shadowBlur = frenzied ? 12 : 6;
@@ -198,21 +246,6 @@ export class Ghost extends Actor {
     ctx.closePath();
     ctx.fill();
 
-    // Side shards
-    for (const side of [-1, 1]) {
-      ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 5;
-      ctx.globalAlpha = 0.7;
-      ctx.beginPath();
-      ctx.moveTo(sz * 0.25, side * sz * 0.6);
-      ctx.lineTo(-sz * 0.15, side * sz * 0.28);
-      ctx.lineTo(-sz * 0.55, side * sz * 0.55);
-      ctx.lineTo(sz * 0.05, side * sz * 0.8);
-      ctx.closePath();
-      ctx.fill();
-    }
-
     ctx.restore();
   }
 
@@ -222,68 +255,80 @@ export class Ghost extends Actor {
     color: string,
     frenzied: boolean,
     eaten: boolean,
-    moveMag: number,
+    moveMagSq: number,
   ): void {
     const count = eaten ? 1 : frenzied ? 3 : 2;
     const backAngle = this.heading + Math.PI;
+    const moveMag = Math.sqrt(moveMagSq);
+    const cosAngle = Math.cos(backAngle);
+    const sinAngle = Math.sin(backAngle);
+    const backDist = r * 0.85;
 
-    for (let i = 0; i < count; i++) {
-      const backDist = r * 0.85;
+    let emitted = 0;
+
+    // Performance Update: Query pooled allocation structure index mappings directly
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      if (emitted >= count) break;
+
+      const p = this.trail[i];
+      if (p.active) continue;
+
       const ox =
-        this.x +
-        Math.cos(backAngle) * backDist +
-        (Math.random() - 0.5) * r * 0.35;
+        this.x + cosAngle * backDist + (Math.random() - 0.5) * r * 0.35;
       const oy =
-        this.y +
-        Math.sin(backAngle) * backDist +
-        (Math.random() - 0.5) * r * 0.35;
-
+        this.y + sinAngle * backDist + (Math.random() - 0.5) * r * 0.35;
       const isWhite = eaten ? false : Math.random() < 0.2;
-      this.trail.push({
-        x: ox,
-        y: oy,
-        vx:
-          Math.cos(backAngle) * (15 + moveMag * 30) +
-          (Math.random() - 0.5) * 10,
-        vy:
-          Math.sin(backAngle) * (15 + moveMag * 30) +
-          (Math.random() - 0.5) * 10,
-        life: eaten ? 0.25 : frenzied ? 0.35 : 0.35,
-        maxLife: eaten ? 0.25 : frenzied ? 0.35 : 0.35,
-        size: eaten
-          ? 0.6 + Math.random() * 1
-          : frenzied
-            ? 1.5 + Math.random() * 2.5
-            : 0.8 + Math.random() * 2,
-        color: isWhite ? "#ffffff" : color,
-      });
+      const lifeSpan = eaten ? 0.25 : 0.35;
+
+      p.active = true;
+      p.x = ox;
+      p.y = oy;
+      p.vx = cosAngle * (15 + moveMag * 30) + (Math.random() - 0.5) * 10;
+      p.vy = sinAngle * (15 + moveMag * 30) + (Math.random() - 0.5) * 10;
+      p.life = lifeSpan;
+      p.maxLife = lifeSpan;
+      p.size = eaten
+        ? 0.6 + Math.random() * 1
+        : frenzied
+          ? 1.5 + Math.random() * 2.5
+          : 0.8 + Math.random() * 2;
+      p.color = isWhite ? "#ffffff" : color;
+
+      emitted++;
     }
   }
 
   private updateTrail(): void {
-    const dt = 1 / 60;
-    for (let i = this.trail.length - 1; i >= 0; i--) {
+    for (let i = 0; i < MAX_PARTICLES; i++) {
       const p = this.trail[i];
-      p.life -= dt;
+      if (!p.active) continue;
+
+      p.life -= TIME_STEP;
       if (p.life <= 0) {
-        this.trail.splice(i, 1);
+        p.active = false;
         continue;
       }
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
+      p.x += p.vx * TIME_STEP;
+      p.y += p.vy * TIME_STEP;
       p.vx *= 0.94;
       p.vy *= 0.94;
     }
   }
 
   private drawTrail(ctx: CanvasRenderingContext2D): void {
-    for (const p of this.trail) {
+    // Performance Update: Unified state initialization loop wrapper safely containing active context
+    ctx.save();
+
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      const p = this.trail[i];
+      if (!p.active) continue;
+
       const a = p.life / p.maxLife;
       const sz = p.size * a;
       if (sz < 0.2) continue;
 
-      ctx.save();
       ctx.globalAlpha = a * 0.7;
+
       // Bright center dot
       const dotR = sz * 0.25;
       ctx.fillStyle = "#ffffff";
@@ -292,13 +337,15 @@ export class Ghost extends Actor {
       ctx.beginPath();
       ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
       ctx.fill();
-      // Colored square around it
+
+      // Colored square boundary footprint framing execution
       ctx.fillStyle = p.color;
       ctx.shadowColor = p.color;
       ctx.shadowBlur = p.color === "#ffffff" ? 5 : 2;
-      ctx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
-      ctx.restore();
+      ctx.fillRect(p.x - sz * 0.5, p.y - sz * 0.5, sz, sz);
     }
+
+    ctx.restore();
   }
 
   // ── Eaten ─────────────────────────────────────────────────────
@@ -405,7 +452,7 @@ export class Ghost extends Actor {
       this.needsRedraw = true;
       return;
     }
-    
+
     let budget = this.speed * dt;
 
     while (budget > 0) {
@@ -548,28 +595,32 @@ export class Ghost extends Actor {
     while (budget > 0) {
       if (!this.currentPathTarget) {
         if (this.path.length > 0) {
-          const [ty, tx] = this.path[0].split(",").map(Number);
+          // Performance Update: Read coordinate objects directly without string parsing
+          const node = this.path[0];
           this.currentPathTarget = {
-            x: tx * this.tileSize + this.tileSize / 2,
-            y: ty * this.tileSize + this.tileSize / 2,
+            x: node.tx * this.tileSize + this.tileSize * 0.5,
+            y: node.ty * this.tileSize + this.tileSize * 0.5,
           };
         } else break;
       }
       const dx = this.currentPathTarget.x - this.x,
         dy = this.currentPathTarget.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 0.001) {
+
+      // Performance Update: Squared distance calculation shortcut
+      const distSq = dx * dx + dy * dy;
+      if (distSq > 0.000001) {
         if (Math.abs(dx) > Math.abs(dy))
           this.direction = { dx: Math.sign(dx), dy: 0 };
         else this.direction = { dx: 0, dy: Math.sign(dy) };
       }
+
+      const dist = Math.sqrt(distSq);
       if (dist <= budget) {
         this.x = this.currentPathTarget.x;
         this.y = this.currentPathTarget.y;
         budget -= dist;
         this.currentPathTarget = null;
         if (this.path.length > 0) this.path.shift();
-        // In moveAlongPath, replace the else block when path empties:
 
         if (this.path.length === 0) {
           if (this.isReturningHome) {
@@ -593,11 +644,9 @@ export class Ghost extends Actor {
             this.lastEvaluatedGrid = { x: -1, y: -1 };
             this.updateTargetNavigation();
 
-            // NEW: Verify the chosen direction is valid from current position
             const ct = this.gridContext.getTile(this.x, this.y);
             const nx = ct.tileX + this.direction.dx;
             const ny = ct.tileY + this.direction.dy;
-            // Allow exiting through GL gate
             const currentTile =
               this.gameState.levelData.map[ct.tileY]?.[ct.tileX];
             const isExitingLair =
@@ -605,7 +654,6 @@ export class Ghost extends Actor {
               this.gameState.levelData.map[ny]?.[nx] === "LE";
 
             if (this.gridContext.isWall(nx, ny, isExitingLair)) {
-              // Forced direction change — pick first valid non-wall direction
               const dirs = [
                 { dx: 0, dy: -1 },
                 { dx: -1, dy: 0 },
@@ -684,12 +732,20 @@ export class Ghost extends Actor {
       to: "EATEN",
     });
     const { tileX, tileY } = this.gridContext.getTile(this.x, this.y);
-    const path = findShortestPath(
+
+    const rawPath = findShortestPath(
       this.gameState.pathGraph!,
       `${tileY},${tileX}`,
       `${this.spawnGridY},${this.spawnGridX}`,
     );
-    if (path) this.path = path;
+
+    // Performance Update: Map returned string keys instantly to coordinate nodes
+    if (rawPath) {
+      this.path = rawPath.map((strNode) => {
+        const [ty, tx] = strNode.split(",").map(Number);
+        return { ty, tx };
+      });
+    }
   }
 
   public spawn(): void {
@@ -709,11 +765,18 @@ export class Ghost extends Actor {
   public calculateExitPath(): void {
     const map = this.gameState.levelData.map;
     const target = findLairExit(map);
-    const path = findShortestPath(
+    const rawPath = findShortestPath(
       this.gameState.pathGraph!,
       `${this.spawnGridY},${this.spawnGridX}`,
       target,
     );
-    if (path) this.path = path;
+
+    // Performance Update: Map serialization objects efficiently
+    if (rawPath) {
+      this.path = rawPath.map((strNode) => {
+        const [ty, tx] = strNode.split(",").map(Number);
+        return { ty, tx };
+      });
+    }
   }
 }

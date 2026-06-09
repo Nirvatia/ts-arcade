@@ -8,6 +8,8 @@ import type { Tally } from "./Tally.svelte.js";
 import type { Renderer } from "../render/Renderer.js";
 import type { GameLoop } from "../core/GameLoop.js";
 import { CFG_PIXI_GRID } from "../config/pixiGrid.config.js";
+import { CFG_CANVAS } from "../config/canvas.config.js";
+import type { TypeDeathScene } from "../shared/types.js";
 
 const COUNTDOWN_SECONDS = 5;
 const INTERMISSION_SECONDS = 10;
@@ -41,15 +43,13 @@ export class Director {
     return this.clock.current;
   }
 
-  // ── Event wiring ──────────────────────────────────────────────
   private wireEvents(): void {
     eventBus.on("game:start", () => this.beginCountdown());
     eventBus.on("game:restart", () => this.restartGame());
     eventBus.on("level:complete", (p) => this.playLevelCompleteSequence(p));
-    eventBus.on("pacman:death_animation_start", () => this.playDeathSequence());
+    eventBus.on("pacman:death", () => this.playDeathSequence());
   }
 
-  // ── Clocks & sequences ────────────────────────────────────────
   private cancelAll(): void {
     if (this.clock.current) {
       this.clock.current.stop();
@@ -71,7 +71,6 @@ export class Director {
     this.renderer.setDrawables(level.getAllDrawable());
   }
 
-  // ── Death ─────────────────────────────────────────────────────
   private playDeathSequence(): void {
     this.gameState.mode = "PACMAN_DEAD";
     this.cancelAll();
@@ -81,7 +80,38 @@ export class Director {
     const grid = level?.pixiGrid;
     if (!grid || !pacman) return;
 
-    grid.startDeathAnimation(pacman.x, pacman.y);
+    // Fix: Force a structural layout pass before geometry extraction to protect high-DPR screens
+    this.renderer.render();
+
+    const entityData: TypeDeathScene = {
+      pacman: { x: pacman.x, y: pacman.y },
+      ghosts: [],
+      dots: [],
+      pills: [],
+    };
+
+    const ghosts = level?.ghosts ?? [];
+    for (const g of ghosts) {
+      entityData.ghosts.push({
+        x: g.x,
+        y: g.y,
+        color: g.color,
+      });
+    }
+
+    const ts = CFG_CANVAS.tile.size;
+    for (const key of this.gameState.activeDots) {
+      const [i, j] = key.split(",").map(Number);
+      entityData.dots.push({ x: j * ts + ts / 2, y: i * ts + ts / 2 });
+    }
+    for (const key of this.gameState.activePills) {
+      const [i, j] = key.split(",").map(Number);
+      entityData.pills.push({ x: j * ts + ts / 2, y: i * ts + ts / 2 });
+    }
+
+    // Clear canvas layouts safely after positions are recorded
+    this.renderer.clear();
+    grid.startDeathAnimation(pacman.x, pacman.y, entityData);
 
     const seconds = CFG_PIXI_GRID.deathDuration;
     const clock = this.startClock("death");
@@ -112,7 +142,6 @@ export class Director {
     }
   }
 
-  // ── Game flow ─────────────────────────────────────────────────
   public async loadGame(): Promise<void> {
     await this.gameRegistry.createLevelAsync();
     this.setupLevel();
@@ -202,7 +231,6 @@ export class Director {
     });
   }
 
-  // ── Level complete → intermission → next level ────────────────
   private async playLevelCompleteSequence(payload: {
     level: number;
     score: number;
@@ -216,7 +244,6 @@ export class Director {
     if (!grid) return;
 
     grid.isFlashing = true;
-
     setTimeout(() => this.startIntermission(payload), 4800);
   }
 

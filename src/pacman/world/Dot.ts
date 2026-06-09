@@ -1,20 +1,17 @@
 // world/Dot.ts
 import { eventBus } from "../core/EventBus.js";
 import { WorldObject } from "./WorldObject.js";
-import type { LevelContext } from "../core/LevelContext.js";
 import type { CanvasLayer } from "../render/CanvasLayer.js";
+import type { LevelContext } from "../core/LevelContext.js";
 
 export class Dot extends WorldObject {
   private dotSize: number;
 
   constructor(canvasLayer: CanvasLayer, levelContext: LevelContext) {
     super(canvasLayer, levelContext);
-    this.dotSize = this.tileSize * 0.22;
+    // Hard downscale factor so the points occupy minimal spatial footprint
+    this.dotSize = this.tileSize * 0.15; 
     this.initEventListeners();
-  }
-
-  private seed(i: number, j: number): number {
-    return Math.abs(Math.sin(i * 127.1 + j * 311.7) * 43758.5453) % 1;
   }
 
   private initEventListeners(): void {
@@ -42,7 +39,7 @@ export class Dot extends WorldObject {
 
     const ctx = this.layer.ctx;
     const ts = this.tileSize;
-    const sz = this.dotSize * 0.5;
+    const radius = this.dotSize * 0.5;
 
     ctx.clearRect(0, 0, this.layer.canvas.width, this.layer.canvas.height);
     ctx.save();
@@ -51,35 +48,28 @@ export class Dot extends WorldObject {
       const [i, j] = posKey.split(",").map(Number);
       const cx = ts * j + ts / 2;
       const cy = ts * i + ts / 2;
-      const s = this.seed(i, j);
-
-      const size = sz * (0.8 + s * 0.4);
-      const rot = s * Math.PI * 2;
 
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(rot);
+      ctx.rotate(Math.PI / 4); // Points tips directly into empty corridor corners
 
-      // Soft violet glow
-      ctx.shadowColor = "rgba(150, 120, 220, 0.55)";
-      ctx.shadowBlur = 4;
+      // ── NO SHADOW BLURS ── NO GRADIENTS ── NO BACKGROUND FOG ──
 
-      // Diamond body
-      ctx.fillStyle = "rgba(190, 165, 240, 0.8)";
+      // 1. Crisp, opaque lavender starburst silhouette
+      ctx.fillStyle = "#b59eef"; 
       ctx.beginPath();
-      ctx.moveTo(0, -size);
-      ctx.lineTo(size * 0.5, 0);
-      ctx.lineTo(0, size);
-      ctx.lineTo(-size * 0.5, 0);
+      ctx.moveTo(0, -radius * 1.3);
+      ctx.quadraticCurveTo(0, 0, radius * 1.3, 0);
+      ctx.quadraticCurveTo(0, 0, 0, radius * 1.3);
+      ctx.quadraticCurveTo(0, 0, -radius * 1.3, 0);
+      ctx.quadraticCurveTo(0, 0, 0, -radius * 1.3);
       ctx.closePath();
       ctx.fill();
 
-      // Bright white core
+      // 2. Clear, high-contrast flat white center point
       ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "#ffffff";
-      ctx.shadowBlur = 3;
       ctx.beginPath();
-      ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
+      ctx.arc(0, 0, radius * 0.45, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
