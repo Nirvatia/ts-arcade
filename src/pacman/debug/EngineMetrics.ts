@@ -2,7 +2,7 @@ import { GameLoopTracker } from "./GameLoopTracker.js";
 import { RenderTracker } from "./RenderTracker.js";
 
 export class EngineMetrics {
-  public static readonly ENABLED = false;
+  public static readonly ENABLED = true;
 
   private static loopTracker = new GameLoopTracker(60);
   private static renderTracker = new RenderTracker();
