@@ -103,6 +103,10 @@ export class GameState {
   public eatDot(i: number, j: number): number {
     this.activeDots.delete(`${i},${j}`);
 
+    // DEBUG: this.activeDots.size <= this.totalDots - 100
+
+    // PROD: this.activeDots.size === 0 && !this.isProcessingLevelTransition
+    
     if (this.activeDots.size === 0 && !this.isProcessingLevelTransition) {
       this.isProcessingLevelTransition = true;
       eventBus.emit("level:complete", {
