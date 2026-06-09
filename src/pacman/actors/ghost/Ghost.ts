@@ -106,6 +106,8 @@ export class Ghost extends Actor {
 
   // ── Draw ──────────────────────────────────────────────────────
   public draw(): void {
+    this.drawDebug();
+    return;
     const ctx = this.layer.ctx;
     const r = this.tileSize * 0.42;
     let themeColor = this.color || this.defaultColor;
@@ -778,5 +780,47 @@ export class Ghost extends Actor {
         return { ty, tx };
       });
     }
+  }
+
+  public drawDebug(): void {
+    const ctx = this.layer.ctx;
+    const r = this.tileSize * 0.42;
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Draw basic classic ghost body shape
+    ctx.fillStyle = this.color || this.defaultColor;
+    ctx.beginPath();
+    // Arc top half of the body
+    ctx.arc(0, -r * 0.1, r, Math.PI, 0, false);
+    // Right side wall down
+    ctx.lineTo(r, r);
+    // Bottom wiggly skirt waves
+    ctx.lineTo(r * 0.5, r * 0.6);
+    ctx.lineTo(0, r);
+    ctx.lineTo(-r * 0.5, r * 0.6);
+    ctx.lineTo(-r, r);
+    // Left side wall back up
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw basic eyes
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(-r * 0.35, -r * 0.2, r * 0.25, 0, Math.PI * 2);
+    ctx.arc(r * 0.35, -r * 0.2, r * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw basic pupils looking in movement direction
+    ctx.fillStyle = "#0000ff";
+    const dx = this.direction.dx * (r * 0.08);
+    const dy = this.direction.dy * (r * 0.08);
+    ctx.beginPath();
+    ctx.arc(-r * 0.35 + dx, -r * 0.2 + dy, r * 0.1, 0, Math.PI * 2);
+    ctx.arc(r * 0.35 + dx, -r * 0.2 + dy, r * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 }

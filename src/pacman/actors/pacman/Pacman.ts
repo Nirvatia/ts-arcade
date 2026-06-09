@@ -632,6 +632,8 @@ export class Pacman extends Actor {
 
   // ── Render Processing Pipeline ─────────────────────────────────
   public draw(): void {
+    this.drawDebug();
+    return;
     if (this.r <= 0) return;
     this.drawTrailRibbon();
     this.drawParticles();
@@ -1016,6 +1018,18 @@ export class Pacman extends Actor {
       ctx.fill();
     }
 
+    ctx.restore();
+  }
+
+  private drawDebug(): void {
+    const ctx = this.layer.ctx;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.fillStyle = this.isBuffed ? "#ffcc00" : "#ffff00";
+    ctx.beginPath();
+    // Native un-clipped ultra fast canvas fill primitive
+    ctx.arc(0, 0, this.r, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }
