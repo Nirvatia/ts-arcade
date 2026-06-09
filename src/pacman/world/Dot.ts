@@ -1,26 +1,39 @@
-// world/Dot.ts
 import { eventBus } from "../core/EventBus.js";
 import { WorldObject } from "./WorldObject.js";
-import type { CanvasLayer } from "../render/CanvasLayer.js";
 import type { LevelContext } from "../core/LevelContext.js";
+import * as PIXI from "pixi.js";
+
+// ──────────────────────────────────────────────
+// STARVED STARS
+// Faint points of residual light.
+// Single Graphics object — one draw call total.
+// ──────────────────────────────────────────────
+
+const DOT_BODY  = 0x8899cc;
+const DOT_GLINT = 0xffffff;
 
 export class Dot extends WorldObject {
-  private dotSize: number;
+  private dotRadius: number;
+  private glintRadius: number;
+  private gfx: PIXI.Graphics;
 
-  constructor(canvasLayer: CanvasLayer, levelContext: LevelContext) {
-    super(canvasLayer, levelContext);
-    // Hard downscale factor so the points occupy minimal spatial footprint
-    this.dotSize = this.tileSize * 0.15; 
+  constructor(levelContext: LevelContext) {
+    super(levelContext);
+
+    const dotSize = this.tileSize * 0.16;
+    this.dotRadius = dotSize * 0.4;
+    this.glintRadius = this.dotRadius * 0.4;
+
+    this.gfx = new PIXI.Graphics();
+    this.container.addChild(this.gfx);
+    this.container.isRenderGroup = true;
+
     this.initEventListeners();
   }
 
   private initEventListeners(): void {
-    eventBus.on("dot:eaten", (payload) => {
-      if (payload?.position) {
-        this.eraseDotAt(payload.position.i, payload.position.j);
-      } else {
-        this.requestRedraw();
-      }
+    eventBus.on("dot:eaten", () => {
+      this.requestRedraw();
     });
   }
 
@@ -28,54 +41,27 @@ export class Dot extends WorldObject {
     this.requestRedraw();
   }
 
-  private eraseDotAt(row: number, col: number): void {
-    const ctx = this.layer.ctx;
-    const ts = this.tileSize;
-    ctx.clearRect(col * ts, row * ts, ts, ts);
-  }
-
   public draw(): void {
     if (!this.needsRedraw) return;
 
-    const ctx = this.layer.ctx;
-    const ts = this.tileSize;
-    const radius = this.dotSize * 0.5;
+    this.gfx.clear();
 
-    ctx.clearRect(0, 0, this.layer.canvas.width, this.layer.canvas.height);
-    ctx.save();
+    const ts = this.tileSize;
 
     this.gameState.activeDots.forEach((posKey) => {
       const [i, j] = posKey.split(",").map(Number);
       const cx = ts * j + ts / 2;
       const cy = ts * i + ts / 2;
 
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(Math.PI / 4); // Points tips directly into empty corridor corners
+      // Body
+      this.gfx.circle(cx, cy, this.dotRadius);
+      this.gfx.fill({ color: DOT_BODY });
 
-      // ── NO SHADOW BLURS ── NO GRADIENTS ── NO BACKGROUND FOG ──
-
-      // 1. Crisp, opaque lavender starburst silhouette
-      ctx.fillStyle = "#b59eef"; 
-      ctx.beginPath();
-      ctx.moveTo(0, -radius * 1.3);
-      ctx.quadraticCurveTo(0, 0, radius * 1.3, 0);
-      ctx.quadraticCurveTo(0, 0, 0, radius * 1.3);
-      ctx.quadraticCurveTo(0, 0, -radius * 1.3, 0);
-      ctx.quadraticCurveTo(0, 0, 0, -radius * 1.3);
-      ctx.closePath();
-      ctx.fill();
-
-      // 2. Clear, high-contrast flat white center point
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 0.45, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.restore();
+      // Glint
+      this.gfx.circle(cx, cy, this.glintRadius);
+      this.gfx.fill({ color: DOT_GLINT });
     });
 
-    ctx.restore();
     this.needsRedraw = false;
   }
 }

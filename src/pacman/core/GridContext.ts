@@ -17,6 +17,16 @@ export class GridContext {
     this.initTeleports(this.grid);
   }
 
+  /** Returns the total width of the map in pixels */
+  public get pixelWidth(): number {
+    return this.grid[0] ? this.grid[0].length * this.tileSize : 448;
+  }
+
+  /** Returns the total height of the map in pixels */
+  public get pixelHeight(): number {
+    return this.grid.length ? this.grid.length * this.tileSize : 496;
+  }
+
   /** Checks if a tile data point qualifies as a teleport configuration type */
   private isTeleportTile(tile: TileType): tile is TeleportType {
     return typeof tile === "string" && tile.startsWith("0");
@@ -70,7 +80,6 @@ export class GridContext {
       return false;
     }
 
-    // New wall tile types: WL (standard wall), LE (lair entrance wall)
     const wallTiles = new Set<TileType>(["WL", "LE"]);
 
     return wallTiles.has(tile);

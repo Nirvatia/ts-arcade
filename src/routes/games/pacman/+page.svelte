@@ -6,11 +6,12 @@
   import { CFG_CANVAS } from "../../../pacman/config/canvas.config.js";
   import { eventBus } from "../../../pacman/core/EventBus.js";
   import { GameMain } from "../../../pacman/game/GameMain.js";
-  import { debugMaze } from "../../../pacman/debug/debugMaze.js";
-  import { CFG_GRID_0 } from "../../../pacman/config/grid.config.js";
 
   let isLoading = $state(true);
   let audioUnlocked = $state(false);
+
+  // Single Canvas DOM element pointer binding
+  let pixiCanvasElement: HTMLCanvasElement | undefined = $state();
   const game = new GameMain();
 
   let canvasWidth = $derived.by(() => {
@@ -26,7 +27,7 @@
   });
 
   let countdown = $derived.by(() => {
-    const activeClock = game.director.currentClock;
+    const activeClock = game.director?.currentClock;
     return activeClock && activeClock.isRunning
       ? activeClock.getRemaining()
       : 0;
@@ -37,18 +38,28 @@
 
   onMount(() => {
     const initGame = async () => {
-      // Load font and preload audio in parallel
       const gameFont = new FontFace("Jersey-Regular", `url(${fontUrl})`);
       document.fonts.add(gameFont);
-
-      await Promise.all([
-        gameFont.load().catch(() => {}),
-        game.sfx.preloadAll(),
-      ]);
+      const fontLoadPromise = gameFont.load().catch(() => {});
 
       isLoading = false;
       await tick();
-      game.controller.init();
+
+      // Launch the Pixi context linked onto the actual canvas rendering target reference
+      if (pixiCanvasElement) {
+        // Enforce structural boundaries explicitly synchronized before loading steps
+        const targetW = canvasWidth;
+        const targetH = canvasHeight;
+
+        await game.initAsync(pixiCanvasElement);
+
+        if (game.pixiApp) {
+          game.pixiApp.renderer.resize(targetW, targetH);
+        }
+      }
+
+      await Promise.all([fontLoadPromise, game.sfx.preloadAll()]);
+
       await game.loadAsync();
     };
     initGame();
@@ -109,13 +120,7 @@
       {#if isLoading}
         <div class="state-overlay"><span class="faint-text">LOADING</span></div>
       {:else}
-        <canvas id={CFG_CANVAS.canvasIds.grid}></canvas>
-        <canvas id={CFG_CANVAS.canvasIds.dots}></canvas>
-        <canvas id={CFG_CANVAS.canvasIds.pills}></canvas>
-        <canvas id={CFG_CANVAS.canvasIds.pacman}></canvas>
-        <canvas id={CFG_CANVAS.canvasIds.vignette}></canvas>
-        <canvas id={CFG_CANVAS.canvasIds.scene}></canvas>
-        <canvas id={CFG_CANVAS.canvasIds.ghosts}></canvas>
+        <canvas bind:this={pixiCanvasElement}></canvas>
 
         {#if game.gameState.mode === "INIT"}
           <div class="state-overlay fogged">

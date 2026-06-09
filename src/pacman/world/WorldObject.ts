@@ -1,22 +1,26 @@
-// world/WorldObject.ts
-import { CanvasLayer } from "../render/CanvasLayer.js";
 import { CFG_CANVAS } from "../config/canvas.config.js";
 import { LevelContext } from "../core/LevelContext.js";
 import type { IDrawable } from "../shared/types.js";
+import * as PIXI from "pixi.js";
 
 export abstract class WorldObject implements IDrawable {
   public levelContext: LevelContext;
-  protected canvasLayer: CanvasLayer;
   protected tileSize: number;
   protected shouldUpdate: boolean = true;
   protected shouldRender: boolean = true;
 
   private _needsRedraw: boolean = true;
 
-  constructor(canvasLayer: CanvasLayer, levelContext: LevelContext) {
-    this.canvasLayer = canvasLayer;
+  // ── Pixi Container Initialization ─────────────────────────────
+  /** Every world asset manages its own sub-container layer */
+  public readonly container: PIXI.Container;
+
+  constructor(levelContext: LevelContext) {
     this.levelContext = levelContext;
     this.tileSize = CFG_CANVAS.tile.size;
+
+    // Instantiate an isolated coordinate space layer for this object
+    this.container = new PIXI.Container();
   }
 
   protected get gameState() {
@@ -35,19 +39,17 @@ export abstract class WorldObject implements IDrawable {
     this._needsRedraw = value;
   }
 
-  public get layer(): CanvasLayer {
-    return this.canvasLayer;
-  }
-
   public requestRedraw(): void {
     this._needsRedraw = true;
   }
 
-  public clearCanvas(x?: number, y?: number, w?: number, h?: number): void {
-    this.canvasLayer.clear(x, y, w, h);
-  }
-
+  /**
+   * Generates or mutates visual geometry.
+   */
   abstract draw(): void;
 
-  public destroy(): void {}
+  public destroy(): void {
+    // Safely remove structural nodes and children textures from memory
+    this.container.destroy({ children: true });
+  }
 }

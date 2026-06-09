@@ -37,13 +37,14 @@ export type GraphType = Record<string, string[]>;
 /** Callback signature invoked when a subscribed event is broadcasted */
 export type EventHandler = (payload?: any) => void;
 
-/** Common structural type for assets capable of rendering pixels to a canvas context */
 export type IDrawable = {
-  readonly layer: CanvasLayer;
+  /** The isolated visual node context managed by PixiJS for this specific asset */
+  readonly container: PIXI.Container;
   needsRedraw: boolean;
+  
+  /** Declares or modifies local graphic layouts/sprites inside the container */
   draw(): void;
   requestRedraw(): void;
-  clearCanvas(): void;
 };
 
 /** Lifecycle type for dynamic assets requiring real-time logical frame updates */

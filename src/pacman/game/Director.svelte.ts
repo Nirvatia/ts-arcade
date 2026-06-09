@@ -1,4 +1,3 @@
-// director/Director.svelte.ts
 import { Clock } from "../core/Clock.svelte.js";
 import { eventBus } from "../core/EventBus.js";
 import { Sequence } from "../core/Sequence.js";
@@ -80,7 +79,6 @@ export class Director {
     const grid = level?.pixiGrid;
     if (!grid || !pacman) return;
 
-    // Fix: Force a structural layout pass before geometry extraction to protect high-DPR screens
     this.renderer.render();
 
     const entityData: TypeDeathScene = {
@@ -109,7 +107,6 @@ export class Director {
       entityData.pills.push({ x: j * ts + ts / 2, y: i * ts + ts / 2 });
     }
 
-    // Clear canvas layouts safely after positions are recorded
     this.renderer.clear();
     grid.startDeathAnimation(pacman.x, pacman.y, entityData);
 
@@ -171,7 +168,6 @@ export class Director {
 
   public async restartGame(): Promise<void> {
     this.cancelAll();
-    this.gameRegistry.getActiveLevel()?.pixiGrid.destroy();
     this.gameState.reset();
     await this.gameRegistry.createLevelAsync();
     this.setupLevel();

@@ -1,12 +1,8 @@
-// game/GameRegistry.ts
 import { CFG_PACMAN } from "../config/pacman.config.js";
-import { CFG_CANVAS } from "../config/canvas.config.js";
 import { CFG_GHOSTS } from "../config/ghost.config.js";
 
 import { LevelContext } from "../core/LevelContext.js";
 import { GridContext } from "../core/GridContext.js";
-import { CanvasLayer } from "../render/CanvasLayer.js";
-import { CanvasComposite } from "../render/CanvasComposite.js";
 import { Ghost } from "../actors/ghost/Ghost.js";
 import { Pacman } from "../actors/pacman/Pacman.js";
 import { Pill } from "../world/Pill.js";
@@ -16,13 +12,19 @@ import { PixiGrid } from "../world/PixiGrid.js";
 import { createPathGraph } from "../pathfinding/graph.js";
 
 import type { GameState } from "../game/GameState.svelte.js";
+import * as PIXI from "pixi.js";
 
 export class GameRegistry {
   private readonly gameState: GameState;
   private activeLevelContext: LevelContext | null = null;
+  private readonly stageContext: PIXI.Container;
+  private readonly pixiApp: PIXI.Application;
+  private levelGroupLayer: PIXI.Container | null = null;
 
-  constructor(gameState: GameState) {
+  constructor(gameState: GameState, pixiApp: PIXI.Application) {
     this.gameState = gameState;
+    this.pixiApp = pixiApp;
+    this.stageContext = pixiApp.stage;
   }
 
   public async createLevelAsync(): Promise<LevelContext> {
@@ -30,115 +32,58 @@ export class GameRegistry {
     this.gameState.pathGraph = createPathGraph(activeGrid);
 
     const gridContext = new GridContext(activeGrid);
-    const levelContext = new LevelContext(this.gameState, gridContext);
-
-    const tileSize = CFG_CANVAS.tile.size;
-
-    const gridCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.grid);
-    const dotsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
-    const pillsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pills);
-    const pacmanCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pacman);
-    const vignetteCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.vignette);
-    const ghostsSharedCanvasLayer = new CanvasLayer(
-      CFG_CANVAS.canvasIds.ghosts,
+    const levelContext = new LevelContext(
+      this.gameState,
+      gridContext,
+      this.pixiApp,
     );
 
-    [
-      gridCanvasLayer,
-      dotsCanvasLayer,
-      pillsCanvasLayer,
-      pacmanCanvasLayer,
-      vignetteCanvasLayer,
-      ghostsSharedCanvasLayer,
-    ].forEach((layer) => layer.resize(tileSize, activeGrid));
+    if (this.levelGroupLayer) {
+      this.stageContext.removeChild(this.levelGroupLayer);
+      this.levelGroupLayer.destroy({ children: true });
+    }
 
-    const pacman = new Pacman(pacmanCanvasLayer, levelContext, CFG_PACMAN);
+    // 1. Wipe out any existing visual layers from previous setups
+    if (this.levelGroupLayer) {
+      this.stageContext.removeChild(this.levelGroupLayer);
+      this.levelGroupLayer.destroy({ children: true });
+    }
+
+    // 2. Initialize a base level container to host all layers
+    this.levelGroupLayer = new PIXI.Container();
+    this.stageContext.addChild(this.levelGroupLayer);
+
+    // 3. Setup entities passing down level context mapping
+    const pacman = new Pacman(levelContext, CFG_PACMAN);
     levelContext.registerPacman(pacman);
 
-    const dot = new Dot(dotsCanvasLayer, levelContext);
-    const pill = new Pill(pillsCanvasLayer, levelContext);
-    const vignette = new Vignette(vignetteCanvasLayer, levelContext);
+    const dot = new Dot(levelContext);
+    const pill = new Pill(levelContext);
+    const vignette = new Vignette(levelContext);
 
-    const pixiGrid = new PixiGrid(gridCanvasLayer, levelContext);
+    const pixiGrid = new PixiGrid(levelContext);
     await pixiGrid.init();
 
-    const ghostLayer = new CanvasComposite(ghostsSharedCanvasLayer);
     const ghosts = Object.values(CFG_GHOSTS).map(
-      (config) => new Ghost(ghostsSharedCanvasLayer, levelContext, config),
+      (config) => new Ghost(levelContext, config),
     );
-    ghosts.forEach((ghost) => ghostLayer.add(ghost));
 
-    levelContext.setEnvironment(
-      ghosts,
-      ghostLayer,
-      pixiGrid,
-      dot,
-      pill,
-      vignette,
-    );
+    // 4. Inject layers sequentially to establish structural rendering order (Z-index stacking)
+    this.levelGroupLayer.addChild(pixiGrid.container);
+    this.levelGroupLayer.addChild(dot.container);
+    this.levelGroupLayer.addChild(pill.container);
+    this.levelGroupLayer.addChild(pacman.container);
+    ghosts.forEach((g) => this.levelGroupLayer!.addChild(g.container));
+    this.levelGroupLayer.addChild(vignette.container);
+
+    levelContext.setEnvironment(ghosts, pixiGrid, dot, pill, vignette);
 
     this.activeLevelContext = levelContext;
     return levelContext;
   }
 
   public async recreateEntitiesAsync(): Promise<LevelContext> {
-    const activeGrid = this.gameState.levelData.map;
-    this.gameState.pathGraph = createPathGraph(activeGrid);
-
-    const gridContext = new GridContext(activeGrid);
-    const levelContext = new LevelContext(this.gameState, gridContext);
-
-    const tileSize = CFG_CANVAS.tile.size;
-
-    const dotsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.dots);
-    const pillsCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pills);
-    const pacmanCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.pacman);
-    const vignetteCanvasLayer = new CanvasLayer(CFG_CANVAS.canvasIds.vignette);
-    const ghostsSharedCanvasLayer = new CanvasLayer(
-      CFG_CANVAS.canvasIds.ghosts,
-    );
-
-    [
-      dotsCanvasLayer,
-      pillsCanvasLayer,
-      pacmanCanvasLayer,
-      vignetteCanvasLayer,
-      ghostsSharedCanvasLayer,
-    ].forEach((layer) => layer.resize(tileSize, activeGrid));
-
-    const pacman = new Pacman(pacmanCanvasLayer, levelContext, CFG_PACMAN);
-    levelContext.registerPacman(pacman);
-
-    const dot = new Dot(dotsCanvasLayer, levelContext);
-    const pill = new Pill(pillsCanvasLayer, levelContext);
-    const vignette = new Vignette(vignetteCanvasLayer, levelContext);
-
-    const oldLevel = this.activeLevelContext;
-    if (!oldLevel) {
-      throw new Error("No active level to reuse PixiGrid from");
-    }
-
-    const pixiGrid = oldLevel.pixiGrid;
-    pixiGrid.reset();
-    pixiGrid.levelContext = levelContext;
-
-    const ghostLayer = new CanvasComposite(ghostsSharedCanvasLayer);
-    const ghosts = Object.values(CFG_GHOSTS).map(
-      (config) => new Ghost(ghostsSharedCanvasLayer, levelContext, config),
-    );
-    ghosts.forEach((ghost) => ghostLayer.add(ghost));
-
-    levelContext.setEnvironment(
-      ghosts,
-      ghostLayer,
-      pixiGrid,
-      dot,
-      pill,
-      vignette,
-    );
-
-    this.activeLevelContext = levelContext;
-    return levelContext;
+    return this.createLevelAsync();
   }
 
   public getActiveLevel(): LevelContext | null {

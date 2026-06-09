@@ -1,12 +1,38 @@
+import * as PIXI from "pixi.js";
 import { Actor } from "../Actor.js";
 import { eventBus } from "../../core/EventBus.js";
 import type { Ghost } from "../ghost/Ghost.js";
 import type { PacmanConfig } from "../../config/pacman.config.js";
 import type { LevelContext } from "../../core/LevelContext.js";
-import type { CanvasLayer } from "../../render/CanvasLayer.js";
 
-// ── Types ───────────────────────────────────────────────────────
-interface StellarParticle {
+// ──────────────────────────────────────────────
+// EVENT HORIZON — v2
+// Cosmic horror adapted for game readability.
+// ──────────────────────────────────────────────
+
+// ── Palette ──────────────────────────────────
+const VOID_CORE       = 0x020612; // Deep blue-black body
+const VOID_EDGE       = 0x030a1f; // Slightly lighter at rim
+const PHOTON_INNER    = 0x8899ff; // Blue-shifted (forward)
+const PHOTON_OUTER    = 0x4455cc; // Soft glow ring
+const PHOTON_TRAILING = 0x664488; // Red-shifted (rear)
+const PHOTON_BUFFED   = 0xccddff; // Buffed bright ring
+const ACCRETION_DISK  = 0x4466aa; // Buffed disk fill
+const MOUTH_GLOW      = 0x223366; // Light escaping mouth
+const MOUTH_BUFFED    = 0x4466cc; // Buffed mouth interior
+const CHERENKOV_BASE  = 0x3344aa; // Trail core
+const CHERENKOV_GLOW  = 0x8899ff; // Trail glow
+const FLARE_WHITE     = 0xffffff;
+const GHOST_STREAK    = 0x44ccff;
+
+interface TrailNode {
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+}
+
+interface Particle {
   x: number;
   y: number;
   vx: number;
@@ -14,46 +40,19 @@ interface StellarParticle {
   life: number;
   maxLife: number;
   size: number;
-  type: "DIAMOND" | "SPARK" | "RING";
-  rotation: number;
-  rotSpeed: number;
-  active: boolean; // For allocation-free memory pools
-}
-
-interface TrailPoint {
-  x: number;
-  y: number;
-  alpha: number;
   active: boolean;
 }
 
-interface SurfaceFlare {
-  angle: number;
+interface RingVFX {
+  x: number;          // World X
+  y: number;          // World Y
+  radius: number;     // Current radius
+  maxRadius: number;  // Target max radius
   life: number;
   maxLife: number;
-  size: number;
-  active: boolean;
+  type: "DOT_SWALLOW" | "PILL_EXPAND" | "WORMHOLE_EXIT" | "WORMHOLE_ENTRY";
+  rotation: number;   // For wormhole cross orientation
 }
-
-// ── Palette (Unchanged to lock in your aesthetics) ───────────────
-// ── Palette ─────────────────────────────────────────────────────
-const BODY_NORMAL = "#2a2a7e";
-const BODY_BUFFED = "#ddaa44";
-const BODY_CORE_N = "#5555cc";
-const BODY_CORE_B = "#ffeebb";
-const BODY_EDGE_N = "rgba(120,160,255,0.8)";
-const BODY_EDGE_B = "rgba(255,255,255,0.95)";
-const MOUTH_INNER = "#ffffff";
-const MOUTH_GRAD_N = "rgba(180,210,255,0.5)";
-const MOUTH_GRAD_B = "rgba(255,245,210,0.7)";
-const MOUTH_RIM_N = "rgba(200,225,255,0.85)"; // <--- Restored
-const MOUTH_RIM_B = "#ffffff"; // <--- Restored
-const TRAIL_CLR_N = "rgba(140,160,240,0.7)";
-const TRAIL_CLR_B = "rgba(255,220,160,0.85)";
-const TRAIL_SPARK_N = "rgba(180,210,255,0.8)";
-const TRAIL_SPARK_B = "#ffffff";
-const HEART_N = "rgba(200,220,255,0.7)";
-const HEART_B = "rgba(255,245,210,0.95)";
 
 export class Pacman extends Actor {
   private config: PacmanConfig;
@@ -62,192 +61,103 @@ export class Pacman extends Actor {
   private lastDirection: { dx: number; dy: number } = { dx: 1, dy: 0 };
   private time = 0;
 
-  // Optimized Object Reuse Pools
-  private trail: TrailPoint[] = [];
-  private particles: StellarParticle[] = [];
-  private flares: SurfaceFlare[] = [];
-  private ghostEatFlash = 0;
-  private mouthStars: {
-    angle: number;
-    radius: number;
-    phase: number;
-    size: number;
-  }[] = [];
-
   private normalSpeed: number;
   private buffedSpeed: number;
 
-  // Offscreen Caching Layer
-  private cacheCanvas!: HTMLCanvasElement;
-  private cacheCtx!: CanvasRenderingContext2D;
-  private cacheSize = 0;
+  // ── Display Tree ────────────────────────
+  public container: PIXI.Container;
+  private trailGfx: PIXI.Graphics;
+  private accretionGfx: PIXI.Graphics;  // Buffed disk (behind body)
+  private bodyGfx: PIXI.Graphics;
+  private mouthGfx: PIXI.Graphics;      // Mouth interior glow (on top of body)
+  private particleGfx: PIXI.Graphics;
+  private ringVfxGfx: PIXI.Graphics;    // Eat/teleport ring effects
+  private flashGfx: PIXI.Graphics;
+  private ghostStreakGfx: PIXI.Graphics;
 
-  constructor(
-    canvasLayer: CanvasLayer,
-    levelContext: LevelContext,
-    config: PacmanConfig,
-  ) {
-    super(canvasLayer, levelContext);
+  // ── Trail buffer ────────────────────────
+  private trail: TrailNode[] = [];
+
+  // ── Particle pool ───────────────────────
+  private particles: Particle[] = [];
+
+  // ── Ring VFX pool ───────────────────────
+  private ringVfx: RingVFX[] = [];
+
+  // ── Death state ─────────────────────────
+  private deathTimer = 0;
+  private deathParticleTimer = 0;
+  private deathShrinkFactor = 0;
+  private deathConvulsePhase = 0;
+
+  // ── Ghost absorption ────────────────────
+  private ghostStreakTimer = 0;
+  private ghostStreakStartX = 0;
+  private ghostStreakStartY = 0;
+  private ghostTerminalFlash = 0;
+
+  // ── Eat flash ───────────────────────────
+  private eatFlashTimer = 0;
+  private eatFlashType: "DOT" | "PILL" | "GHOST" | null = null;
+
+  constructor(levelContext: LevelContext, config: PacmanConfig) {
+    super(levelContext);
     this.config = config;
     this.normalSpeed = this.tileSize * config.normalSpeedMultiplier;
     this.buffedSpeed = this.tileSize * config.buffedSpeedMultiplier;
     this.speed = this.normalSpeed;
     this.r = this.tileSize * config.radiusMultiplier;
 
-    // Preallocate pools to cap memory limits
-    for (let i = 0; i < 200; i++) {
+    // ── Build display tree (back to front) ──
+    this.container = new PIXI.Container();
+    this.container.isRenderGroup = true;
+
+    this.trailGfx = new PIXI.Graphics();
+    this.accretionGfx = new PIXI.Graphics();
+    this.bodyGfx = new PIXI.Graphics();
+    this.mouthGfx = new PIXI.Graphics();
+    this.particleGfx = new PIXI.Graphics();
+    this.ringVfxGfx = new PIXI.Graphics();
+    this.flashGfx = new PIXI.Graphics();
+    this.ghostStreakGfx = new PIXI.Graphics();
+
+    this.trailGfx.blendMode = "add";
+    this.accretionGfx.blendMode = "add";
+    this.bodyGfx.blendMode = "normal";
+    this.mouthGfx.blendMode = "add";
+    this.particleGfx.blendMode = "add";
+    this.ringVfxGfx.blendMode = "add";
+    this.flashGfx.blendMode = "add";
+    this.ghostStreakGfx.blendMode = "add";
+
+    this.container.addChild(this.trailGfx);
+    this.container.addChild(this.accretionGfx);
+    this.container.addChild(this.bodyGfx);
+    this.container.addChild(this.mouthGfx);
+    this.container.addChild(this.particleGfx);
+    this.container.addChild(this.ringVfxGfx);
+    this.container.addChild(this.ghostStreakGfx);
+    this.container.addChild(this.flashGfx);
+
+    // ── Pre-allocate pools ────────────────
+    for (let i = 0; i < 250; i++) {
       this.particles.push({
-        x: 0,
-        y: 0,
-        vx: 0,
-        vy: 0,
-        life: 0,
-        maxLife: 1,
-        size: 0,
-        type: "SPARK",
-        rotation: 0,
-        rotSpeed: 0,
+        x: 0, y: 0, vx: 0, vy: 0,
+        life: 0, maxLife: 1, size: 0,
         active: false,
       });
     }
-    for (let i = 0; i < 14; i++) {
-      this.trail.push({ x: 0, y: 0, alpha: 0, active: false });
-    }
-    for (let i = 0; i < 20; i++) {
-      this.flares.push({
-        angle: 0,
-        life: 0,
-        maxLife: 1,
-        size: 0,
-        active: false,
+    for (let i = 0; i < 12; i++) {
+      this.ringVfx.push({
+        x: 0, y: 0, radius: 0, maxRadius: 0,
+        life: 0, maxLife: 1, type: "DOT_SWALLOW", rotation: 0,
       });
     }
-
-    for (let i = 0; i < 28; i++) {
-      this.mouthStars.push({
-        angle: Math.random() * Math.PI * 0.5 - Math.PI * 0.25,
-        radius: 0.1 + Math.random() * 0.65,
-        phase: Math.random() * Math.PI * 2,
-        size: 0.25 + Math.random() * 0.7,
-      });
-    }
-
-    this.initCache();
   }
 
-  private get isBuffed(): boolean {
-    return this.gameState.isBuffed;
-  }
-
-  // ── Pre-Render Static Assets ──────────────────────────────────
-  private initCache(): void {
-    this.cacheSize = Math.ceil(this.r * 5); // Ensure headroom for glow leaks
-    this.cacheCanvas = document.createElement("canvas");
-    this.cacheCanvas.width = this.cacheSize * 2;
-    this.cacheCanvas.height = this.cacheSize * 2;
-    this.cacheCtx = this.cacheCanvas.getContext("2d")!;
-    this.preRenderGradients();
-  }
-
-  private preRenderGradients(): void {
-    const ctx = this.cacheCtx;
-    const size = this.cacheSize;
-    const r = this.r;
-
-    ctx.clearRect(0, 0, this.cacheCanvas.width, this.cacheCanvas.height);
-
-    // Cache [0]: Normal Ambient Glow
-    ctx.save();
-    ctx.translate(size * 0.5, size * 0.5);
-    const glowGradN = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 2.2);
-    glowGradN.addColorStop(0, "rgba(60,80,200,0.35)");
-    glowGradN.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = glowGradN;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Cache [1]: Buffed Ambient Glow
-    ctx.save();
-    ctx.translate(size * 1.5, size * 0.5);
-    const glowGradB = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 2.2);
-    glowGradB.addColorStop(0, "rgba(255,200,130,0.55)");
-    glowGradB.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = glowGradB;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Cache [2]: Normal Body
-    ctx.save();
-    ctx.translate(size * 0.5, size * 1.5);
-    const bodyGradN = ctx.createRadialGradient(0, 0, r * 0.05, 0, 0, r);
-    bodyGradN.addColorStop(0, BODY_CORE_N);
-    bodyGradN.addColorStop(0.6, BODY_NORMAL);
-    bodyGradN.addColorStop(1, "#0a0a35");
-    ctx.fillStyle = bodyGradN;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Cache [3]: Buffed Body
-    ctx.save();
-    ctx.translate(size * 1.5, size * 1.5);
-    const bodyGradB = ctx.createRadialGradient(0, 0, r * 0.05, 0, 0, r);
-    bodyGradB.addColorStop(0, BODY_CORE_B);
-    bodyGradB.addColorStop(0.6, BODY_BUFFED);
-    bodyGradB.addColorStop(1, "#664422");
-    ctx.fillStyle = bodyGradB;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // ── Pool Fetch Allocators ──────────────────────────────────────
-  private spawnParticle(config: Partial<StellarParticle>): void {
-    const p = this.particles.find((item) => !item.active);
-    if (p) {
-      Object.assign(p, config, { active: true });
-    }
-  }
-
-  private addTrailPoint(x: number, y: number): void {
-    const t = this.trail.find((item) => !item.active);
-    if (t) {
-      t.x = x;
-      t.y = y;
-      t.alpha = 1;
-      t.active = true;
-    } else {
-      // If pool full, cycle oldest
-      const oldest = this.trail[0];
-      oldest.x = x;
-      oldest.y = y;
-      oldest.alpha = 1;
-      oldest.active = true;
-      this.trail.push(this.trail.shift()!);
-    }
-  }
-
-  private spawnFlare(
-    angle: number,
-    life: number,
-    maxLife: number,
-    size: number,
-  ): void {
-    const f = this.flares.find((item) => !item.active);
-    if (f) {
-      f.angle = angle;
-      f.life = life;
-      f.maxLife = maxLife;
-      f.size = size;
-      f.active = true;
-    }
-  }
+  // ══════════════════════════════════════════
+  // PUBLIC API
+  // ══════════════════════════════════════════
 
   public spawn(): void {
     const map = this.gameState.levelData.map;
@@ -256,6 +166,7 @@ export class Pacman extends Actor {
       if (x !== -1) {
         this.x = x * this.tileSize + this.tileSize / 2;
         this.y = y * this.tileSize + this.tileSize / 2;
+        this.container.position.set(this.x, this.y);
         this.lastTeleportExit = null;
         return;
       }
@@ -264,108 +175,85 @@ export class Pacman extends Actor {
 
   public update(dt: number): void {
     this.time += dt;
+
     if (this.state === "DYING") {
+      this.updateDeath(dt);
       this.updateParticles(dt);
-      this.updateFlares(dt);
-      this.needsRedraw = true;
+      this.updateRingVfx(dt);
+      this.draw();
       return;
     }
 
     if (this.gameState.mode !== "PLAYING") return;
 
+    // ── Decay all systems ─────────────────
     this.updateTrail(dt);
     this.updateParticles(dt);
-    this.updateFlares(dt);
-
-    if (this.ghostEatFlash > 0) this.ghostEatFlash -= dt * 3;
+    this.updateRingVfx(dt);
+    this.updateGhostStreak(dt);
+    if (this.eatFlashTimer > 0) this.eatFlashTimer -= dt;
 
     this.speed = this.isBuffed ? this.buffedSpeed : this.normalSpeed;
 
+    // ── Emission ──────────────────────────
     if (this.direction.dx !== 0 || this.direction.dy !== 0) {
-      this.addTrailPoint(this.x, this.y);
-
-      const rate = this.isBuffed ? 4 : 2;
-      for (let i = 0; i < rate; i++) {
-        const sx =
-          this.x -
-          this.direction.dx * this.r * 0.6 +
-          (Math.random() - 0.5) * this.r * 0.35;
-        const sy =
-          this.y -
-          this.direction.dy * this.r * 0.6 +
-          (Math.random() - 0.5) * this.r * 0.35;
-
-        this.spawnParticle({
-          x: sx,
-          y: sy,
-          vx:
-            -this.direction.dx * (this.isBuffed ? 160 : 55) +
-            (Math.random() - 0.5) * 30,
-          vy:
-            -this.direction.dy * (this.isBuffed ? 160 : 55) +
-            (Math.random() - 0.5) * 30,
-          life: this.isBuffed ? 0.45 : 0.3,
-          maxLife: this.isBuffed ? 0.45 : 0.3,
-          size: this.isBuffed
-            ? 1.5 + Math.random() * 3.5
-            : 0.8 + Math.random() * 2,
-          type: Math.random() > 0.3 ? "DIAMOND" : "SPARK",
-          rotation: Math.random() * Math.PI * 2,
-          rotSpeed: (Math.random() - 0.5) * 10,
-        });
-      }
-
-      if (this.isBuffed && Math.random() < 0.4) {
-        this.spawnFlare(
-          Math.random() * Math.PI * 2,
-          0.15 + Math.random() * 0.2,
-          0.35,
-          1.5 + Math.random() * 4,
-        );
-      }
+      this.trail.push({ x: this.x, y: this.y, life: this.isBuffed ? 0.55 : 0.38, maxLife: this.isBuffed ? 0.55 : 0.38 });
+      this.emitHawkingParticles();
     }
 
-    const px = this.x,
-      py = this.y;
+    // ── Movement ──────────────────────────
+    const px = this.x, py = this.y;
     this.updateMovement(dt);
     this.teleport();
+    this.container.position.set(this.x, this.y);
 
-    if (
-      Math.abs(this.x - px) > this.tileSize * 2 ||
-      Math.abs(this.y - py) > this.tileSize * 2
-    ) {
-      this.trail.forEach((t) => (t.active = false));
-      this.spawnWarpVFX(px, py, true);
-      this.spawnWarpVFX(this.x, this.y, false);
+    // Teleport detected
+    if (Math.abs(this.x - px) > this.tileSize * 2 || Math.abs(this.y - py) > this.tileSize * 2) {
+      this.trail.length = 0;
+      this.spawnWormholeVFX(px, py, false); // Exit
+      this.spawnWormholeVFX(this.x, this.y, true); // Entry
     }
 
-    const g = this.getCollidedGhost();
-    if (g) {
-      if (this.isBuffed && g.state === "FRIGHTENED") {
-        this.spawnGhostConsume(g.x, g.y);
-        this.ghostEatFlash = 1;
-        eventBus.emit("ghost:eaten", {
-          ghostName: g.name,
-          points: 0,
-          ghostIndex: 0,
-        });
-      } else if (
-        !this.isBuffed &&
-        g.state !== "FRIGHTENED" &&
-        g.state !== "EATEN"
-      ) {
+    // ── Ghost collision ───────────────────
+    const ghost = this.getCollidedGhost();
+    if (ghost) {
+      if (this.isBuffed && ghost.state === "FRIGHTENED") {
+        this.beginGhostAbsorption(ghost);
+        eventBus.emit("ghost:eaten", { ghostName: ghost.name, points: 0, ghostIndex: 0 });
+      } else if (!this.isBuffed && ghost.state !== "FRIGHTENED" && ghost.state !== "EATEN") {
         this.triggerDeath();
       }
     }
-    this.needsRedraw = true;
+
+    this.tryEatTile();
+    this.draw();
   }
 
+  public changeDirection(d: { dx: number; dy: number }): void {
+    this.nextDirection = d;
+  }
+
+  public triggerDeath(): void {
+    if (this.state === "DYING") return;
+    this.state = "DYING";
+    this.speed = 0;
+    this.deathTimer = 0;
+    this.deathParticleTimer = 0;
+    this.deathShrinkFactor = 0;
+    this.deathConvulsePhase = 0;
+    eventBus.emit("pacman:death");
+  }
+
+  public destroy(): void {
+    this.container.destroy({ children: true });
+  }
+
+  // ══════════════════════════════════════════
+  // MOVEMENT
+  // ══════════════════════════════════════════
+
   private updateMovement(dt: number): void {
-    if (
-      this.direction.dx === 0 &&
-      this.direction.dy === 0 &&
-      this.nextDirection
-    ) {
+    if (this.direction.dx === 0 && this.direction.dy === 0 && this.nextDirection) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
     }
@@ -377,32 +265,28 @@ export class Pacman extends Actor {
     const n = this.getNextPosition(dt);
     this.x = n.newX;
     this.y = n.newY;
-    if (this.direction.dx !== 0 || this.direction.dy !== 0)
+    if (this.direction.dx !== 0 || this.direction.dy !== 0) {
       this.lastDirection = { ...this.direction };
+    }
     this.smoothAlign(dt);
-    const { tileX, tileY } = this.gridContext.getTile(this.x, this.y);
-    this.tryEat(tileX, tileY);
   }
 
   private tryTurn(): void {
     if (!this.nextDirection) return;
     const { centerX, centerY } = this.gridContext.getTileCenter(this.x, this.y);
     const { tileX, tileY } = this.gridContext.getTile(this.x, this.y);
-    if (
-      this.nextDirection.dx === -this.direction.dx &&
-      this.nextDirection.dy === -this.direction.dy
-    ) {
+
+    if (this.nextDirection.dx === -this.direction.dx && this.nextDirection.dy === -this.direction.dy) {
       this.direction = this.nextDirection;
       this.nextDirection = null;
       return;
     }
-    const tx = tileX + this.nextDirection.dx,
-      ty = tileY + this.nextDirection.dy;
+
+    const tx = tileX + this.nextDirection.dx;
+    const ty = tileY + this.nextDirection.dy;
     if (this.gridContext.isWall(tx, ty)) return;
-    if (
-      Math.sqrt((this.x - centerX) ** 2 + (this.y - centerY) ** 2) <
-      this.tileSize * this.config.turnThreshold
-    ) {
+
+    if (Math.hypot(this.x - centerX, this.y - centerY) < this.tileSize * this.config.turnThreshold) {
       if (this.nextDirection.dx !== 0) this.y = centerY;
       if (this.nextDirection.dy !== 0) this.x = centerX;
       this.direction = this.nextDirection;
@@ -417,181 +301,152 @@ export class Pacman extends Actor {
     if (this.direction.dy !== 0) this.x += (centerX - this.x) * f;
   }
 
-  public changeDirection(d: { dx: number; dy: number }): void {
-    this.nextDirection = d;
-  }
-
   private getCollidedGhost(): Ghost | null {
     for (const g of this.levelContext.ghosts) {
-      if (Math.sqrt((this.x - g.x) ** 2 + (this.y - g.y) ** 2) < this.r + g.r)
-        return g;
+      if (Math.hypot(this.x - g.x, this.y - g.y) < this.r + g.r) return g;
     }
     return null;
   }
 
-  private tryEat(tx: number, ty: number): void {
-    if (this.gameState.activeDots.has(`${ty},${tx}`)) {
-      this.spawnDotEat(tx, ty);
-      eventBus.emit("dot:collect", { position: { i: ty, j: tx } });
+  private tryEatTile(): void {
+    const { tileX, tileY } = this.gridContext.getTile(this.x, this.y);
+    if (this.gameState.activeDots.has(`${tileY},${tileX}`)) {
+      this.spawnDotSwallowVFX(
+        tileX * this.tileSize + this.tileSize / 2,
+        tileY * this.tileSize + this.tileSize / 2,
+      );
+      this.eatFlashTimer = 0.1;
+      this.eatFlashType = "DOT";
+      eventBus.emit("dot:collect", { position: { i: tileY, j: tileX } });
     }
-    if (this.gameState.activePills.has(`${ty},${tx}`)) {
-      this.spawnPillEat(tx, ty);
-      eventBus.emit("power_pill:collect", { position: { i: ty, j: tx } });
-    }
-  }
-
-  // ── Spawn Handlers (Converted to write to Object Recycler Pools) ──
-  private spawnWarpVFX(x: number, y: number, isExit: boolean): void {
-    this.ghostEatFlash = 0.8;
-
-    this.spawnParticle({
-      x,
-      y,
-      vx: 0,
-      vy: 0,
-      life: 0.25,
-      maxLife: 0.25,
-      size: isExit ? this.r * 0.15 : this.r * 3.5,
-      type: "RING",
-      rotation: 0,
-      rotSpeed: 0,
-    });
-
-    const shardCount = 30;
-    for (let i = 0; i < shardCount; i++) {
-      const a = (i / shardCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
-      const speed = isExit
-        ? 180 + Math.random() * 280
-        : 30 + Math.random() * 60;
-      this.spawnParticle({
-        x,
-        y,
-        vx: Math.cos(a) * speed,
-        vy: Math.sin(a) * speed,
-        life: 0.15 + Math.random() * 0.2,
-        maxLife: 0.35,
-        size: 2 + Math.random() * 3.5,
-        type: "DIAMOND",
-        rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 14,
-      });
-    }
-
-    const starCount = 14;
-    for (let i = 0; i < starCount; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const speed = isExit
-        ? 200 + Math.random() * 320
-        : 25 + Math.random() * 55;
-      this.spawnParticle({
-        x,
-        y,
-        vx: Math.cos(a) * speed,
-        vy: Math.sin(a) * speed,
-        life: 0.1 + Math.random() * 0.12,
-        maxLife: 0.22,
-        size: 1.5 + Math.random() * 2.5,
-        type: "SPARK",
-        rotation: 0,
-        rotSpeed: 0,
-      });
+    if (this.gameState.activePills.has(`${tileY},${tileX}`)) {
+      this.spawnPillExpandVFX();
+      this.eatFlashTimer = 0.45;
+      this.eatFlashType = "PILL";
+      eventBus.emit("power_pill:collect", { position: { i: tileY, j: tileX } });
     }
   }
 
-  private spawnDotEat(tx: number, ty: number): void {
-    const cx = tx * this.tileSize + this.tileSize / 2;
-    const cy = ty * this.tileSize + this.tileSize / 2;
-    for (let i = 0; i < 5; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = 35 + Math.random() * 50;
+  // ══════════════════════════════════════════
+  // VFX SPAWNERS
+  // ══════════════════════════════════════════
+
+  private spawnRingVFX(x: number, y: number, maxR: number, life: number, type: RingVFX["type"], rot: number = 0): void {
+    for (const r of this.ringVfx) {
+      if (r.life <= 0) {
+        r.x = x;
+        r.y = y;
+        r.radius = type === "PILL_EXPAND" || type === "WORMHOLE_ENTRY" ? 0 : maxR;
+        r.maxRadius = maxR;
+        r.life = life;
+        r.maxLife = life;
+        r.type = type;
+        r.rotation = rot;
+        return;
+      }
+    }
+  }
+
+  private spawnDotSwallowVFX(wx: number, wy: number): void {
+    this.spawnRingVFX(wx, wy, 7, 0.18, "DOT_SWALLOW");
+  }
+
+  private spawnPillExpandVFX(): void {
+    this.spawnRingVFX(this.x, this.y, this.r * 3.5, 0.45, "PILL_EXPAND");
+  }
+
+  private spawnWormholeVFX(wx: number, wy: number, isEntry: boolean): void {
+    const type = isEntry ? "WORMHOLE_ENTRY" : "WORMHOLE_EXIT";
+    const life = isEntry ? 0.35 : 0.25;
+    const rot = Math.random() * Math.PI;
+    this.spawnRingVFX(wx, wy, this.r * 1.6, life, type, rot);
+  }
+
+  private spawnParticle(overrides: Partial<Particle>): void {
+    for (const p of this.particles) {
+      if (!p.active) {
+        Object.assign(p, {
+          x: 0, y: 0, vx: 0, vy: 0,
+          life: 1, maxLife: 1, size: 1.5,
+        }, overrides, { active: true });
+        return;
+      }
+    }
+  }
+
+  private emitHawkingParticles(): void {
+    const rate = this.isBuffed ? 0.7 : 0.25;
+    if (Math.random() < rate) {
+      const rimAngle = Math.random() * Math.PI * 2;
+      const dist = this.r * (0.85 + Math.random() * 0.3);
       this.spawnParticle({
-        x: cx,
-        y: cy,
-        vx: Math.cos(a) * s,
-        vy: Math.sin(a) * s,
-        life: 0.12 + Math.random() * 0.1,
-        maxLife: 0.22,
-        size: 0.8 + Math.random() * 1.5,
-        type: "DIAMOND",
-        rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 6,
+        x: this.x + Math.cos(rimAngle) * dist,
+        y: this.y + Math.sin(rimAngle) * dist,
+        vx: Math.cos(rimAngle) * (50 + Math.random() * 140),
+        vy: Math.sin(rimAngle) * (50 + Math.random() * 140),
+        life: 0.3 + Math.random() * 0.6,
+        maxLife: 0.9,
+        size: 0.5 + Math.random() * 2.2,
       });
     }
   }
 
-  private spawnPillEat(tx: number, ty: number): void {
-    const cx = tx * this.tileSize + this.tileSize / 2;
-    const cy = ty * this.tileSize + this.tileSize / 2;
-    this.spawnParticle({
-      x: cx,
-      y: cy,
-      vx: 0,
-      vy: 0,
-      life: 0.5,
-      maxLife: 0.5,
-      size: this.r * 0.3,
-      type: "RING",
-      rotation: 0,
-      rotSpeed: 0,
-    });
-
-    for (let i = 0; i < 18; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = 90 + Math.random() * 180;
+  private emitDeathParticles(): void {
+    const count = 2 + Math.floor(this.deathShrinkFactor * 4);
+    for (let i = 0; i < count; i++) {
+      // Polar jets along last direction axis
+      const jetAxis = this.getAngle();
+      const isJet = Math.random() < 0.5;
+      const angle = isJet
+        ? jetAxis + (Math.random() - 0.5) * 0.6 + (Math.random() < 0.5 ? 0 : Math.PI)
+        : Math.random() * Math.PI * 2;
+      const speed = isJet ? 180 + Math.random() * 250 : 60 + Math.random() * 120;
       this.spawnParticle({
-        x: cx,
-        y: cy,
-        vx: Math.cos(a) * s,
-        vy: Math.sin(a) * s,
-        life: 0.18 + Math.random() * 0.3,
-        maxLife: 0.48,
-        size: 1.5 + Math.random() * 3,
-        type: "SPARK",
-        rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 12,
+        x: this.x + Math.cos(angle) * this.r * 0.3,
+        y: this.y + Math.sin(angle) * this.r * 0.3,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.4 + Math.random() * 0.7,
+        maxLife: 1.1,
+        size: 0.4 + Math.random() * 2.5,
       });
     }
   }
 
-  private spawnGhostConsume(gx: number, gy: number): void {
-    this.spawnParticle({
-      x: gx,
-      y: gy,
-      vx: 0,
-      vy: 0,
-      life: 0.45,
-      maxLife: 0.45,
-      size: 4,
-      type: "RING",
-      rotation: 0,
-      rotSpeed: 0,
-    });
-    for (let i = 0; i < 30; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = 100 + Math.random() * 180;
-      this.spawnParticle({
-        x: gx,
-        y: gy,
-        vx: Math.cos(a) * s,
-        vy: Math.sin(a) * s,
-        life: 0.22 + Math.random() * 0.4,
-        maxLife: 0.62,
-        size: 1.5 + Math.random() * 3.5,
-        type: Math.random() > 0.5 ? "DIAMOND" : "SPARK",
-        rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 14,
-      });
+  // ══════════════════════════════════════════
+  // GHOST ABSORPTION
+  // ══════════════════════════════════════════
+
+  private beginGhostAbsorption(ghost: Ghost): void {
+    this.ghostStreakTimer = 0.45;
+    this.ghostStreakStartX = ghost.x;
+    this.ghostStreakStartY = ghost.y;
+    this.ghostTerminalFlash = 0;
+    this.eatFlashTimer = 0.4;
+    this.eatFlashType = "GHOST";
+  }
+
+  private updateGhostStreak(dt: number): void {
+    if (this.ghostStreakTimer > 0) {
+      this.ghostStreakTimer -= dt;
+      // Terminal flash when streak reaches center
+      if (this.ghostStreakTimer <= 0.1 && this.ghostTerminalFlash === 0) {
+        this.ghostTerminalFlash = 0.15;
+      }
+    }
+    if (this.ghostTerminalFlash > 0) {
+      this.ghostTerminalFlash -= dt;
     }
   }
 
-  // ── Array Pool Modifiers (Replaces Splice Trash Operations) ────
+  // ══════════════════════════════════════════
+  // UPDATE SYSTEMS
+  // ══════════════════════════════════════════
+
   private updateTrail(dt: number): void {
-    // Raised decay from 1.1/1.7 to 4.5/6.5 for an instant power-burst snap
-    const decay = this.isBuffed ? 4.5 : 6.5;
-    for (const t of this.trail) {
-      if (!t.active) continue;
-      t.alpha -= dt * decay;
-      if (t.alpha <= 0) t.active = false;
+    for (let i = this.trail.length - 1; i >= 0; i--) {
+      this.trail[i].life -= dt;
+      if (this.trail[i].life <= 0) this.trail.splice(i, 1);
     }
   }
 
@@ -603,433 +458,579 @@ export class Pacman extends Actor {
         p.active = false;
         continue;
       }
-      if (p.type !== "RING") {
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.vx *= 0.9;
-        p.vy *= 0.9;
-        p.rotation += p.rotSpeed * dt;
-      } else {
-        p.size += 900 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.93;
+      p.vy *= 0.93;
+    }
+  }
+
+  private updateRingVfx(dt: number): void {
+    for (const r of this.ringVfx) {
+      if (r.life <= 0) continue;
+      r.life -= dt;
+      const progress = 1 - r.life / r.maxLife;
+      if (r.type === "DOT_SWALLOW") {
+        r.radius = r.maxRadius * (1 - progress);
+      } else if (r.type === "PILL_EXPAND" || r.type === "WORMHOLE_ENTRY") {
+        r.radius = r.maxRadius * progress;
+      }
+      // WORMHOLE_EXIT: stays at max and fades
+    }
+  }
+
+  private updateDeath(dt: number): void {
+    this.deathTimer += dt;
+    this.deathShrinkFactor = Math.min(1, Math.max(0, (this.deathTimer - 0.3) / 1.5));
+
+    // Convulsion phase (0-0.3s)
+    if (this.deathTimer < 0.3) {
+      this.deathConvulsePhase += dt * 50; // 8Hz
+    }
+
+    // Particle emission during evaporation (0.3-1.8s)
+    if (this.deathTimer >= 0.3 && this.deathTimer < 1.8) {
+      this.deathParticleTimer += dt;
+      const interval = 0.06 - this.deathShrinkFactor * 0.04; // Gets faster
+      while (this.deathParticleTimer > interval) {
+        this.deathParticleTimer -= interval;
+        this.emitDeathParticles();
       }
     }
   }
 
-  private updateFlares(dt: number): void {
-    for (const f of this.flares) {
-      if (!f.active) continue;
-      f.life -= dt;
-      if (f.life <= 0) f.active = false;
-    }
-  }
+  // ══════════════════════════════════════════
+  // HELPERS
+  // ══════════════════════════════════════════
 
-  public triggerDeath(): void {
-    if (this.state === "DYING") return;
-    this.state = "DYING";
-    this.speed = 0;
-    eventBus.emit("pacman:death");
-  }
-
-  // ── Render Processing Pipeline ─────────────────────────────────
-  public draw(): void {
-    this.drawDebug();
-    return;
-    if (this.r <= 0) return;
-    this.drawTrailRibbon();
-    this.drawParticles();
-    if (this.state === "DYING") this.drawDead();
-    else this.drawAlive();
-  }
-
-  private drawTrailRibbon(): void {
-    if (this.state === "DYING") return;
-    const ctx = this.layer.ctx;
-
-    const w = this.r * 0.35;
-    const gap = this.isBuffed ? this.r * 0.5 : 0; // Distinct dual spacing
-    const coreClr = this.isBuffed ? TRAIL_CLR_B : TRAIL_CLR_N;
-    const sparkClr = this.isBuffed ? TRAIL_SPARK_B : TRAIL_SPARK_N;
-
-    const activePoints = this.trail.filter((t) => t.active);
-    if (activePoints.length < 2) return;
-
-    ctx.save();
-    ctx.lineCap = "butt"; // Sharp, blocky beam cuts
-    ctx.lineJoin = "miter"; // Boxy alignment when cornering
-    ctx.miterLimit = 2;
-
-    const sides = this.isBuffed ? [-1, 1] : [0];
-
-    for (const side of sides) {
-      const offset = side * gap * 0.5;
-
-      // Continuous execution path
-      ctx.beginPath();
-      let first = true;
-      for (const p of activePoints) {
-        const dx = this.lastDirection.dy * offset;
-        const dy = -this.lastDirection.dx * offset;
-
-        if (first) {
-          ctx.moveTo(p.x + dx, p.y + dy);
-          first = false;
-        } else {
-          ctx.lineTo(p.x + dx, p.y + dy);
-        }
-      }
-
-      // Neon Flare Pass
-      ctx.globalAlpha = 0.35;
-      ctx.lineWidth = w * (this.isBuffed ? 2.5 : 1.8);
-      ctx.strokeStyle = coreClr;
-      ctx.stroke();
-
-      // Sharp Core Filament Pass
-      ctx.globalAlpha = 0.9;
-      ctx.lineWidth = this.isBuffed ? 3.5 : 1.5;
-      ctx.strokeStyle = sparkClr;
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-
-  private drawParticles(): void {
-    const ctx = this.layer.ctx;
-
-    // Batch operations state wrapper saved once outside individual updates
-    ctx.save();
-    for (const p of this.particles) {
-      if (!p.active) continue;
-      const a = Math.max(0, p.life / p.maxLife);
-      if (a <= 0.01) continue;
-
-      ctx.globalAlpha = a * 0.8;
-
-      // Ring handler
-      if (p.type === "RING") {
-        ctx.strokeStyle = "rgba(255,255,255,0.15)";
-        ctx.lineWidth = 6 * a; // Double stroke mimic bloom layer
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.strokeStyle = "rgba(255,255,255,0.8)";
-        ctx.lineWidth = 1.5 * a;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      // Diamond handler
-      else if (p.type === "DIAMOND") {
-        const s = p.size * a;
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rotation);
-
-        ctx.fillStyle = "rgba(255,255,255,0.3)"; // Fake bloom substrate
-        ctx.beginPath();
-        ctx.moveTo(0, -s * 1.4);
-        ctx.lineTo(s * 0.7, 0);
-        ctx.lineTo(0, s * 1.4);
-        ctx.lineTo(-s * 0.7, 0);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.moveTo(0, -s);
-        ctx.lineTo(s * 0.5, 0);
-        ctx.lineTo(0, s);
-        ctx.lineTo(-s * 0.5, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-      // Spark block tracker
-      else {
-        const s = p.size * a;
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rotation);
-        ctx.fillStyle = "rgba(255,255,255,0.25)";
-        ctx.fillRect(-s * 0.6, -s * 1.3, s * 1.2, s * 2.6);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(-s * 0.25, -s, s * 0.5, s * 2);
-        ctx.restore();
-      }
-    }
-    ctx.restore();
+  private get isBuffed(): boolean {
+    return this.gameState.isBuffed;
   }
 
   private getAngle(): number {
-    const d =
-      this.direction.dx !== 0 || this.direction.dy !== 0
-        ? this.direction
-        : this.lastDirection;
-    if (d.dx === -1) return Math.PI;
-    if (d.dx === 1) return 0;
-    if (d.dy === -1) return -Math.PI / 2;
-    if (d.dy === 1) return Math.PI / 2;
-    return 0;
+    const d = (this.direction.dx !== 0 || this.direction.dy !== 0)
+      ? this.direction
+      : this.lastDirection;
+    return Math.atan2(d.dy, d.dx);
   }
 
-  private drawAlive(): void {
-    const ctx = this.layer.ctx;
-    const r = this.r;
-    const rot = this.getAngle();
-    const moving = this.direction.dx !== 0 || this.direction.dy !== 0;
-    const t = this.time * 1000;
+  // ── FIX 1: Buffed no longer bloats the body size ──
+  // Buffed state is communicated through the accretion disk, brighter photon ring,
+  // and brighter mouth — NOT through making the body bigger which creates visual clutter.
+  private getDisplayRadius(): number {
+    if (this.state === "DYING" && this.deathTimer < 0.3) {
+      const convulse = 1 + Math.sin(this.deathConvulsePhase) * 0.12;
+      return this.r * convulse;
+    }
+    if (this.state === "DYING") {
+      return this.r * (1 - this.deathShrinkFactor * 0.88);
+    }
+    // Same size regardless of buffed state
+    return this.r;
+  }
 
+  // ══════════════════════════════════════════
+  // DRAW
+  // ══════════════════════════════════════════
+
+  public draw(): void {
+    this.trailGfx.clear();
+    this.accretionGfx.clear();
+    this.bodyGfx.clear();
+    this.mouthGfx.clear();
+    this.particleGfx.clear();
+    this.ringVfxGfx.clear();
+    this.flashGfx.clear();
+    this.ghostStreakGfx.clear();
+
+    const r = this.getDisplayRadius();
+    if (r <= 0.3) return;
+
+    if (this.state === "DYING") {
+      this.drawDeathBody(r);
+      this.drawParticles();
+      this.drawRingVfx();
+      return;
+    }
+
+    this.drawTrail();
+    if (this.isBuffed) this.drawAccretionDisk(r);
+    this.drawBody(r);
+    this.drawMouthGlow(r);
+    this.drawParticles();
+    this.drawRingVfx();
+    this.drawGhostStreak();
+    this.drawEatFlash(r);
+  }
+
+  // ── TRAIL ──────────────────────────────────
+
+  private drawTrail(): void {
+    if (this.trail.length < 2) return;
+
+    const baseWidth = this.r * (this.isBuffed ? 0.55 : 0.35);
+
+    for (let i = 1; i < this.trail.length; i++) {
+      const p1 = this.trail[i - 1];
+      const p2 = this.trail[i];
+      const ratio = p2.life / p2.maxLife;
+      if (ratio <= 0.01) continue;
+
+      const x1 = p1.x - this.x;
+      const y1 = p1.y - this.y;
+      const x2 = p2.x - this.x;
+      const y2 = p2.y - this.y;
+
+      const width = baseWidth * ratio;
+
+      // Soft outer glow
+      this.trailGfx.moveTo(x1, y1);
+      this.trailGfx.lineTo(x2, y2);
+      this.trailGfx.stroke({
+        color: CHERENKOV_BASE,
+        width: width * 3.5,
+        alpha: ratio * (this.isBuffed ? 0.2 : 0.12),
+        cap: "round",
+        join: "round",
+      });
+
+      // Core line
+      this.trailGfx.moveTo(x1, y1);
+      this.trailGfx.lineTo(x2, y2);
+      this.trailGfx.stroke({
+        color: this.isBuffed ? FLARE_WHITE : CHERENKOV_GLOW,
+        width: width * (this.isBuffed ? 1.0 : 0.55),
+        alpha: ratio * (this.isBuffed ? 0.65 : 0.5),
+        cap: "round",
+        join: "round",
+      });
+    }
+  }
+
+  // ── ACCRETION DISK (buffed only) ──────────
+  // ── FIX 1: Cleaner disk — single swept ring instead of 8 concentric strokes ──
+
+  private drawAccretionDisk(r: number): void {
+    // Single thin, bright ring at the photon sphere radius — much cleaner
+    const diskR = r * 1.2;
+    this.accretionGfx.circle(0, 0, diskR);
+    this.accretionGfx.stroke({
+      color: ACCRETION_DISK,
+      width: 2.5,
+      alpha: 0.35,
+    });
+
+    // Faint outer whisper
+    this.accretionGfx.circle(0, 0, diskR + 3);
+    this.accretionGfx.stroke({
+      color: PHOTON_BUFFED,
+      width: 1,
+      alpha: 0.15,
+    });
+  }
+
+  // ── BODY ───────────────────────────────────
+  // ── FIX 2: Increased visibility in normal state — lighter void fill, thicker photon ring ──
+
+  private drawBody(r: number): void {
+    const t = this.time * 1000;
+    const moving = this.direction.dx !== 0 || this.direction.dy !== 0;
+    const angle = this.getAngle();
+
+    // Mouth
     let mouth: number;
     if (moving) {
-      const sf = this.isBuffed
-        ? this.config.mouthSpeed * 1.55
-        : this.config.mouthSpeed;
-      mouth = Math.abs(Math.sin(t * sf)) * this.config.maxMouthAngle;
+      const speedMult = this.isBuffed ? 1.35 : 1;
+      mouth = Math.abs(Math.sin(t * this.config.mouthSpeed * speedMult)) * this.config.maxMouthAngle;
     } else {
       mouth = this.config.idleMouthAngle;
     }
-    mouth = Math.max(0.08, Math.min(mouth, Math.PI * 0.45));
-    const sa = mouth,
-      ea = Math.PI * 2 - mouth;
-    const innerRim = r * 0.3;
+    mouth = Math.max(0.06, Math.min(mouth, Math.PI * 0.5));
+    if (this.isBuffed) mouth = Math.min(mouth * 1.15, Math.PI * 0.52);
 
-    ctx.save();
-    ctx.translate(this.x, this.y);
+    const sa = angle + mouth;
+    const ea = angle + Math.PI * 2 - mouth;
 
-    // 1. Ghost Eat Flash Layer Mimic
-    if (this.ghostEatFlash > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${0.12 * this.ghostEatFlash})`;
-      ctx.beginPath();
-      ctx.arc(0, 0, r + 26, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,255,255,${0.25 * this.ghostEatFlash})`;
-      ctx.beginPath();
-      ctx.arc(0, 0, r + 10, 0, Math.PI * 2);
-      ctx.fill();
+    // ── 1. Void fill with subtle radial gradient ──
+    // Lighter than before — base alpha raised so it doesn't disappear on dark backgrounds
+    const gradSteps = 6;
+    for (let i = gradSteps; i >= 0; i--) {
+      const frac = i / gradSteps;
+      const gradR = r * frac;
+      if (gradR < 0.3) continue;
+      const cr = ((VOID_CORE >> 16) & 0xff) + ((VOID_EDGE >> 16 & 0xff) - (VOID_CORE >> 16 & 0xff)) * frac;
+      const cg = ((VOID_CORE >> 8) & 0xff) + ((VOID_EDGE >> 8 & 0xff) - (VOID_CORE >> 8 & 0xff)) * frac;
+      const cb = (VOID_CORE & 0xff) + ((VOID_EDGE & 0xff) - (VOID_CORE & 0xff)) * frac;
+      const color = (Math.round(cr) << 16) | (Math.round(cg) << 8) | Math.round(cb);
+
+      this.bodyGfx.moveTo(0, 0);
+      this.bodyGfx.arc(0, 0, gradR, sa, ea, false);
+      this.bodyGfx.lineTo(0, 0);
+      this.bodyGfx.closePath();
+      // Raised base alpha from 0.5→0.7 so the body is visible against dark tiles
+      this.bodyGfx.fill({ color, alpha: 0.7 + frac * 0.3 });
     }
 
-    // 2. High-Performance Copy From Pre-Rendered Ambient Glow Buffer
-    const glowX = this.isBuffed ? this.cacheSize * 1.5 : this.cacheSize * 0.5;
-    ctx.drawImage(
-      this.cacheCanvas,
-      glowX - this.cacheSize * 0.5,
-      this.cacheSize * 0.5 - this.cacheSize * 0.5,
-      this.cacheSize,
-      this.cacheSize,
-      -this.cacheSize * 0.5,
-      -this.cacheSize * 0.5,
-      this.cacheSize,
-      this.cacheSize,
-    );
+    // ── 2. Photon ring: outer soft glow ──
+    this.bodyGfx.moveTo(0, 0);
+    this.bodyGfx.arc(0, 0, r, sa, ea, false);
+    this.bodyGfx.lineTo(0, 0);
+    this.bodyGfx.closePath();
+    this.bodyGfx.stroke({
+      color: this.isBuffed ? PHOTON_BUFFED : PHOTON_OUTER,
+      // Thicker in both states for visibility
+      width: this.isBuffed ? 7 : 5,
+      alpha: this.isBuffed ? 0.45 : 0.4,
+      alignment: 0.5,
+    });
 
-    ctx.rotate(rot);
-
-    // 3. Dynamic Surface Flares Vector Layering
-    for (const flare of this.flares) {
-      if (!flare.active) continue;
-      const fa = flare.life / flare.maxLife;
-      const fx = Math.cos(flare.angle) * r * 0.8;
-      const fy = Math.sin(flare.angle) * r * 0.8;
-      const fs = flare.size * fa;
-
-      ctx.fillStyle = "rgba(255,180,80,0.15)";
-      ctx.beginPath();
-      ctx.arc(fx, fy, fs * 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,220,160,0.4)";
-      ctx.beginPath();
-      ctx.arc(fx, fy, fs * 1.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
-      ctx.beginPath();
-      ctx.arc(fx, fy, fs * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 4. Copied Pre-rendered Gradient Body Core Base Slice
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, sa, ea);
-    ctx.lineTo(Math.cos(ea) * innerRim, Math.sin(ea) * innerRim);
-    ctx.lineTo(Math.cos(sa) * innerRim, Math.sin(sa) * innerRim);
-    ctx.closePath();
-    ctx.clip();
-
-    const bodyX = this.isBuffed ? this.cacheSize * 1.5 : this.cacheSize * 0.5;
-    ctx.drawImage(
-      this.cacheCanvas,
-      bodyX - r,
-      this.cacheSize * 1.5 - r,
-      r * 2,
-      r * 2,
-      -r,
-      -r,
-      r * 2,
-      r * 2,
-    );
-    ctx.restore();
-
-    // 5. Outer Edge Wireframe Rim Layering
-    const edgeClr = this.isBuffed ? BODY_EDGE_B : BODY_EDGE_N;
-    ctx.strokeStyle = this.isBuffed
-      ? "rgba(255,255,255,0.15)"
-      : "rgba(120,160,255,0.2)";
-    ctx.lineWidth = this.isBuffed ? 7 : 4;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, sa, ea);
-    ctx.stroke(); // Faux Bloom Rim
-
-    ctx.strokeStyle = edgeClr;
-    ctx.lineWidth = this.isBuffed ? 2.2 : 1.6;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, sa, ea);
-    ctx.stroke(); // Core Crisp Rim
-
-    // 6. Mouth Interior Clips & Star Twinkles
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, sa, ea);
-    ctx.lineTo(Math.cos(ea) * innerRim, Math.sin(ea) * innerRim);
-    ctx.lineTo(Math.cos(sa) * innerRim, Math.sin(sa) * innerRim);
-    ctx.closePath();
-    ctx.clip();
-
-    const mouthGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-    mouthGrad.addColorStop(0, MOUTH_INNER);
-    mouthGrad.addColorStop(0.25, this.isBuffed ? MOUTH_GRAD_B : MOUTH_GRAD_N);
-    mouthGrad.addColorStop(
-      0.6,
-      this.isBuffed ? "rgba(180,130,60,0.35)" : "rgba(25,35,100,0.35)",
-    );
-    mouthGrad.addColorStop(1, "rgba(0,0,0,0.85)");
-    ctx.fillStyle = mouthGrad;
-    ctx.fillRect(-r, -r, r * 2, r * 2);
-
-    for (const star of this.mouthStars) {
-      const starR = star.radius * r;
-      if (starR <= 0.4) continue;
-      const sx = Math.cos(star.angle) * starR;
-      const sy = Math.sin(star.angle) * starR;
-      const twinkle = 0.5 + 0.5 * Math.sin(t * 0.005 + star.phase);
-      const ss = Math.max(0.12, star.size * twinkle);
-      ctx.fillStyle = `rgba(255,255,255,${twinkle * 0.75})`;
-      ctx.beginPath();
-      ctx.arc(sx, sy, ss, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // 7. Mouth Edge Flare Highlights
-    const rimClr = this.isBuffed ? MOUTH_RIM_B : MOUTH_RIM_N;
-    ctx.strokeStyle = rimClr;
-    ctx.lineWidth = this.isBuffed ? 2.5 : 1.6;
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, Math.max(0, sa - 0.06), sa + 0.18);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, r - 2, ea - 0.18, Math.min(Math.PI * 2, ea + 0.06));
-    ctx.stroke();
-
-    // 8. Core Auriferous Pulsing Vector Heart
-    const heartClr = this.isBuffed ? HEART_B : HEART_N;
-    const pulse = 1 + Math.sin(t * 0.012) * 0.22;
-    const heartR = Math.max(0.4, r * 0.09 * pulse);
-
-    ctx.fillStyle = "rgba(255,255,255,0.15)";
-    ctx.beginPath();
-    ctx.arc(0, 0, heartR * 4.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = heartClr;
-    ctx.globalAlpha = 0.3;
-    ctx.beginPath();
-    ctx.arc(0, 0, heartR * 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1.0;
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(0, 0, heartR, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (this.isBuffed) {
-      const pulseAlpha = 0.06 + Math.sin(t * 0.018) * 0.05;
-      ctx.fillStyle = `rgba(255,255,255,${pulseAlpha})`;
-      ctx.beginPath();
-      ctx.arc(0, 0, r - 2, sa, ea);
-      ctx.lineTo(Math.cos(ea) * innerRim, Math.sin(ea) * innerRim);
-      ctx.lineTo(Math.cos(sa) * innerRim, Math.sin(sa) * innerRim);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    ctx.restore();
+    // ── 3. Photon ring: inner sharp ring with Doppler shift ──
+    this.drawDopplerRing(r, sa, ea, angle);
   }
 
-  private drawDead(): void {
-    const p = Math.min(1, this.gameState.deathProgress);
-    const ctx = this.layer.ctx;
-    const r = this.r;
+  // ── FIX 2: Thicker Doppler ring for readability ──
 
-    ctx.save();
-    ctx.translate(this.x, this.y);
+  private drawDopplerRing(r: number, sa: number, ea: number, angle: number): void {
+    const segments = 48;
+    for (let i = 0; i < segments; i++) {
+      const a1 = sa + ((ea - sa) / segments) * i;
+      const a2 = sa + ((ea - sa) / segments) * (i + 1);
 
-    if (p < 0.2) {
-      const s = 1 - p * 2;
-      const flash = Math.floor(p * 60) % 2 === 0;
-      const clr = flash ? "#ffffff" : "#ddccaa";
+      const midAngle = (a1 + a2) / 2;
+      const doppler = 0.5 + 0.5 * Math.cos(midAngle - angle);
+      const brightness = 0.5 + doppler * 0.5;
 
-      ctx.strokeStyle = "rgba(221,204,170,0.2)";
-      ctx.lineWidth = 8 * Math.max(0.1, s);
-      ctx.beginPath();
-      ctx.arc(0, 0, r * s, 0, Math.PI * 2);
-      ctx.stroke();
+      const cr = Math.round(100 + doppler * 155);
+      const cg = Math.round(60 + doppler * 95);
+      const cb = Math.round(180 + doppler * 75);
+      const color = (cr << 16) | (cg << 8) | cb;
 
-      ctx.strokeStyle = clr;
-      ctx.lineWidth = 3 * Math.max(0.1, s);
-      ctx.beginPath();
-      ctx.arc(0, 0, r * s, 0, Math.PI * 2);
-      ctx.stroke();
+      this.bodyGfx.moveTo(Math.cos(a1) * r, Math.sin(a1) * r);
+      this.bodyGfx.arc(0, 0, r, a1, a2, false);
+      this.bodyGfx.stroke({
+        color,
+        // Thicker in normal state, slightly thinner in buffed (disk carries the weight)
+        width: this.isBuffed ? 2.5 : 2.2,
+        alpha: brightness * (this.isBuffed ? 0.95 : 0.85),
+        cap: "butt",
+      });
+    }
+  }
 
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.12, 0, Math.PI * 2);
-      ctx.fill();
+  // ── MOUTH INTERIOR GLOW ────────────────────
+  // ── FIX 2: Brighter mouth glow so the opening reads clearly ──
+
+  private drawMouthGlow(r: number): void {
+    const moving = this.direction.dx !== 0 || this.direction.dy !== 0;
+    const t = this.time * 1000;
+    const angle = this.getAngle();
+
+    let mouth: number;
+    if (moving) {
+      const speedMult = this.isBuffed ? 1.35 : 1;
+      mouth = Math.abs(Math.sin(t * this.config.mouthSpeed * speedMult)) * this.config.maxMouthAngle;
     } else {
-      const bp = (p - 0.2) / 0.8;
-      const a = Math.max(0, 1 - bp);
-      const ringR = r * (1 + bp * 4);
-
-      ctx.strokeStyle = `rgba(180,160,220,${a * 0.25})`;
-      ctx.lineWidth = 6 * a;
-      ctx.beginPath();
-      ctx.arc(0, 0, ringR, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.strokeStyle = `rgba(220,210,240,${a * 0.7})`;
-      ctx.lineWidth = 2.5 * a;
-      ctx.beginPath();
-      ctx.arc(0, 0, ringR, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.05 * a, 0, Math.PI * 2);
-      ctx.fill();
+      mouth = this.config.idleMouthAngle;
     }
+    mouth = Math.max(0.06, Math.min(mouth, Math.PI * 0.5));
+    if (this.isBuffed) mouth = Math.min(mouth * 1.15, Math.PI * 0.52);
 
-    ctx.restore();
+    const sa = angle + mouth;
+    const ea = angle + Math.PI * 2 - mouth;
+    const mouthSize = Math.PI * 2 - (ea - sa);
+
+    if (mouthSize < 0.05) return;
+
+    const glowR = r * 0.85;
+    // Raised alpha floor for visibility
+    const alpha = Math.min(1, mouthSize / 0.6) * (this.isBuffed ? 0.35 : 0.22);
+
+    this.mouthGfx.moveTo(0, 0);
+    this.mouthGfx.arc(0, 0, glowR, sa, ea, false);
+    this.mouthGfx.lineTo(0, 0);
+    this.mouthGfx.closePath();
+    this.mouthGfx.fill({ color: this.isBuffed ? MOUTH_BUFFED : MOUTH_GLOW, alpha });
+
+    // Einstein ring inside mouth — thin arc of brighter light
+    const ringR = r * 0.48;
+    const ringSpan = Math.PI * 0.55;
+    const mouthCenter = sa + (ea - sa) / 2;
+    const ra1 = mouthCenter - ringSpan / 2;
+    const ra2 = mouthCenter + ringSpan / 2;
+
+    this.mouthGfx.moveTo(Math.cos(ra1) * ringR, Math.sin(ra1) * ringR);
+    this.mouthGfx.arc(0, 0, ringR, ra1, ra2, false);
+    this.mouthGfx.stroke({
+      color: this.isBuffed ? FLARE_WHITE : CHERENKOV_GLOW,
+      width: this.isBuffed ? 1.2 : 0.9,
+      alpha: alpha * 1.6,
+      cap: "round",
+    });
+
+    // Central singularity point
+    if (mouthSize > 0.2) {
+      const pointAlpha = alpha * 1.2;
+      this.mouthGfx.circle(0, 0, r * 0.05);
+      this.mouthGfx.fill({ color: FLARE_WHITE, alpha: pointAlpha });
+    }
   }
 
-  private drawDebug(): void {
-    const ctx = this.layer.ctx;
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.fillStyle = this.isBuffed ? "#ffcc00" : "#ffff00";
-    ctx.beginPath();
-    // Native un-clipped ultra fast canvas fill primitive
-    ctx.arc(0, 0, this.r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+  // ── PARTICLES ──────────────────────────────
+
+  private drawParticles(): void {
+    for (const p of this.particles) {
+      if (!p.active) continue;
+      const alpha = Math.max(0, p.life / p.maxLife);
+      if (alpha <= 0.01) continue;
+
+      const rx = p.x - this.x;
+      const ry = p.y - this.y;
+
+      // Glow
+      this.particleGfx.circle(rx, ry, p.size * 2.2 * alpha);
+      this.particleGfx.fill({ color: CHERENKOV_BASE, alpha: alpha * 0.18 });
+
+      // Core
+      this.particleGfx.circle(rx, ry, p.size * 0.45 * alpha);
+      this.particleGfx.fill({ color: CHERENKOV_GLOW, alpha: alpha * 0.7 });
+    }
+  }
+
+  // ── RING VFX ───────────────────────────────
+  // ── FIX 3: Wormhole VFX rebuilt — thick, dramatic spiral collapse instead of thin cross ──
+
+  private drawRingVfx(): void {
+    for (const r of this.ringVfx) {
+      if (r.life <= 0) continue;
+      const alpha = Math.max(0, r.life / r.maxLife);
+
+      const rx = r.x - this.x;
+      const ry = r.y - this.y;
+
+      if (r.type === "DOT_SWALLOW") {
+        if (r.radius > 0.5) {
+          this.ringVfxGfx.circle(rx, ry, r.radius);
+          this.ringVfxGfx.stroke({
+            color: CHERENKOV_GLOW,
+            width: 1.5 * alpha,
+            alpha: alpha * 0.8,
+          });
+          this.ringVfxGfx.circle(rx, ry, r.radius * 0.6);
+          this.ringVfxGfx.stroke({
+            color: FLARE_WHITE,
+            width: 0.8 * alpha,
+            alpha: alpha * 0.6,
+          });
+        }
+      } else if (r.type === "PILL_EXPAND") {
+        this.ringVfxGfx.circle(rx, ry, r.radius);
+        this.ringVfxGfx.stroke({
+          color: FLARE_WHITE,
+          width: 3 * alpha,
+          alpha: alpha * 0.7,
+        });
+        this.ringVfxGfx.circle(rx, ry, r.radius * 0.85);
+        this.ringVfxGfx.stroke({
+          color: PHOTON_OUTER,
+          width: 5 * alpha,
+          alpha: alpha * 0.3,
+        });
+        this.ringVfxGfx.circle(rx, ry, r.radius * 0.3);
+        this.ringVfxGfx.stroke({
+          color: FLARE_WHITE,
+          width: 1.5 * alpha,
+          alpha: alpha * 0.5,
+        });
+      } else if (r.type === "WORMHOLE_EXIT" || r.type === "WORMHOLE_ENTRY") {
+        // ── FIX 3: Dramatic wormhole ──
+        // Instead of a thin cross of ellipses, draw a bright collapsing/expanding
+        // ring with radial streaks that twist — reads as a proper portal tear.
+
+        const isEntry = r.type === "WORMHOLE_ENTRY";
+        const progress = 1 - alpha; // 0→1 for entry (growing), 1→0 for exit (fading)
+        const ringR = isEntry ? r.radius : r.maxRadius;
+
+        // Thick outer ring
+        this.ringVfxGfx.circle(rx, ry, ringR);
+        this.ringVfxGfx.stroke({
+          color: isEntry ? PHOTON_BUFFED : CHERENKOV_GLOW,
+          width: 4 * alpha,
+          alpha: alpha * 0.7,
+        });
+
+        // Bright inner ring
+        this.ringVfxGfx.circle(rx, ry, ringR * 0.65);
+        this.ringVfxGfx.stroke({
+          color: FLARE_WHITE,
+          width: 2.5 * alpha,
+          alpha: alpha * 0.8,
+        });
+
+        // Radial streaks from center — like light being pulled through
+        const streakCount = 12;
+        const twist = isEntry ? progress * Math.PI * 1.5 : (1 - progress) * Math.PI * 1.5;
+        for (let s = 0; s < streakCount; s++) {
+          const baseAngle = (s / streakCount) * Math.PI * 2 + r.rotation;
+          const innerAngle = baseAngle + twist;
+          const outerAngle = baseAngle - twist * 0.5;
+          const innerDist = ringR * 0.15 * alpha;
+          const outerDist = ringR * (0.9 + alpha * 0.1);
+
+          this.ringVfxGfx.moveTo(
+            rx + Math.cos(innerAngle) * innerDist,
+            ry + Math.sin(innerAngle) * innerDist,
+          );
+          this.ringVfxGfx.lineTo(
+            rx + Math.cos(outerAngle) * outerDist,
+            ry + Math.sin(outerAngle) * outerDist,
+          );
+          this.ringVfxGfx.stroke({
+            color: s % 3 === 0 ? FLARE_WHITE : CHERENKOV_GLOW,
+            width: (s % 3 === 0 ? 1.8 : 0.8) * alpha,
+            alpha: alpha * 0.5,
+          });
+        }
+
+        // Entry gets an extra bright core flash at the end
+        if (isEntry && progress > 0.7) {
+          const coreAlpha = (progress - 0.7) / 0.3;
+          this.ringVfxGfx.circle(rx, ry, ringR * 0.2 * coreAlpha);
+          this.ringVfxGfx.fill({ color: FLARE_WHITE, alpha: coreAlpha * 0.9 });
+        }
+      }
+    }
+  }
+
+  // ── GHOST STREAK ───────────────────────────
+
+  private drawGhostStreak(): void {
+    if (this.ghostStreakTimer <= 0 && this.ghostTerminalFlash <= 0) return;
+
+    if (this.ghostStreakTimer > 0) {
+      const progress = 1 - this.ghostStreakTimer / 0.45;
+      const startX = this.ghostStreakStartX - this.x;
+      const startY = this.ghostStreakStartY - this.y;
+      const t = Math.min(1, progress * 2.5);
+      const cx = startX + (0 - startX) * t;
+      const cy = startY + (0 - startY) * t;
+      const alpha = 1 - progress;
+
+      this.ghostStreakGfx.moveTo(startX, startY);
+      this.ghostStreakGfx.lineTo(cx, cy);
+      this.ghostStreakGfx.stroke({
+        color: GHOST_STREAK,
+        width: 3.5 * alpha,
+        alpha: alpha * 0.3,
+        cap: "round",
+      });
+
+      this.ghostStreakGfx.moveTo(startX, startY);
+      this.ghostStreakGfx.lineTo(cx, cy);
+      this.ghostStreakGfx.stroke({
+        color: FLARE_WHITE,
+        width: 1.2 * alpha,
+        alpha: alpha * 0.7,
+        cap: "round",
+      });
+    }
+
+    if (this.ghostTerminalFlash > 0) {
+      const flashAlpha = this.ghostTerminalFlash / 0.15;
+      const flashR = this.r * (0.5 + flashAlpha * 1.5);
+      this.ghostStreakGfx.circle(0, 0, flashR);
+      this.ghostStreakGfx.fill({ color: FLARE_WHITE, alpha: flashAlpha * 0.6 });
+      this.ghostStreakGfx.circle(0, 0, flashR * 1.6);
+      this.ghostStreakGfx.fill({ color: GHOST_STREAK, alpha: flashAlpha * 0.2 });
+    }
+  }
+
+  // ── EAT FLASH ──────────────────────────────
+
+  private drawEatFlash(r: number): void {
+    if (this.eatFlashTimer <= 0) return;
+
+    const maxTime = this.eatFlashType === "DOT" ? 0.1
+      : this.eatFlashType === "PILL" ? 0.45
+      : 0.4;
+    const alpha = this.eatFlashTimer / maxTime;
+
+    if (this.eatFlashType === "GHOST") {
+      this.flashGfx.circle(0, 0, r);
+      this.flashGfx.stroke({
+        color: FLARE_WHITE,
+        width: 3.5 * alpha,
+        alpha: alpha * 0.65,
+      });
+      this.flashGfx.circle(0, 0, r + 8);
+      this.flashGfx.stroke({
+        color: GHOST_STREAK,
+        width: 6 * alpha,
+        alpha: alpha * 0.25,
+      });
+    } else if (this.eatFlashType === "PILL") {
+      this.flashGfx.circle(0, 0, r);
+      this.flashGfx.stroke({
+        color: FLARE_WHITE,
+        width: 2.5 * alpha,
+        alpha: alpha * 0.8,
+      });
+    }
+    if (this.eatFlashType === "DOT") {
+      this.flashGfx.circle(0, 0, r * 0.25);
+      this.flashGfx.fill({ color: FLARE_WHITE, alpha: alpha * 0.2 });
+    }
+  }
+
+  // ── DEATH BODY ─────────────────────────────
+
+  private drawDeathBody(r: number): void {
+    const alpha = this.deathTimer < 1.8 ? 1 : Math.max(0, 1 - (this.deathTimer - 1.8) / 0.2);
+    if (alpha <= 0) return;
+
+    this.bodyGfx.circle(0, 0, r);
+    this.bodyGfx.fill({ color: VOID_CORE, alpha });
+
+    const shrink = this.deathShrinkFactor;
+    const rimBrightness = 0.5 + shrink * 0.5;
+    const rimWidth = 1.5 + shrink * 1.5;
+
+    if (this.deathTimer < 0.3) {
+      const flicker = 0.5 + 0.5 * Math.sin(this.deathConvulsePhase);
+      const color = flicker > 0.7 ? FLARE_WHITE : PHOTON_INNER;
+      this.bodyGfx.circle(0, 0, r);
+      this.bodyGfx.stroke({
+        color,
+        width: 2 + flicker * 3,
+        alpha: (0.5 + flicker * 0.5) * alpha,
+      });
+    } else {
+      const color = shrink > 0.7 ? FLARE_WHITE : PHOTON_BUFFED;
+      this.bodyGfx.circle(0, 0, r);
+      this.bodyGfx.stroke({
+        color,
+        width: rimWidth,
+        alpha: rimBrightness * alpha,
+      });
+
+      const haloR = r * (1.2 + shrink * 2.5);
+      this.bodyGfx.circle(0, 0, haloR);
+      this.bodyGfx.stroke({
+        color: PHOTON_OUTER,
+        width: 1,
+        alpha: shrink * alpha * 0.3,
+      });
+    }
+
+    if (this.deathTimer >= 1.5 && this.deathTimer < 1.8) {
+      const popProgress = (this.deathTimer - 1.5) / 0.3;
+      this.flashGfx.circle(0, 0, this.r * 0.2 * (1 + popProgress * 3));
+      this.flashGfx.fill({ color: FLARE_WHITE, alpha: (1 - popProgress) * 0.8 });
+    }
+
+    if (this.deathTimer >= 1.8 && this.deathTimer < 1.95) {
+      const flashAlpha = Math.max(0, 1 - (this.deathTimer - 1.8) / 0.15);
+      this.flashGfx.circle(0, 0, this.r * 2 * (2 - flashAlpha));
+      this.flashGfx.fill({ color: FLARE_WHITE, alpha: flashAlpha * 0.5 });
+    }
   }
 }
