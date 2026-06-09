@@ -8,6 +8,8 @@ export abstract class WorldObject implements IDrawable {
   public levelContext: LevelContext;
   protected canvasLayer: CanvasLayer;
   protected tileSize: number;
+  protected shouldUpdate: boolean = true;
+  protected shouldRender: boolean = true;
 
   private _needsRedraw: boolean = true;
 

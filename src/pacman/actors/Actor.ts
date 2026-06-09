@@ -5,9 +5,11 @@ import type { LevelContext } from "../core/LevelContext.js";
 import type { IUpdatable } from "../shared/types.js";
 
 export abstract class Actor implements IUpdatable {
-  protected canvasLayer: CanvasLayer; // Enforced non-nullable definition
+  protected canvasLayer: CanvasLayer;
   protected levelContext: LevelContext;
   protected tileSize: number;
+  protected shouldUpdate: boolean = true;
+  protected shouldRender: boolean = true;
 
   private _needsRedraw: boolean = true;
   public x: number = -9999;
@@ -25,7 +27,6 @@ export abstract class Actor implements IUpdatable {
     this.speed = this.tileSize / 8;
   }
 
-  // Handy shortcut getters to keep your internal code clean
   protected get gridContext() {
     return this.levelContext.gridContext;
   }
@@ -50,8 +51,6 @@ export abstract class Actor implements IUpdatable {
     return this.canvasLayer;
   }
 
-  // Actor.ts — teleport method
-
   protected teleport(): void {
     const { tileX, tileY } = this.gridContext.getTile(this.x, this.y);
 
@@ -69,13 +68,9 @@ export abstract class Actor implements IUpdatable {
     if (this.gridContext.isTeleport(tileX, tileY)) {
       const exit = this.gridContext.getTeleportExit(tileX, tileY);
       if (exit) {
-        // Place at exit tile center
         this.x = exit.x * this.tileSize + this.tileSize / 2;
         this.y = exit.y * this.tileSize + this.tileSize / 2;
 
-        // Push one extra step in the movement direction to clear the teleport tile
-        // This prevents the actor from being detected as still on the teleport tile
-        // or stepping outside the map on the next frame
         this.x += this.direction.dx * this.tileSize * 0.6;
         this.y += this.direction.dy * this.tileSize * 0.6;
 
