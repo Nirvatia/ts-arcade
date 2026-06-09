@@ -11,8 +11,8 @@ export interface PacmanConfig {
 }
 
 export const CFG_PACMAN: PacmanConfig = {
-  normalSpeedMultiplier: 5.8,
-  buffedSpeedMultiplier: 6.6,
+  normalSpeedMultiplier: 5,
+  buffedSpeedMultiplier: 5.4,
   radiusMultiplier: 0.45,
   mouthSpeed: 0.012,
   maxMouthAngle: 0.65,
