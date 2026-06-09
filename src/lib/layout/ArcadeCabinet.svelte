@@ -17,31 +17,49 @@
 <div class="void-expanse">
   <div class="starfield"></div>
 
-  <div class="fracture-well">
-    {#each layers as i}
-      <div
-        class="fracture-frame"
-        style="
-          --frame-w: {screenWidth + 40 + i * 36}px;
-          --frame-h: {totalHeight + 40 + i * 36}px;
-          --delay: {i * 1.5}s;
-        "
-      ></div>
-    {/each}
+  <div class="cabinet-scaler-box" style="width: {screenWidth}px; height: {totalHeight}px;">
+    <div class="fracture-well">
+      {#each layers as i}
+        <div
+          class="fracture-frame"
+          style="
+            --frame-w: {screenWidth + 40 + i * 36}px;
+            --frame-h: {totalHeight + 40 + i * 36}px;
+            --delay: {i * 1.5}s;
+          "
+        ></div>
+      {/each}
 
-    <div class="viewport" style="width: {screenWidth}px; height: {totalHeight}px;">
-      <div class="game-layer">{@render matrix()}</div>
-      {#if hud}
-        <div class="hud-bar">{@render hud()}</div>
-      {/if}
+      <div class="viewport" style="width: {screenWidth}px; height: {totalHeight}px;">
+        <div class="game-layer">{@render matrix()}</div>
+        {#if hud}
+          <div class="hud-bar">{@render hud()}</div>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
 
 <style lang="scss">
+  // 1. RESPONSIVE DESIGN SCSS MIXIN DEF
+  @mixin respond-to($max-width) {
+    @media (max-width: #{$max-width}) {
+      @content;
+    }
+  }
+
   $void: #040410;
   $violet: #6655aa;
   $white-dim: #9999bb;
+
+  // 2. SCALE PROPERTY CONFIGURATION DEGRADATION
+  :root {
+    --cabinet-scale: 1;
+  }
+  @include respond-to(1920px) { :root { --cabinet-scale: 0.85; } }
+  @include respond-to(1440px) { :root { --cabinet-scale: 0.72; } }
+  @include respond-to(1024px) { :root { --cabinet-scale: 0.55; } }
+  @include respond-to(480px)  { :root { --cabinet-scale: 0.42; } }
 
   :global(body) {
     margin: 0;
@@ -61,6 +79,31 @@
     overflow: hidden;
   }
 
+  // 3. COLLAPSE EMPTY BOUNDING FOOTPRINT WHITESPACE
+  .cabinet-scaler-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    
+    // Updates layout allocation boundary framework sizes dynamically
+    width: calc(100% * var(--cabinet-scale)) !important;
+    height: calc(100% * var(--cabinet-scale)) !important;
+  }
+
+  // 4. UNIFIED GROUP TRANSFORM CONTROLLER
+  .fracture-well {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    // Scales the cabinet canvas slot and surrounding ambient backgrounds flawlessly
+    transform: scale(var(--cabinet-scale));
+    transform-origin: center center;
+  }
+
   .starfield {
     position: absolute;
     inset: 0;
@@ -75,21 +118,13 @@
       radial-gradient(1px 1px at 82% 10%, rgba(180, 150, 240, 0.25), transparent),
       radial-gradient(1px 1px at 90% 55%, rgba(150, 120, 220, 0.15), transparent),
       radial-gradient(1px 1px at 4% 78%, rgba(150, 120, 220, 0.18), transparent),
-      radial-gradient(1px 1px at 25% 32%, rgba(180, 150, 240, 0.2), transparent),
+      radial-gradient(1px 1px at 25% 32%, rgba(180, 140, 240, 0.2), transparent),
       radial-gradient(1px 1px at 40% 80%, rgba(150, 120, 220, 0.15), transparent),
       radial-gradient(1px 1px at 52% 45%, rgba(200, 170, 255, 0.2), transparent),
       radial-gradient(1px 1px at 68% 6%, rgba(150, 120, 220, 0.2), transparent),
       radial-gradient(1px 1px at 85% 68%, rgba(150, 120, 220, 0.15), transparent);
     pointer-events: none;
     z-index: 0;
-  }
-
-  .fracture-well {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .fracture-frame {
